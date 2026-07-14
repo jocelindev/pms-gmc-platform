@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PMS GMC Group</title>
+    <link rel="stylesheet" href="styles.css?v=deploy-ready" />
+  </head>
+  <body class="login-mode">
+    <section class="login-page" id="login-page" aria-labelledby="login-title">
+      <div class="login-card">
+        <div class="login-brand">
+          <div class="brand-mark">P</div>
+          <div>
+            <strong>Palladium PMS</strong>
+            <span>GMC Group</span>
+          </div>
+        </div>
+        <p class="eyebrow">Acces securise</p>
+        <h1 id="login-title">Connexion a la plateforme de performance</h1>
+        <p class="login-copy">
+          Connectez-vous pour acceder au tableau de bord, au suivi KPI par pole,
+          aux rapports et aux formulaires KoboCollect.
+        </p>
+        <form class="login-form" id="login-form">
+          <label>
+            Identifiant
+            <input
+              id="login-identifier"
+              type="text"
+              autocomplete="username"
+              placeholder="admin ou email utilisateur"
+              required
+            />
+          </label>
+          <label>
+            Code d'acces
+            <input
+              id="login-password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Code temporaire"
+              required
+            />
+          </label>
+          <button class="primary-action login-submit" id="login-submit" type="submit">
+            Se connecter
+          </button>
+          <div class="login-feedback" id="login-feedback" role="status" aria-live="polite">
+            Code temporaire prototype : PMS2026
+          </div>
+        </form>
+      </div>
+      <aside class="login-side-panel" aria-label="Resume plateforme">
+        <span class="eyebrow">PMS GMC Group</span>
+        <h2>Suivi KPI par pole et reporting periodique</h2>
+        <div class="login-highlights">
+          <div>
+            <strong>16</strong>
+            <span>poles pilotes</span>
+          </div>
+          <div>
+            <strong>Kobo</strong>
+            <span>source primaire</span>
+          </div>
+          <div>
+            <strong>RBAC</strong>
+            <span>droits par profil</span>
+          </div>
+        </div>
+      </aside>
+    </section>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Navigation principale">
+        <div class="brand">
+          <div class="brand-mark">P</div>
+          <div>
+            <strong>Palladium PMS</strong>
+            <span>GMC Group</span>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-item active" data-view="dashboard">Tableau de bord</button>
+          <button class="nav-item" data-view="poles">Suivi par pole</button>
+          <button class="nav-item" data-view="alerts">Notifications</button>
+          <button class="nav-item" data-view="kobo">KoboCollect</button>
+          <button class="nav-item" data-view="admin">Administration</button>
+        </nav>
+
+        <div class="sidebar-note">
+          <span class="eyebrow">Source primaire</span>
+          <strong>KoboCollect / KoboToolbox</strong>
+          <p>Synchronisation planifiee, controle qualite et mapping vers le referentiel KPI.</p>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Performance Management System</p>
+            <h1 id="view-title">Dashboard KPI par pole</h1>
+          </div>
+          <div class="filters" aria-label="Filtres globaux">
+            <div class="session-chip" id="session-chip" hidden>
+              <span id="session-user-name">Utilisateur</span>
+              <strong id="session-user-profile">Profil</strong>
+            </div>
+            <button class="ghost-action" id="logout-button" type="button" hidden>Deconnexion</button>
+            <label>
+              Periode
+              <select id="period-filter">
+                <option>Juillet 2026</option>
+                <option>Juin 2026</option>
+                <option>T2 2026</option>
+                <option>Annuel 2026</option>
+              </select>
+            </label>
+            <label>
+              Filiale
+              <select id="branch-filter">
+                <option value="Groupe">Groupe</option>
+                <option value="Cote d'Ivoire">Cote d'Ivoire</option>
+                <option value="Benin">Benin</option>
+                <option value="Cameroun">Cameroun</option>
+                <option value="Congo">Congo</option>
+                <option value="Guinee-Bissau">Guinee-Bissau</option>
+                <option value="Guinee Conakry">Guinee Conakry</option>
+              </select>
+            </label>
+            <button class="primary-action" id="sync-button">Synchroniser Kobo</button>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboard" aria-labelledby="view-title">
+          <div class="hero-panel">
+            <div>
+              <p class="eyebrow">Vision COMEX</p>
+              <h2>Performance consolidee GMC Group</h2>
+              <p>
+                Suivi centralise des KPIs, alertes critiques, dynamique d'amelioration
+                et couverture des soumissions KoboCollect.
+              </p>
+            </div>
+            <div class="hero-score">
+              <span>IPG</span>
+              <strong>82</strong>
+              <small>Performance groupe</small>
+            </div>
+          </div>
+
+          <div class="metric-grid">
+            <article class="metric-card">
+              <span class="metric-label">KPIs catalogues</span>
+              <strong id="catalog-stat-kpis">--</strong>
+              <span class="trend positive">Catalogue Palladium</span>
+            </article>
+            <article class="metric-card">
+              <span class="metric-label">Formules de calcul</span>
+              <strong id="catalog-stat-formulas">--</strong>
+              <span class="trend positive">Dictionnaire FORMULE</span>
+            </article>
+            <article class="metric-card">
+              <span class="metric-label">Groupes KPI</span>
+              <strong id="catalog-stat-groups">--</strong>
+              <span class="trend positive">Rattachements</span>
+            </article>
+            <article class="metric-card">
+              <span class="metric-label">Domaines collecte</span>
+              <strong id="catalog-stat-forms">--</strong>
+              <span class="trend positive">Fiches Kobo</span>
+            </article>
+          </div>
+
+          <section class="panel dashboard-poles-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Dashboard KPI par pole</p>
+                <h3>Table synthese des KPI par pole</h3>
+              </div>
+              <span class="status-pill amber">15 poles suivis</span>
+            </div>
+            <div class="table-wrap pole-summary-wrap">
+              <table class="pole-summary-table">
+                <thead>
+                  <tr>
+                    <th>Categorie</th>
+                    <th>Pole</th>
+                    <th>Responsable</th>
+                    <th>Score</th>
+                    <th>RAG KPI</th>
+                    <th>Qualite Kobo</th>
+                    <th>Rapport</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="dashboard-pole-summary-table"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <div class="dashboard-grid">
+            <section class="panel span-2">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Benchmark inter-filiales</p>
+                  <h3>Indice de performance filiale</h3>
+                </div>
+                <button class="ghost-action">Exporter</button>
+              </div>
+              <div class="branch-bars" id="branch-bars"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">RAG</p>
+                  <h3>Statut portefeuille KPI</h3>
+                </div>
+              </div>
+              <div class="rag-donut" aria-label="Repartition RAG">
+                <div class="donut"></div>
+                <div class="legend">
+                  <span><i class="green"></i> Vert 64%</span>
+                  <span><i class="amber"></i> Orange 23%</span>
+                  <span><i class="red"></i> Rouge 13%</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel span-2">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Priorites</p>
+                  <h3>Alertes executives</h3>
+                </div>
+                <span class="status-pill red">6 critiques</span>
+              </div>
+              <div class="alert-list" id="executive-alerts"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Tendance</p>
+                  <h3>IPG sur 6 periodes</h3>
+                </div>
+              </div>
+              <div class="sparkline" id="ipg-sparkline" aria-label="Tendance IPG"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Catalogue</p>
+                  <h3>Repartition par categorie</h3>
+                </div>
+              </div>
+              <div class="breakdown-list" id="category-breakdown"></div>
+            </section>
+
+            <section class="panel span-2">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Frequences</p>
+                  <h3>Cadences de collecte KPI</h3>
+                </div>
+              </div>
+              <div class="loss-stack" id="frequency-breakdown"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="poles">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">KPIs par pole</p>
+              <h2>KPIs par pole</h2>
+              <p>Choisir un pole pour afficher uniquement ses KPI, avec la valeur, l'objectif, la tendance, la source Kobo et le statut.</p>
+            </div>
+            <div class="filters compact-filters pole-filter-bar">
+              <span class="access-scope-pill" id="pole-access-scope">Acces: tous les poles</span>
+              <label>
+                Pole
+                <select id="pole-monitor-select"></select>
+              </label>
+            </div>
+          </div>
+
+          <section class="panel pole-kpi-directory-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Catalogue operationnel</p>
+                <h3 id="pole-kpi-directory-title">KPI du pole selectionne</h3>
+              </div>
+              <span class="status-pill green" id="pole-kpi-total">0 KPI</span>
+            </div>
+            <div class="pole-kpi-directory" id="pole-kpi-directory"></div>
+          </section>
+        </section>
+
+        <section class="view" id="kobo">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">KoboCollect</p>
+              <h2>Connexion au formulaire KoboCollect</h2>
+              <p>Choisir une source Kobo, verifier le fichier ou la connexion, puis confirmer les champs disponibles pour alimenter la plateforme.</p>
+            </div>
+          </div>
+
+          <div class="dashboard-grid kobo-workspace">
+            <section class="panel span-2 kobo-panel">
+              <div class="panel-header">
+                <div class="kobo-panel-title">
+                  <span class="step-badge">1</span>
+                  <div>
+                    <p class="eyebrow">Connexion formulaire</p>
+                    <h3>Connecter un formulaire KoboToolbox</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="kobo-connector-form">
+                <label class="wide-field">
+                  Adresse du serveur Kobo
+                  <input id="kobo-server-url" class="search-input" inputmode="url" autocomplete="url" placeholder="https://kf.kobotoolbox.org" />
+                  <small class="form-hint">Exemple : https://kf.kobotoolbox.org</small>
+                </label>
+                <label>
+                  ID formulaire / Asset UID
+                  <input id="kobo-form-uid" class="search-input" placeholder="ex. aBcDeFg12345" />
+                  <small class="form-hint">Identifiant visible dans KoboToolbox.</small>
+                </label>
+                <label class="wide-field">
+                  Jeton API
+                  <div class="token-input-wrap">
+                    <input id="kobo-api-token" class="search-input" type="password" autocomplete="off" placeholder="Token KoboToolbox" />
+                    <button class="ghost-action token-toggle" id="toggle-kobo-token" type="button">Afficher</button>
+                  </div>
+                  <small class="form-hint">Le jeton reste dans cette session de travail.</small>
+                </label>
+                <div class="connector-actions">
+                  <button class="primary-action" id="connect-kobo-form" type="button">Connecter</button>
+                  <button class="ghost-action" id="clear-kobo-form" type="button">Reinitialiser</button>
+                </div>
+              </div>
+              <div class="connector-status empty" id="kobo-connection-status">
+                Aucun formulaire Kobo connecte.
+              </div>
+            </section>
+
+            <section class="panel kobo-panel">
+              <div class="panel-header">
+                <div class="kobo-panel-title">
+                  <span class="step-badge">2</span>
+                  <div>
+                    <p class="eyebrow">Chargement local</p>
+                    <h3>Charger un formulaire KoboCollect</h3>
+                  </div>
+                </div>
+              </div>
+              <label class="file-upload-card" id="kobo-drop-zone" for="kobo-form-file">
+                <span class="file-upload-icon">KBO</span>
+                <strong>Deposer ou selectionner un fichier</strong>
+                <span>XLSForm, XML/XForm ou CSV</span>
+                <input id="kobo-form-file" type="file" accept=".xlsx,.xls,.xml,.xform,.csv" />
+              </label>
+              <div class="format-chips" aria-label="Formats acceptes">
+                <span>.xlsx</span>
+                <span>.xls</span>
+                <span>.xml</span>
+                <span>.xform</span>
+                <span>.csv</span>
+              </div>
+              <div class="upload-summary empty" id="kobo-upload-summary">
+                Aucun formulaire charge.
+              </div>
+            </section>
+
+            <section class="panel span-3 kobo-panel">
+              <div class="panel-header">
+                <div class="kobo-panel-title">
+                  <span class="step-badge">3</span>
+                  <div>
+                    <p class="eyebrow">Formulaire actif</p>
+                    <h3>Source Kobo utilisee pour alimenter la plateforme</h3>
+                  </div>
+                </div>
+                <div class="active-meta-pills">
+                  <span class="field-count-pill" id="kobo-field-count">0 champ</span>
+                  <span class="status-pill gray" id="kobo-active-status">Non configure</span>
+                </div>
+              </div>
+              <div class="active-form-card" id="kobo-active-form">
+                <div class="active-empty-state">
+                  <strong>Aucune source active</strong>
+                  <span>Connecter un formulaire KoboToolbox ou charger un fichier KoboCollect pour afficher les champs detectes.</span>
+                </div>
+              </div>
+              <div class="table-wrap form-fields-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Champ</th>
+                      <th>Type</th>
+                      <th>Libelle / information</th>
+                    </tr>
+                  </thead>
+                  <tbody id="kobo-form-fields-table">
+                    <tr>
+                      <td colspan="3">Aucun champ detecte pour le moment.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="kpis">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Referentiel</p>
+              <h2>KPIs, objectifs et seuils</h2>
+              <p>Catalogue central pour les formules, frequences, sources Kobo et regles RAG.</p>
+            </div>
+            <button class="primary-action">Ajouter un KPI</button>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Catalogue</p>
+                <h3>KPIs critiques du MVP</h3>
+              </div>
+              <input class="search-input" id="kpi-search" placeholder="Rechercher un KPI" />
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>KPI</th>
+                    <th>Direction</th>
+                    <th>Frequence</th>
+                    <th>Objectif</th>
+                    <th>Source</th>
+                    <th>Statut</th>
+                  </tr>
+                </thead>
+                <tbody id="kpi-table"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel kpi-groups-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Groupes de rattachement</p>
+                <h3>Structure issue du catalogue KPI</h3>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Groupe</th>
+                    <th>Nb KPI</th>
+                    <th>Validation</th>
+                    <th>Priorite revue</th>
+                  </tr>
+                </thead>
+                <tbody id="group-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="alerts">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Centre de controle</p>
+              <h2>Alertes automatiques</h2>
+              <p>Escalade in-app, email et SMS selon seuil, persistance et absence de plan d'action.</p>
+            </div>
+          </div>
+          <div class="alert-board" id="alert-board"></div>
+        </section>
+
+        <section class="view" id="actions">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Responsabilisation</p>
+              <h2>Plans d'action SMART</h2>
+              <p>Suivi des causes racines, actions, responsables, echeances et validations N+1.</p>
+            </div>
+            <button class="primary-action">Creer un plan</button>
+          </div>
+          <div class="action-grid" id="action-grid"></div>
+        </section>
+
+        <section class="view" id="improvement">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Trajectoire</p>
+              <h2>Amelioration continue</h2>
+              <p>Matrice de maturite AC sur les 6 dernieres periodes par direction et KPI.</p>
+            </div>
+          </div>
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Heatmap</p>
+                <h3>Dynamique d'amelioration</h3>
+              </div>
+            </div>
+            <div class="heatmap" id="improvement-heatmap"></div>
+          </section>
+        </section>
+
+        <section class="view" id="losses">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Rentabilite operationnelle</p>
+              <h2>Analyse horaire & pertes CA</h2>
+              <p>Detection des pertes par occupation, performance horaire, appels non facturables et absenteisme.</p>
+            </div>
+            <button class="primary-action">Generer rapport jour</button>
+          </div>
+          <div class="dashboard-grid">
+            <section class="panel span-2">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Courbe</p>
+                  <h3>CA/h vs cible</h3>
+                </div>
+              </div>
+              <div class="hour-chart" id="hour-chart"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Synthese</p>
+                  <h3>Pertes par source</h3>
+                </div>
+              </div>
+              <div class="loss-stack" id="loss-stack"></div>
+            </section>
+            <section class="panel span-3">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Tranches de 2h</p>
+                  <h3>Occupation horaire</h3>
+                </div>
+              </div>
+              <div class="time-heatmap" id="time-heatmap"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="reports">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Cycle de pilotage</p>
+              <h2>Reporting periodique par pole</h2>
+              <p>Selectionner un pole, une periodicite et generer le rapport de performance avec KPI, alertes, commentaires et plans d'action.</p>
+            </div>
+            <button class="primary-action" id="generate-report">Generer le rapport</button>
+          </div>
+
+          <div class="report-workspace">
+            <section class="panel report-builder">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Parametrage</p>
+                  <h3>Rapport a produire</h3>
+                </div>
+              </div>
+              <div class="report-controls">
+                <label>
+                  Pole / Direction
+                  <select id="report-pole-select"></select>
+                </label>
+                <label>
+                  Periodicite
+                  <select id="report-cycle-select"></select>
+                </label>
+                <label>
+                  Format
+                  <select id="report-format-select">
+                    <option>Word COMEX</option>
+                    <option>PDF signe</option>
+                    <option>PowerPoint synthese</option>
+                    <option>Excel donnees</option>
+                    <option>Email HTML</option>
+                  </select>
+                </label>
+              </div>
+              <div class="report-summary" id="report-summary"></div>
+            </section>
+
+            <section class="panel report-preview-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Apercu</p>
+                  <h3 id="report-preview-title">Rapport de performance</h3>
+                </div>
+                <span class="status-pill amber" id="report-status-pill">A valider</span>
+              </div>
+              <div class="report-preview" id="report-preview"></div>
+            </section>
+
+            <section class="panel report-comments-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Commentaire</p>
+                  <h3>Analyse du responsable pole</h3>
+                </div>
+              </div>
+              <label>
+                Faits marquants et causes
+                <textarea id="report-comment" rows="6" placeholder="Expliquer les KPI orange/rouge, les risques et les actions de correction."></textarea>
+              </label>
+              <button class="ghost-action" id="save-report-comment">Enregistrer commentaire</button>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Workflow</p>
+                  <h3>Production et validation</h3>
+                </div>
+              </div>
+              <div class="workflow-list" id="report-workflow"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Formats</p>
+                  <h3>Exports disponibles</h3>
+                </div>
+              </div>
+              <div class="report-grid compact" id="report-grid"></div>
+            </section>
+
+            <section class="panel span-2 report-export-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Export & diffusion</p>
+                  <h3>Livrables du rapport</h3>
+                </div>
+              </div>
+              <div class="export-actions">
+                <button class="primary-action" data-report-export="json">Exporter le rapport JSON</button>
+                <button class="ghost-action" data-report-export="csv">Exporter les KPI CSV</button>
+                <button class="ghost-action" id="schedule-report">Planifier la diffusion</button>
+              </div>
+              <div class="distribution-list" id="distribution-list"></div>
+            </section>
+
+            <section class="panel span-2">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Historique</p>
+                  <h3>Rapports generes</h3>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Pole</th>
+                      <th>Cycle</th>
+                      <th>Periode</th>
+                      <th>Format</th>
+                      <th>Statut</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody id="report-history-table"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="admin">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Administration</p>
+              <h2>Administration</h2>
+              <p>Gerer les objectifs KPI via KoboCollect et limiter chaque responsable au dashboard de son pole.</p>
+            </div>
+          </div>
+
+          <div class="admin-submenu" role="tablist" aria-label="Sous-menu administration">
+            <button class="admin-tab-button active" type="button" data-admin-tab="objectives">
+              <strong>Objectif</strong>
+              <span>Cibles KPI via KoboCollect</span>
+            </button>
+            <button class="admin-tab-button" type="button" data-admin-tab="kobo">
+              <strong>KoboCollecte</strong>
+              <span>Formulaire et mapping</span>
+            </button>
+            <button class="admin-tab-button" type="button" data-admin-tab="access">
+              <strong>Droit d'acces</strong>
+              <span>Utilisateurs, profils et poles</span>
+            </button>
+          </div>
+
+          <div class="admin-tab-panel active" data-admin-panel="objectives">
+          <div class="dashboard-grid admin-objective-grid">
+            <section class="panel span-3 admin-summary-panel">
+              <div class="admin-summary-head">
+                <div>
+                  <p class="eyebrow">Vue rapide</p>
+                  <h3>Pilotage des objectifs KPI</h3>
+                </div>
+                <div class="admin-flow">
+                  <span>1. Connecter Kobo</span>
+                  <span>2. Mapper les champs</span>
+                  <span>3. Synchroniser les objectifs</span>
+                </div>
+              </div>
+              <div class="admin-summary-grid" id="objective-summary-cards"></div>
+            </section>
+
+            <section class="panel span-3">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Reference catalogue</p>
+                  <h3>Controle de correspondance KPI</h3>
+                </div>
+                <span class="status-pill gray" id="objective-catalog-status">Catalogue</span>
+              </div>
+              <div class="objective-catalog-profile" id="objective-catalog-profile"></div>
+            </section>
+
+            <section class="panel span-3">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Donnees KoboCollect</p>
+                  <h3>Objectifs KPI importes depuis le formulaire KoboCollect</h3>
+                </div>
+                <span class="status-pill gray" id="objective-count">0 objectif</span>
+              </div>
+              <div class="table-wrap">
+                <table class="objective-table">
+                  <thead>
+                    <tr>
+                      <th>Pole</th>
+                      <th>ID KPI</th>
+                      <th>KPI</th>
+                      <th>Objectif</th>
+                      <th>Periode</th>
+                      <th>Frequence</th>
+                      <th>Responsable</th>
+                      <th>Validation</th>
+                      <th>Statut</th>
+                      <th>Source Kobo</th>
+                    </tr>
+                  </thead>
+                  <tbody id="objective-table"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+          </div>
+
+          <div class="admin-tab-panel" data-admin-panel="kobo">
+            <div class="dashboard-grid admin-objective-grid">
+              <section class="panel span-3 admin-kobo-source-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Formulaire KoboCollect</p>
+                    <h3>Source unique des objectifs KPI</h3>
+                  </div>
+                </div>
+                <div class="admin-kobo-form admin-kobo-source-form">
+                  <label>
+                    Adresse serveur Kobo
+                    <input id="admin-kobo-server" class="search-input" inputmode="url" placeholder="https://kf.kobotoolbox.org" />
+                  </label>
+                  <label>
+                    ID formulaire objectifs
+                    <input id="admin-kobo-form-id" class="search-input" placeholder="ex. aObjectifsKPI2026" />
+                  </label>
+                  <label>
+                    Champ KPI
+                    <input id="admin-kobo-kpi-field" class="search-input" value="kpi_id" />
+                  </label>
+                  <label>
+                    Champ objectif
+                    <input id="admin-kobo-target-field" class="search-input" value="objectif_kpi" />
+                  </label>
+                  <label>
+                    Champ periode
+                    <input id="admin-kobo-period-field" class="search-input" value="periode_objectif" />
+                  </label>
+                  <label>
+                    Champ pole
+                    <input id="admin-kobo-pole-field" class="search-input" value="pole_id" />
+                  </label>
+                  <label>
+                    Champ unite
+                    <input id="admin-kobo-unit-field" class="search-input" value="unite_mesure" />
+                  </label>
+                  <label>
+                    Champ frequence
+                    <input id="admin-kobo-frequency-field" class="search-input" value="frequence_collecte" />
+                  </label>
+                  <label>
+                    Champ source donnee
+                    <input id="admin-kobo-source-field" class="search-input" value="source_donnee" />
+                  </label>
+                  <label>
+                    Champ validation
+                    <input id="admin-kobo-validation-field" class="search-input" value="validation_hierarchique" />
+                  </label>
+                </div>
+                <div class="connector-actions admin-kobo-actions">
+                  <button class="primary-action" id="admin-kobo-source-save" type="button">
+                    Utiliser ce formulaire KoboCollect
+                  </button>
+                </div>
+                <div class="connector-status empty" id="admin-kobo-status">
+                  Aucun formulaire KoboCollect d'objectifs configure. Les objectifs ne sont pas saisis manuellement dans la plateforme.
+                </div>
+              </section>
+
+              <section class="panel span-3">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Structure KoboCollect</p>
+                    <h3>Champs attendus pour le formulaire objectifs</h3>
+                  </div>
+                  <span class="status-pill green" id="objective-field-count">0 champ</span>
+                </div>
+                <div class="objective-field-list" id="objective-kobo-fields"></div>
+                <div class="objective-control-list" id="objective-control-list"></div>
+              </section>
+            </div>
+          </div>
+
+          <div class="admin-tab-panel" data-admin-panel="access">
+            <div class="dashboard-grid admin-access-grid">
+              <section class="panel span-3 admin-summary-panel">
+                <div class="admin-summary-head">
+                  <div>
+                    <p class="eyebrow">Vue rapide</p>
+                    <h3>Gouvernance des acces</h3>
+                  </div>
+                  <div class="admin-flow">
+                    <span>1. Creer utilisateur</span>
+                    <span>2. Choisir profil</span>
+                    <span>3. Affecter le pole</span>
+                  </div>
+                </div>
+                <div class="admin-summary-grid" id="access-summary-cards"></div>
+              </section>
+
+              <section class="panel access-editor-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Droit d'acces</p>
+                    <h3>Configurer un profil</h3>
+                  </div>
+                </div>
+                <div class="access-form">
+                  <label>
+                    Profil utilisateur
+                    <select id="access-profile">
+                      <option>Administrateur</option>
+                      <option>Direction</option>
+                      <option>Manager / Responsable</option>
+                      <option>Analyste BI</option>
+                    </select>
+                  </label>
+                  <div class="permission-checks" id="permission-checks">
+                    <label><input type="checkbox" data-permission-key="consultation" /> Consultation</label>
+                    <label><input type="checkbox" data-permission-key="ajout" /> Ajout</label>
+                    <label><input type="checkbox" data-permission-key="modification" /> Modification</label>
+                    <label><input type="checkbox" data-permission-key="suppression" /> Suppression</label>
+                    <label><input type="checkbox" data-permission-key="validation" /> Validation</label>
+                    <label><input type="checkbox" data-permission-key="administration" /> Administration</label>
+                  </div>
+                  <button class="primary-action" id="save-access-rule" type="button">Enregistrer les droits du profil</button>
+                </div>
+              </section>
+
+              <section class="panel access-editor-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Utilisateur</p>
+                    <h3>Creer un utilisateur</h3>
+                  </div>
+                </div>
+                <div class="access-form">
+                  <label>
+                    Nom complet
+                    <input id="new-user-full-name" class="search-input" placeholder="Ex. Responsable Audit" />
+                  </label>
+                  <label>
+                    Email
+                    <input id="new-user-email" class="search-input" type="email" placeholder="prenom.nom@palladium.local" />
+                  </label>
+                  <label>
+                    Telephone
+                    <input id="new-user-phone" class="search-input" placeholder="+225 ..." />
+                  </label>
+                  <label>
+                    Profil par defaut
+                    <select id="new-user-profile"></select>
+                  </label>
+                  <label>
+                    Pole propose
+                    <select id="new-user-pole"></select>
+                  </label>
+                  <label>
+                    Statut
+                    <select id="new-user-status">
+                      <option>Actif</option>
+                      <option>Suspendu</option>
+                      <option>Inactif</option>
+                    </select>
+                  </label>
+                  <button class="primary-action" id="create-user" type="button">Creer l'utilisateur</button>
+                </div>
+              </section>
+
+              <section class="panel access-editor-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Affectation utilisateur</p>
+                    <h3>Donner un acces individuel</h3>
+                  </div>
+                </div>
+                <div class="access-form">
+                  <label>
+                    Responsable
+                    <select id="user-access-responsible"></select>
+                  </label>
+                  <label>
+                    Pole
+                    <select id="user-access-pole"></select>
+                  </label>
+                  <label>
+                    Profil
+                    <select id="user-access-profile"></select>
+                  </label>
+                  <label>
+                    Dashboard autorise
+                    <input id="user-access-dashboard" class="search-input" readonly />
+                  </label>
+                  <button class="primary-action" id="save-user-access" type="button">Enregistrer l'acces utilisateur</button>
+                </div>
+              </section>
+
+              <section class="panel span-3">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Affectation par pole</p>
+                    <h3>Responsables limites a leur dashboard KPI</h3>
+                  </div>
+                </div>
+                <div class="table-wrap">
+                  <table class="access-table pole-access-table">
+                    <thead>
+                      <tr>
+                        <th>Responsable</th>
+                        <th>Pole</th>
+                        <th>Profil</th>
+                        <th>Dashboard autorise</th>
+                        <th>Statut</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="pole-access-table"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="scripts/data.js?v=deploy-ready"></script>
+    <script src="scripts/renderers.js?v=deploy-ready"></script>
+    <script src="scripts/api.js?v=deploy-ready"></script>
+    <script src="app.js?v=deploy-ready"></script>
+  </body>
+</html>

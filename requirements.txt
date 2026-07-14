@@ -1,0 +1,1 @@
+# Aucune dependance externe pour le prototype actuel.

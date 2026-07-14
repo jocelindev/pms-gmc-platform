@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: pms-gmc-platform
+    runtime: python
+    plan: free
+    buildCommand: python database/init_database.py --db database/pms_gmc.sqlite
+    startCommand: python server.py --host 0.0.0.0
+    healthCheckPath: /api/health
