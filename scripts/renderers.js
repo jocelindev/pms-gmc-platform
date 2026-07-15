@@ -159,10 +159,33 @@
     };
   }
 
-  function renderPoleSummaryRows(selector) {
+  function getPoleAccessContext(state = {}) {
+    const reporting = PMS_DATA.reporting;
+    if (!state.currentUser || state.currentPermissions?.administration) {
+      return { activeRule: null, poles: reporting.poles, isRestricted: false };
+    }
+
+    const sessionRules = Array.isArray(state.userAccessScope)
+      ? state.userAccessScope.filter((rule) => rule?.poleId)
+      : [];
+    const fallbackRule = (state.accessRules || []).find((rule) => rule.id === state.activeAccessRuleId);
+    const rules = sessionRules.length ? sessionRules : fallbackRule ? [fallbackRule] : [];
+    const poleIds = [...new Set(rules.map((rule) => rule.poleId))];
+    const poles = reporting.poles.filter((pole) => poleIds.includes(pole.id));
+    const activeRule = rules.find((rule) => rule.id === state.activeAccessRuleId) || rules[0] || null;
+
+    return {
+      activeRule,
+      poles: poles.length ? poles : reporting.poles,
+      isRestricted: poles.length > 0,
+    };
+  }
+
+  function renderPoleSummaryRows(selector, state) {
     const target = $(selector);
     if (!target) return;
-    target.innerHTML = PMS_DATA.reporting.poles
+    const accessContext = getPoleAccessContext(state);
+    target.innerHTML = accessContext.poles
       .map((pole) => {
         const { greenCount, amberCount, redCount } = getPoleKpiStatus(pole.id);
         return `
@@ -185,9 +208,9 @@
       .join("");
   }
 
-  function renderPoleSummaryTables() {
-    renderPoleSummaryRows("#dashboard-pole-summary-table");
-    renderPoleSummaryRows("#all-poles-table");
+  function renderPoleSummaryTables(state) {
+    renderPoleSummaryRows("#dashboard-pole-summary-table", state);
+    renderPoleSummaryRows("#all-poles-table", state);
   }
 
   function renderDashboardPoleKpis() {
@@ -532,18 +555,6 @@
       .join("");
   }
 
-  function getPoleAccessContext(state) {
-    const reporting = PMS_DATA.reporting;
-    const activeRule = (state.accessRules || []).find((rule) => rule.id === state.activeAccessRuleId);
-    if (!activeRule) return { activeRule: null, poles: reporting.poles };
-
-    const authorizedPole = reporting.poles.find((pole) => pole.id === activeRule.poleId);
-    return {
-      activeRule,
-      poles: authorizedPole ? [authorizedPole] : reporting.poles,
-    };
-  }
-
   function renderPoleControls(state) {
     const reporting = PMS_DATA.reporting;
     const poleSelect = $("#pole-monitor-select");
@@ -565,12 +576,12 @@
         `
       )
       .join("");
-    poleSelect.disabled = Boolean(accessContext.activeRule);
+    poleSelect.disabled = accessContext.isRestricted && authorizedPoles.length === 1;
 
     const accessScope = $("#pole-access-scope");
     if (accessScope) {
-      accessScope.textContent = accessContext.activeRule
-        ? `Acces: ${accessContext.activeRule.responsible} - ${accessContext.activeRule.poleName}`
+      accessScope.textContent = accessContext.isRestricted
+        ? `Acces: ${accessContext.activeRule?.responsible || "Utilisateur"} - ${authorizedPoles.map((pole) => pole.name).join(", ")}`
         : "Acces: tous les poles";
     }
 
@@ -845,7 +856,14 @@
 
   function renderReportControls(state) {
     const reporting = PMS_DATA.reporting;
-    $("#report-pole-select").innerHTML = reporting.poles
+    const accessContext = getPoleAccessContext(state);
+    const authorizedPoles = accessContext.poles.length ? accessContext.poles : reporting.poles;
+    if (!authorizedPoles.some((pole) => pole.id === state.currentReportPole)) {
+      state.currentReportPole = authorizedPoles[0]?.id || reporting.defaultPole;
+    }
+
+    const poleSelect = $("#report-pole-select");
+    poleSelect.innerHTML = authorizedPoles
       .map(
         (pole) => `
           <option value="${escapeHtml(pole.id)}" ${pole.id === state.currentReportPole ? "selected" : ""}>
@@ -854,6 +872,7 @@
         `
       )
       .join("");
+    poleSelect.disabled = accessContext.isRestricted && authorizedPoles.length === 1;
 
     $("#report-cycle-select").innerHTML = reporting.cycles
       .map(
@@ -868,7 +887,12 @@
 
   function renderReportWorkspace(state) {
     const reporting = PMS_DATA.reporting;
-    const pole = reporting.poles.find((item) => item.id === state.currentReportPole) || reporting.poles[0];
+    const accessContext = getPoleAccessContext(state);
+    const authorizedPoles = accessContext.poles.length ? accessContext.poles : reporting.poles;
+    if (!authorizedPoles.some((item) => item.id === state.currentReportPole)) {
+      state.currentReportPole = authorizedPoles[0]?.id || reporting.defaultPole;
+    }
+    const pole = authorizedPoles.find((item) => item.id === state.currentReportPole) || authorizedPoles[0] || reporting.poles[0];
     const cycle = reporting.cycles.find((item) => item.value === state.currentReportCycle) || reporting.cycles[0];
     const kpis = reporting.kpisByPole[pole.id] || [];
     const statusClass = reportStatusClass(pole.status);
@@ -1379,7 +1403,7 @@
     renderExecutiveAlerts();
     renderSparkline();
     renderCatalogStats();
-    renderPoleSummaryTables();
+    renderPoleSummaryTables(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
     renderReportCalendar();
@@ -1412,6 +1436,7 @@
     renderKpiTable,
     renderPoleMonitor,
     renderValidationQueue,
+    renderReportControls,
     renderReportWorkspace,
     renderReportHistory,
     renderAdmin,

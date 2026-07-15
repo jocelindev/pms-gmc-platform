@@ -7,7 +7,7 @@ Premiere base de developpement pour la plateforme Performance Management System 
 Lancer d'abord le serveur local qui connecte l'interface a SQLite :
 
 ```powershell
-python server.py --port 5184
+python start.py --port 5184
 ```
 
 Puis ouvrir :
@@ -49,7 +49,7 @@ Identifiant : admin
 Code d'acces : PMS2026
 ```
 
-Note importante : l'offre gratuite convient pour une demonstration externe. Pour une exploitation officielle, il faudra remplacer SQLite par une base persistante type PostgreSQL, securiser les secrets Kobo, renforcer les mots de passe et prevoir les sauvegardes.
+Note importante : l'offre gratuite convient pour une demonstration externe. La base SQLite est creee automatiquement au premier demarrage si elle n'existe pas. Pour conserver les donnees entre redeploiements, configurer un stockage persistant Render et pointer `PMS_DB_PATH` vers ce volume, par exemple `/var/data/pms_gmc.sqlite`. Pour une exploitation officielle, il faudra ensuite migrer vers PostgreSQL, securiser les secrets Kobo, renforcer les mots de passe et prevoir les sauvegardes.
 
 ## Ouvrir le prototype statique
 
@@ -91,6 +91,7 @@ scripts/renderers.js    Fonctions de rendu de l'interface
 scripts/api.js          Connecteur entre l'interface et l'API locale
 app.js                  Etat, navigation et interactions utilisateur
 server.py               API locale et serveur web de developpement
+start.py                Demarrage avec creation automatique de la base si absente
 database/schema.sql     Schema de la base SQLite
 database/init_database.py Script de creation et d'alimentation de la base
 database/pms_gmc.sqlite Base de donnees locale generee

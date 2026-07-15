@@ -9,6 +9,7 @@
     renderPoleControls,
     renderPoleMonitor,
     renderValidationQueue,
+    renderReportControls,
     renderReportWorkspace,
     renderReportHistory,
     renderAdmin,
@@ -267,11 +268,34 @@
     logout.hidden = false;
   }
 
+  function getAuthorizedPoleIds() {
+    if (state.currentPermissions?.administration) {
+      return PMS_DATA.reporting.poles.map((pole) => pole.id);
+    }
+    const scope = Array.isArray(state.userAccessScope) ? state.userAccessScope : [];
+    return [...new Set(scope.map((rule) => rule.poleId).filter(Boolean))];
+  }
+
+  function getAllowedPoleFromScope(requestedPoleId) {
+    const authorizedPoleIds = getAuthorizedPoleIds();
+    if (!authorizedPoleIds.length || authorizedPoleIds.includes(requestedPoleId)) {
+      return requestedPoleId;
+    }
+    return authorizedPoleIds[0] || requestedPoleId;
+  }
+
   function applyUserAccessScope() {
     const firstAccess = state.userAccessScope?.[0];
     const canAdmin = Boolean(state.currentPermissions?.administration);
 
     document.querySelector('.nav-item[data-view="admin"]')?.toggleAttribute("hidden", !canAdmin);
+
+    if (canAdmin) {
+      state.activeAccessRuleId = null;
+      state.currentPoleMonitor = state.currentPoleMonitor || PMS_DATA.reporting.defaultPole;
+      state.currentReportPole = state.currentReportPole || PMS_DATA.reporting.defaultPole;
+      return;
+    }
 
     if (!firstAccess) return;
     state.activeAccessRuleId = firstAccess.id;
@@ -293,10 +317,8 @@
     state.userAccessScope = session.access || [];
     applyUserAccessScope();
     updateSessionChip();
-    renderPoleControls(state);
-    renderPoleMonitor(state);
-    renderReportWorkspace(state);
-    renderAdmin(state);
+    renderAll(state);
+    renderKoboActiveForm();
     showApplication();
     activateView("dashboard");
 
@@ -360,6 +382,10 @@
   }
 
   function activateView(view) {
+    if (view === "admin" && !state.currentPermissions?.administration) {
+      showToast("Acces reserve aux administrateurs.");
+      view = "dashboard";
+    }
     document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
     document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
     document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add("active");
@@ -697,16 +723,11 @@
   }
 
   function bindPoleMonitoring() {
-    const getAllowedPole = (requestedPoleId) => {
-      const activeRule = state.accessRules.find((rule) => rule.id === state.activeAccessRuleId);
-      return activeRule ? activeRule.poleId : requestedPoleId;
-    };
-
     document.addEventListener("click", (event) => {
       const poleButton = event.target.closest("[data-open-pole]");
       if (!poleButton) return;
       const requestedPole = poleButton.dataset.openPole;
-      const allowedPole = getAllowedPole(requestedPole);
+      const allowedPole = getAllowedPoleFromScope(requestedPole);
       state.currentPoleMonitor = allowedPole;
       activateView("poles");
       renderPoleControls(state);
@@ -724,7 +745,7 @@
     if (poleSelect) {
       poleSelect.addEventListener("change", (event) => {
         const requestedPole = event.target.value;
-        const allowedPole = getAllowedPole(requestedPole);
+        const allowedPole = getAllowedPoleFromScope(requestedPole);
         state.currentPoleMonitor = allowedPole;
         renderPoleControls(state);
         renderPoleMonitor(state);
@@ -761,9 +782,16 @@
 
   function bindReporting() {
     $("#report-pole-select").addEventListener("change", (event) => {
-      state.currentReportPole = event.target.value;
+      const requestedPole = event.target.value;
+      const allowedPole = getAllowedPoleFromScope(requestedPole);
+      state.currentReportPole = allowedPole;
+      event.target.value = allowedPole;
       renderReportWorkspace(state);
-      showToast("Apercu du rapport mis a jour pour le pole selectionne.");
+      showToast(
+        allowedPole === requestedPole
+          ? "Apercu du rapport mis a jour pour le pole selectionne."
+          : "Acces limite: le rapport reste sur le pole autorise."
+      );
     });
 
     $("#report-cycle-select").addEventListener("change", (event) => {
@@ -773,6 +801,9 @@
     });
 
     $("#generate-report").addEventListener("click", async () => {
+      state.currentReportPole = getAllowedPoleFromScope(state.currentReportPole);
+      renderReportControls(state);
+      renderReportWorkspace(state);
       const format = $("#report-format-select").value;
       const poleOption = $("#report-pole-select").selectedOptions[0];
       const pole = poleOption.textContent.trim();
@@ -1199,6 +1230,7 @@
         state.activeAccessRuleId = savedRule.id;
         renderPoleControls(state);
         renderPoleMonitor(state);
+        renderReportControls(state);
         renderAdmin(state);
         setAdminTab("access");
         showToast(
