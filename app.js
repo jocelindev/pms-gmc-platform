@@ -85,9 +85,35 @@
   function applyCalculatedKpisToReporting() {
     resetReportingToBaseline();
     const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
-    if (!results.length) return;
+    const referenceKpis = Array.isArray(state.kpiCalculationQuality?.referenceKpis)
+      ? state.kpiCalculationQuality.referenceKpis
+      : [];
+    if (!results.length && !referenceKpis.length) return;
 
     const byPole = new Map();
+    const calculatedKeys = new Set(results.map((result) => `${result.poleId}:${result.kpiId}`));
+    referenceKpis
+      .filter((kpi) => !calculatedKeys.has(`${kpi.poleId}:${kpi.kpiId}`))
+      .forEach((kpi) => {
+        if (!kpi.poleId) return;
+        const items = byPole.get(kpi.poleId) || [];
+        items.push({
+          id: kpi.kpiId,
+          name: kpi.kpiName,
+          value: kpi.valueLabel || "En attente calcul",
+          target: kpi.target || "A completer",
+          trend: "Reference Kobo",
+          status: "gray",
+          source: kpi.source || "KoboCollect",
+          calculated: false,
+          pendingCalculation: true,
+          period: "A calculer",
+          formula: kpi.formula,
+          method: kpi.method || "Donnees de calcul attendues",
+        });
+        byPole.set(kpi.poleId, items);
+      });
+
     results.forEach((result) => {
       if (!result.poleId) return;
       const items = byPole.get(result.poleId) || [];
@@ -114,14 +140,17 @@
       if (!pole) return;
       const redCount = kpis.filter((item) => item.status === "red").length;
       const amberCount = kpis.filter((item) => item.status === "amber").length;
+      const grayCount = kpis.filter((item) => item.status === "gray").length;
       const score = scoreFromKpis(kpis);
+      const matchRate = Number(state.kpiCalculationQuality?.matchRate);
+      const calculationRate = Number(state.kpiCalculationQuality?.calculationRate);
       pole.kpiCount = kpis.length;
       pole.score = score;
-      pole.rag = redCount ? "red" : amberCount ? "amber" : "green";
-      pole.quality = state.kpiCalculationQuality?.matchRate || pole.quality || 0;
-      pole.readiness = state.kpiCalculationQuality?.calculationRate || score;
+      pole.rag = redCount ? "red" : amberCount ? "amber" : grayCount ? "gray" : "green";
+      pole.quality = Number.isFinite(matchRate) ? matchRate : pole.quality || 0;
+      pole.readiness = Number.isFinite(calculationRate) ? calculationRate : score;
       pole.status = statusLabel(pole.rag);
-      pole.lastReport = latestPeriod(results.filter((item) => item.poleId === poleId));
+      pole.lastReport = latestPeriod(results.filter((item) => item.poleId === poleId)) || "Reference Kobo";
       pole.lateSubmissions = state.kpiCalculationQuality?.unmatchedCalculationCount || 0;
     });
   }

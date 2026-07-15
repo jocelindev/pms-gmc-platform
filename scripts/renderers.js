@@ -145,6 +145,7 @@
     if (status === "green") return "Vert";
     if (status === "red") return "Rouge";
     if (status === "amber") return "Orange";
+    if (status === "gray") return "A verifier";
     return status;
   }
 
@@ -246,7 +247,7 @@
     const { kpis, greenCount, amberCount, redCount, totalShown } = getPoleKpiStatus(pole.id);
     const priorityKpis = [...kpis]
       .sort((left, right) => {
-        const order = { red: 0, amber: 1, green: 2 };
+        const order = { red: 0, amber: 1, gray: 2, green: 3 };
         return order[left.status] - order[right.status];
       })
       .slice(0, 3);
@@ -721,12 +722,8 @@
                               <div><dt>Objectif</dt><dd>${escapeHtml(kpi.target)}</dd></div>
                               <div><dt>Tendance</dt><dd>${escapeHtml(kpi.trend)}</dd></div>
                               <div><dt>Source Kobo</dt><dd>${escapeHtml(kpi.source)}</dd></div>
-                              ${
-                                kpi.calculated
-                                  ? `<div><dt>Periode</dt><dd>${escapeHtml(kpi.period || "Kobo")}</dd></div>
-                                     <div><dt>Methode</dt><dd>${escapeHtml(kpi.method || "Calcul PMS")}</dd></div>`
-                                  : ""
-                              }
+                              <div><dt>Periode</dt><dd>${escapeHtml(kpi.period || "Kobo")}</dd></div>
+                              <div><dt>Methode</dt><dd>${escapeHtml(kpi.method || (kpi.pendingCalculation ? "Donnees de calcul attendues" : "Calcul PMS"))}</dd></div>
                             </dl>
                           </section>
                         `

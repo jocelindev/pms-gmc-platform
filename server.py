@@ -1637,7 +1637,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     reference_source = source_by_role.get("referentielKpi")
     calculation_source = source_by_role.get("donneesCalcul")
     quality = {
-        "configured": bool(reference_source and calculation_source),
+        "configured": bool(reference_source),
+        "calculationFormConfigured": bool(calculation_source),
         "referenceCount": 0,
         "calculationRecords": 0,
         "calculationGroups": 0,
@@ -1649,13 +1650,14 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         "missingFormulaCount": 0,
         "matchRate": 0,
         "calculationRate": 0,
+        "referenceKpis": [],
         "warnings": [],
         "proposals": [],
     }
 
-    if not reference_source or not calculation_source:
+    if not reference_source:
         quality["proposals"].append(
-            "Configurer les deux formulaires dans Administration > KoboCollecte : KPI/formules puis donnees de calcul."
+            "Configurer le formulaire KPI/formules dans Administration > KoboCollecte pour afficher les KPI par pole."
         )
         return [], quality
 
@@ -1668,21 +1670,27 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         """,
         (reference_source["formId"],),
     ).fetchall()
-    calculation_rows = conn.execute(
-        """
-        SELECT *
-        FROM kobo_submissions
-        WHERE form_uid = ?
-        ORDER BY created_at DESC, id DESC
-        """,
-        (calculation_source["formId"],),
-    ).fetchall()
+    calculation_rows = (
+        conn.execute(
+            """
+            SELECT *
+            FROM kobo_submissions
+            WHERE form_uid = ?
+            ORDER BY created_at DESC, id DESC
+            """,
+            (calculation_source["formId"],),
+        ).fetchall()
+        if calculation_source
+        else []
+    )
 
     quality["referenceCount"] = len(reference_rows)
     quality["calculationRecords"] = len(calculation_rows)
     if not reference_rows:
         quality["warnings"].append("Aucune soumission trouvee pour le formulaire KPI/formules.")
-    if not calculation_rows:
+    if not calculation_source:
+        quality["warnings"].append("Formulaire donnees de calcul non configure.")
+    elif not calculation_rows:
         quality["warnings"].append("Aucune soumission trouvee pour le formulaire donnees de calcul.")
 
     references: list[dict] = []
@@ -1792,6 +1800,30 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     quality["calculationGroups"] = len(groups)
     results: list[dict] = []
     pole_names = {row["id"]: row["name"] for row in conn.execute("SELECT id, name FROM poles").fetchall()}
+    quality["referenceKpis"] = sorted(
+        [
+            {
+                "id": f"{record['poleId']}:{record['kpiId']}",
+                "poleId": record["poleId"],
+                "poleName": pole_names.get(record["poleId"], record["poleId"]),
+                "kpiId": record["kpiId"],
+                "kpiName": record["kpiName"],
+                "target": record["target"] or "A completer",
+                "unit": record["unit"],
+                "formula": record["formula"] or "Formule a completer",
+                "source": reference_source["formId"],
+                "sourceData": record["sourceData"],
+                "owner": record["owner"],
+                "collectionFrequency": record["collectionFrequency"],
+                "reportingFrequency": record["reportingFrequency"],
+                "status": "gray",
+                "valueLabel": "En attente calcul",
+                "method": "Reference Kobo, donnees de calcul attendues",
+            }
+            for record in references
+        ],
+        key=lambda item: (item["poleName"], item["kpiName"]),
+    )
 
     for group in groups.values():
         reference = reference_lookup.get((group["poleId"], group["kpiKey"])) or reference_by_kpi.get(group["kpiKey"])
@@ -1820,7 +1852,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "unit": reference["unit"],
             "status": status,
             "trend": "Calcul Kobo",
-            "source": calculation_source["formId"],
+            "source": calculation_source["formId"] if calculation_source else reference_source["formId"],
             "formula": reference["formula"] or "Formule a completer",
             "sourceData": reference["sourceData"],
             "method": method,
@@ -1844,8 +1876,10 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         quality["proposals"].append("Completer les valeurs cibles dans le formulaire KPI/formules pour fiabiliser le statut vert/orange/rouge.")
     if quality["missingFormulaCount"]:
         quality["proposals"].append("Formaliser les formules restantes avec les memes libelles que les elements collectes.")
+    if references and not calculation_source:
+        quality["proposals"].append("Les KPI du referentiel sont visibles; ajouter le formulaire donnees de calcul pour obtenir les valeurs.")
     if not results and quality["configured"]:
-        quality["proposals"].append("Synchroniser les deux formulaires Kobo apres configuration pour alimenter les dashboards.")
+        quality["proposals"].append("Synchroniser le formulaire donnees de calcul pour remplacer les valeurs en attente.")
     if not quality["proposals"]:
         quality["proposals"].append("Maintenir le meme id_kpi dans les deux formulaires pour garder le calcul automatique stable.")
 
