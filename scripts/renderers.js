@@ -1011,6 +1011,7 @@
     const countFields = (objectiveTemplate.requiredFields?.length || 0) + (objectiveTemplate.calculationFields?.length || 0);
     const referenceSource = state.objectiveKoboSource;
     const calculationSource = state.calculationKoboSource;
+    const sourceProfile = objectiveTemplate.sourceWorkbookProfile || {};
     const objectiveSummary = $("#objective-summary-cards");
 
     if (objectiveSummary) {
@@ -1041,6 +1042,16 @@
           <strong>${countFields}</strong>
           <small>sur les deux formulaires Kobo</small>
         </div>
+        <div class="admin-summary-card">
+          <span>Catalogue source</span>
+          <strong>${sourceProfile.kpiCount || 0}</strong>
+          <small>${sourceProfile.groupCount || 0} groupes / ${sourceProfile.categoryCount || 0} categories</small>
+        </div>
+        <div class="admin-summary-card">
+          <span>Controle qualite</span>
+          <strong>${sourceProfile.formulaMissing || 0}</strong>
+          <small>formule manquante / ${sourceProfile.targetMissing || 0} cible(s) a completer</small>
+        </div>
       `;
     }
 
@@ -1061,14 +1072,32 @@
       server: "#admin-kobo-reference-server",
       form: "#admin-kobo-reference-form-id",
       fields: {
+        id: "#admin-kobo-reference-id-field",
+        category: "#admin-kobo-reference-category-field",
+        entity: "#admin-kobo-reference-entity-field",
+        subEntity: "#admin-kobo-reference-subentity-field",
         pole: "#admin-kobo-reference-pole-field",
-        kpi: "#admin-kobo-reference-kpi-field",
-        name: "#admin-kobo-reference-name-field",
+        path: "#admin-kobo-reference-path-field",
+        title: "#admin-kobo-reference-title-field",
+        definition: "#admin-kobo-reference-definition-field",
+        type: "#admin-kobo-reference-type-field",
+        unit: "#admin-kobo-reference-unit-field",
         formula: "#admin-kobo-reference-formula-field",
         target: "#admin-kobo-reference-target-field",
-        unit: "#admin-kobo-reference-unit-field",
-        frequency: "#admin-kobo-reference-frequency-field",
+        collectionFrequency: "#admin-kobo-reference-collection-frequency-field",
+        reportingFrequency: "#admin-kobo-reference-reporting-frequency-field",
+        sourceData: "#admin-kobo-reference-source-field",
+        owner: "#admin-kobo-reference-owner-field",
+        respondent: "#admin-kobo-reference-respondent-field",
+        respondentFunction: "#admin-kobo-reference-respondent-function-field",
+        year: "#admin-kobo-reference-year-field",
         validation: "#admin-kobo-reference-validation-field",
+        validator: "#admin-kobo-reference-validator-field",
+        comments: "#admin-kobo-reference-comments-field",
+        submittedAt: "#admin-kobo-reference-submitted-at-field",
+        sourceReference: "#admin-kobo-reference-source-reference-field",
+        documentStatus: "#admin-kobo-reference-document-status-field",
+        attention: "#admin-kobo-reference-attention-field",
       },
     });
     fillKoboSourceForm(calculationSource, {

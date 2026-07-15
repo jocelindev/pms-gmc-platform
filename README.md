@@ -70,6 +70,7 @@ L'onglet KoboCollect permet maintenant de renseigner l'adresse serveur KoboToolb
 - Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.
 - Le jeton API sert uniquement a la synchronisation courante : il n'est pas renvoye a l'interface ni affiche comme formulaire actif.
 - Dans Administration > KoboCollecte, la logique PMS distingue deux formulaires : un formulaire `KPI et formules` par pole, et un formulaire `Elements de calcul` qui collecte les donnees brutes utilisees par ces formules.
+- Le formulaire `KPI et formules` est aligne sur `Copie de Catalogu.xlsx` : 26 champs, 74 KPI, 11 groupes de rattachement, 0 formule manquante et 13 cibles a completer.
 
 ## Contenu de cette version
 
