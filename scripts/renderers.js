@@ -185,6 +185,11 @@
     const target = $(selector);
     if (!target) return;
     const accessContext = getPoleAccessContext(state);
+    const dashboardCount = selector === "#dashboard-pole-summary-table" ? $("#dashboard-pole-count") : null;
+    if (dashboardCount) {
+      dashboardCount.className = `status-pill ${accessContext.isRestricted ? "green" : "amber"}`;
+      dashboardCount.textContent = `${accessContext.poles.length} pole${accessContext.poles.length > 1 ? "s" : ""} suivi${accessContext.poles.length > 1 ? "s" : ""}`;
+    }
     target.innerHTML = accessContext.poles
       .map((pole) => {
         const { greenCount, amberCount, redCount } = getPoleKpiStatus(pole.id);
