@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import sqlite3
 import subprocess
@@ -16,6 +18,9 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DATABASE_DIR = ROOT_DIR / "database"
 SCHEMA_PATH = DATABASE_DIR / "schema.sql"
 DEFAULT_DB_PATH = DATABASE_DIR / "pms_gmc.sqlite"
+PASSWORD_ITERATIONS = 210_000
+DEFAULT_ADMIN_PASSWORD = os.environ.get("PMS_ADMIN_PASSWORD", "Admin@2026!")
+DEFAULT_USER_PASSWORD = os.environ.get("PMS_DEFAULT_USER_PASSWORD", "Palladium@2026!")
 
 
 PERMISSIONS = [
@@ -62,6 +67,17 @@ PROFILE_PERMISSIONS = {
         "administration": False,
     },
 }
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        bytes.fromhex(salt),
+        PASSWORD_ITERATIONS,
+    ).hex()
+    return f"pbkdf2_sha256${PASSWORD_ITERATIONS}${salt}${digest}"
 
 
 def slugify(value: str) -> str:
@@ -150,18 +166,29 @@ def upsert_permission(cur: sqlite3.Cursor, code: str, label: str, description: s
     return int(cur.fetchone()[0])
 
 
-def upsert_user(cur: sqlite3.Cursor, full_name: str, profile_id: int | None = None) -> int:
+def upsert_user(
+    cur: sqlite3.Cursor,
+    full_name: str,
+    profile_id: int | None = None,
+    initial_password: str | None = None,
+) -> int:
     email = f"{slugify(full_name)}@palladium.local"
+    password_hash = hash_password(initial_password or DEFAULT_USER_PASSWORD)
     cur.execute(
         """
-        INSERT INTO users (full_name, email, default_profile_id, status, updated_at)
-        VALUES (?, ?, ?, 'Actif', CURRENT_TIMESTAMP)
+        INSERT INTO users (
+          full_name, email, default_profile_id, status, password_hash,
+          password_updated_at, must_change_password, updated_at
+        )
+        VALUES (?, ?, ?, 'Actif', ?, CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP)
         ON CONFLICT(email) DO UPDATE SET
           full_name = excluded.full_name,
           default_profile_id = COALESCE(excluded.default_profile_id, users.default_profile_id),
+          password_hash = COALESCE(NULLIF(users.password_hash, ''), excluded.password_hash),
+          password_updated_at = COALESCE(users.password_updated_at, excluded.password_updated_at),
           updated_at = CURRENT_TIMESTAMP
         """,
-        (full_name, email, profile_id),
+        (full_name, email, profile_id, password_hash),
     )
     cur.execute("SELECT id FROM users WHERE email = ?", (email,))
     return int(cur.fetchone()[0])
@@ -245,6 +272,8 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
                 """,
                 (profile_id, permission_id, 1 if permissions.get(code) else 0),
             )
+
+    upsert_user(cur, "Administrateur PMS", profile_ids["Administrateur"], DEFAULT_ADMIN_PASSWORD)
 
     reporting = data.get("reporting", {})
     poles = list(reporting.get("poles", []))

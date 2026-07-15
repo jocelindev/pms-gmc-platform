@@ -337,7 +337,7 @@
         const identifier = $("#login-identifier").value.trim();
         const password = $("#login-password").value.trim();
         if (!identifier || !password) {
-          setLoginFeedback("Renseignez l'identifiant et le code d'acces.", "error");
+          setLoginFeedback("Renseignez l'identifiant et le mot de passe.", "error");
           return;
         }
 
@@ -369,7 +369,7 @@
         $("#session-chip").hidden = true;
         logout.hidden = true;
         showLogin();
-        setLoginFeedback("Session fermee. Code temporaire prototype : PMS2026");
+        setLoginFeedback("Session fermee. Saisissez votre mot de passe utilisateur.");
       });
     }
   }
@@ -1056,6 +1056,7 @@
         const fullName = $("#new-user-full-name")?.value.trim();
         const email = $("#new-user-email")?.value.trim();
         const phone = $("#new-user-phone")?.value.trim();
+        const password = $("#new-user-password")?.value.trim();
         const profile = $("#new-user-profile")?.value || state.currentUserAccessProfile;
         const status = $("#new-user-status")?.value || "Actif";
         const poleId = $("#new-user-pole")?.value || state.currentUserAccessPole;
@@ -1063,6 +1064,11 @@
 
         if (!fullName) {
           showToast("Renseignez le nom complet de l'utilisateur.");
+          return;
+        }
+
+        if (!password || password.length < 8) {
+          showToast("Definissez un mot de passe temporaire d'au moins 8 caracteres.");
           return;
         }
 
@@ -1085,7 +1091,7 @@
         let savedInDatabase = false;
         if (api?.createUser) {
           try {
-            const response = await api.createUser(user);
+            const response = await api.createUser({ ...user, password });
             savedUser = {
               ...user,
               ...response,
@@ -1113,6 +1119,7 @@
         $("#new-user-full-name").value = "";
         $("#new-user-email").value = "";
         $("#new-user-phone").value = "";
+        $("#new-user-password").value = "";
         renderAdmin(state);
         setAdminTab("access");
         showToast(

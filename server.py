@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import mimetypes
 import os
 import re
+import secrets
 import sqlite3
 import unicodedata
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -24,7 +27,58 @@ PERMISSION_LABELS = {
     "validation": "Validation",
     "administration": "Administration",
 }
-DEMO_ACCESS_CODE = "PMS2026"
+PASSWORD_ITERATIONS = 210_000
+DEFAULT_ADMIN_PASSWORD = os.environ.get("PMS_ADMIN_PASSWORD", "Admin@2026!")
+DEFAULT_USER_PASSWORD = os.environ.get("PMS_DEFAULT_USER_PASSWORD", "Palladium@2026!")
+MIN_PASSWORD_LENGTH = 8
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        bytes.fromhex(salt),
+        PASSWORD_ITERATIONS,
+    ).hex()
+    return f"pbkdf2_sha256${PASSWORD_ITERATIONS}${salt}${digest}"
+
+
+def verify_password(password: str, stored_hash: str | None) -> bool:
+    if not stored_hash:
+        return False
+    try:
+        algorithm, iterations, salt, digest = stored_hash.split("$", 3)
+        if algorithm != "pbkdf2_sha256":
+            return False
+        candidate = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            bytes.fromhex(salt),
+            int(iterations),
+        ).hex()
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(candidate, digest)
+
+
+def validate_password(password: str) -> None:
+    if len(password or "") < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"Le mot de passe doit contenir au moins {MIN_PASSWORD_LENGTH} caracteres.")
+
+
+def sanitize_details(value):
+    if isinstance(value, dict):
+        sanitized = {}
+        for key, item in value.items():
+            if "password" in str(key).lower() or "motdepasse" in str(key).lower():
+                sanitized[key] = "***"
+            else:
+                sanitized[key] = sanitize_details(item)
+        return sanitized
+    if isinstance(value, list):
+        return [sanitize_details(item) for item in value]
+    return value
 
 
 def slugify(value: str) -> str:
@@ -38,6 +92,7 @@ def db_connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    migrate_database(conn)
     return conn
 
 
@@ -51,8 +106,51 @@ def audit(conn: sqlite3.Connection, action: str, entity_type: str, entity_id: st
         INSERT INTO audit_logs (action, entity_type, entity_id, details)
         VALUES (?, ?, ?, ?)
         """,
-        (action, entity_type, str(entity_id), json.dumps(details or {}, ensure_ascii=False)),
+        (action, entity_type, str(entity_id), json.dumps(sanitize_details(details or {}), ensure_ascii=False)),
     )
+
+
+def migrate_database(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    changed = False
+    if "password_hash" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+        changed = True
+    if "password_updated_at" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN password_updated_at TEXT")
+        changed = True
+    if "must_change_password" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+        changed = True
+
+    admin_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
+    default_hash = hash_password(DEFAULT_USER_PASSWORD)
+    conn.execute(
+        """
+        UPDATE users
+        SET password_hash = ?,
+            password_updated_at = COALESCE(password_updated_at, CURRENT_TIMESTAMP),
+            must_change_password = COALESCE(must_change_password, 0)
+        WHERE (password_hash IS NULL OR password_hash = '')
+          AND (
+            lower(email) IN ('administrateur.pms@palladium.local', 'admin@palladium.local')
+            OR lower(full_name) IN ('administrateur pms', 'admin')
+          )
+        """,
+        (admin_hash,),
+    )
+    conn.execute(
+        """
+        UPDATE users
+        SET password_hash = ?,
+            password_updated_at = COALESCE(password_updated_at, CURRENT_TIMESTAMP),
+            must_change_password = COALESCE(must_change_password, 0)
+        WHERE password_hash IS NULL OR password_hash = ''
+        """,
+        (default_hash,),
+    )
+    if changed or conn.total_changes:
+        conn.commit()
 
 
 def ensure_permission(conn: sqlite3.Connection, code: str) -> int:
@@ -84,18 +182,29 @@ def ensure_profile(conn: sqlite3.Connection, profile: str) -> int:
     return int(row["id"])
 
 
-def ensure_user(conn: sqlite3.Connection, full_name: str, profile_id: int | None = None) -> int:
+def ensure_user(
+    conn: sqlite3.Connection,
+    full_name: str,
+    profile_id: int | None = None,
+    initial_password: str | None = None,
+) -> int:
     email = f"{slugify(full_name)}@palladium.local"
+    password_hash = hash_password(initial_password or DEFAULT_USER_PASSWORD)
     conn.execute(
         """
-        INSERT INTO users (full_name, email, default_profile_id, status, updated_at)
-        VALUES (?, ?, ?, 'Actif', CURRENT_TIMESTAMP)
+        INSERT INTO users (
+          full_name, email, default_profile_id, status, password_hash,
+          password_updated_at, must_change_password, updated_at
+        )
+        VALUES (?, ?, ?, 'Actif', ?, CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP)
         ON CONFLICT(email) DO UPDATE SET
           full_name = excluded.full_name,
           default_profile_id = COALESCE(excluded.default_profile_id, users.default_profile_id),
+          password_hash = COALESCE(NULLIF(users.password_hash, ''), excluded.password_hash),
+          password_updated_at = COALESCE(users.password_updated_at, excluded.password_updated_at),
           updated_at = CURRENT_TIMESTAMP
         """,
-        (full_name, email, profile_id),
+        (full_name, email, profile_id, password_hash),
     )
     row = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
     return int(row["id"])
@@ -108,20 +217,43 @@ def upsert_user_details(
     phone: str | None,
     profile_id: int | None,
     status: str = "Actif",
+    password: str | None = None,
 ) -> int:
     normalized_email = (email or f"{slugify(full_name)}@palladium.local").strip().lower()
+    password_hash = hash_password(password) if password else None
     conn.execute(
         """
-        INSERT INTO users (full_name, email, phone, default_profile_id, status, updated_at)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT INTO users (
+          full_name, email, phone, default_profile_id, status, password_hash,
+          password_updated_at, must_change_password, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, COALESCE(?, ?), CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(email) DO UPDATE SET
           full_name = excluded.full_name,
           phone = excluded.phone,
           default_profile_id = COALESCE(excluded.default_profile_id, users.default_profile_id),
           status = excluded.status,
+          password_hash = COALESCE(excluded.password_hash, users.password_hash),
+          password_updated_at = CASE
+            WHEN excluded.password_hash IS NOT NULL THEN CURRENT_TIMESTAMP
+            ELSE users.password_updated_at
+          END,
+          must_change_password = CASE
+            WHEN excluded.password_hash IS NOT NULL THEN excluded.must_change_password
+            ELSE users.must_change_password
+          END,
           updated_at = CURRENT_TIMESTAMP
         """,
-        (full_name, normalized_email, phone, profile_id, status or "Actif"),
+        (
+            full_name,
+            normalized_email,
+            phone,
+            profile_id,
+            status or "Actif",
+            password_hash,
+            hash_password(DEFAULT_USER_PASSWORD),
+            1 if password_hash else 0,
+        ),
     )
     row = conn.execute("SELECT id FROM users WHERE email = ?", (normalized_email,)).fetchone()
     return int(row["id"])
@@ -390,14 +522,16 @@ def create_platform_user(payload: dict) -> dict:
     phone = str(payload.get("phone") or "").strip()
     profile = str(payload.get("profile") or "Manager / Responsable").strip()
     status = str(payload.get("status") or "Actif").strip()
+    password = str(payload.get("password") or payload.get("temporaryPassword") or "").strip()
     default_pole_id = str(payload.get("defaultPoleId") or "").strip()
     default_pole_name = str(payload.get("defaultPoleName") or "").strip()
     if not full_name:
         raise ValueError("Le nom complet est obligatoire.")
+    validate_password(password)
 
     with db_connect() as conn:
         profile_id = ensure_profile(conn, profile)
-        user_id = upsert_user_details(conn, full_name, email or None, phone or None, profile_id, status)
+        user_id = upsert_user_details(conn, full_name, email or None, phone or None, profile_id, status, password)
         audit(conn, "Creation utilisateur", "user", str(user_id), payload)
         conn.commit()
         row = conn.execute(
@@ -559,17 +693,15 @@ def access_for_session(conn: sqlite3.Connection, user_id: int, profile: str, per
 
 def authenticate_user(payload: dict) -> dict:
     identifier = str(payload.get("identifier") or "").strip()
-    access_code = str(payload.get("password") or payload.get("accessCode") or "").strip()
-    if not identifier or not access_code:
-        raise ValueError("Identifiant et code d'acces obligatoires.")
-    if access_code != DEMO_ACCESS_CODE:
-        raise ValueError("Code d'acces incorrect.")
+    password = str(payload.get("password") or payload.get("accessCode") or "").strip()
+    if not identifier or not password:
+        raise ValueError("Identifiant et mot de passe obligatoires.")
 
     normalized_identifier = identifier.lower()
     with db_connect() as conn:
         if normalized_identifier in {"admin", "administrateur", "admin@palladium.local"}:
             profile_id = ensure_profile(conn, "Administrateur")
-            user_id = ensure_user(conn, "Administrateur PMS", profile_id)
+            user_id = ensure_user(conn, "Administrateur PMS", profile_id, DEFAULT_ADMIN_PASSWORD)
             conn.commit()
         else:
             row = conn.execute(
@@ -594,7 +726,14 @@ def authenticate_user(payload: dict) -> dict:
 
         user = conn.execute(
             """
-            SELECT u.id, u.full_name, u.email, u.status, pr.name AS profile, pr.id AS profile_id
+            SELECT
+              u.id,
+              u.full_name,
+              u.email,
+              u.status,
+              u.password_hash,
+              pr.name AS profile,
+              pr.id AS profile_id
             FROM users u
             JOIN profiles pr ON pr.id = ?
             WHERE u.id = ?
@@ -603,6 +742,8 @@ def authenticate_user(payload: dict) -> dict:
         ).fetchone()
         if not user or user["status"] != "Actif":
             raise ValueError("Compte utilisateur inactif ou introuvable.")
+        if not verify_password(password, user["password_hash"]):
+            raise ValueError("Mot de passe incorrect.")
 
         permissions = permission_map_for_profile(conn, int(user["profile_id"]))
         access = access_for_session(conn, int(user["id"]), user["profile"], permissions)

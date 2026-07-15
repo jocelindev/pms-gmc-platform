@@ -19,8 +19,11 @@ http://127.0.0.1:5184/
 Connexion de demonstration :
 
 ```text
-Identifiant : admin
-Code d'acces : PMS2026
+Identifiant admin : admin
+Mot de passe admin : Admin@2026!
+
+Identifiant responsable exemple : directeur.financier@palladium.local
+Mot de passe responsable initial : Palladium@2026!
 ```
 
 Les responsables peuvent aussi se connecter avec leur email local, par exemple `directeur.financier@palladium.local`, avec le meme code temporaire.
@@ -45,11 +48,11 @@ https://pms-gmc-platform.onrender.com
 Connexion de demonstration :
 
 ```text
-Identifiant : admin
-Code d'acces : PMS2026
+Identifiant admin : admin
+Mot de passe admin : Admin@2026!
 ```
 
-Note importante : l'offre gratuite convient pour une demonstration externe. La base SQLite est creee automatiquement au premier demarrage si elle n'existe pas. Pour conserver les donnees entre redeploiements, configurer un stockage persistant Render et pointer `PMS_DB_PATH` vers ce volume, par exemple `/var/data/pms_gmc.sqlite`. Pour une exploitation officielle, il faudra ensuite migrer vers PostgreSQL, securiser les secrets Kobo, renforcer les mots de passe et prevoir les sauvegardes.
+Note importante : l'offre gratuite convient pour une demonstration externe. La base SQLite est creee automatiquement au premier demarrage si elle n'existe pas. Pour conserver les donnees entre redeploiements, configurer un stockage persistant Render et pointer `PMS_DB_PATH` vers ce volume, par exemple `/var/data/pms_gmc.sqlite`. Les mots de passe initiaux peuvent etre changes par variables d'environnement : `PMS_ADMIN_PASSWORD` et `PMS_DEFAULT_USER_PASSWORD`. Pour une exploitation officielle, il faudra ensuite migrer vers PostgreSQL, securiser les secrets Kobo, renforcer les mots de passe et prevoir les sauvegardes.
 
 ## Ouvrir le prototype statique
 
@@ -109,7 +112,7 @@ database/pms_gmc.sqlite Base de donnees locale generee
 - Version sans dependances frontend pour demarrer rapidement.
 - Base SQLite locale branchee via une API Python legere.
 - Les objectifs KPI, droits par profil, affectations utilisateur, formulaires Kobo actifs et rapports generes sont persistables dans SQLite.
-- Page de connexion locale avec session utilisateur, profil et acces par pole.
+- Page de connexion locale avec mots de passe hashes, session utilisateur, profil et acces par pole.
 
 ## Prochaines etapes conseillees
 

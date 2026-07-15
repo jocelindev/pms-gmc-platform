@@ -34,12 +34,12 @@
             />
           </label>
           <label>
-            Code d'acces
+            Mot de passe
             <input
               id="login-password"
               type="password"
               autocomplete="current-password"
-              placeholder="Code temporaire"
+              placeholder="Mot de passe utilisateur"
               required
             />
           </label>
@@ -47,7 +47,7 @@
             Se connecter
           </button>
           <div class="login-feedback" id="login-feedback" role="status" aria-live="polite">
-            Code temporaire prototype : PMS2026
+            Utilisez le mot de passe fourni par l'administrateur.
           </div>
         </form>
       </div>
@@ -907,6 +907,10 @@
                     <input id="new-user-phone" class="search-input" placeholder="+225 ..." />
                   </label>
                   <label>
+                    Mot de passe temporaire
+                    <input id="new-user-password" class="search-input" type="password" autocomplete="new-password" placeholder="Minimum 8 caracteres" />
+                  </label>
+                  <label>
                     Profil par defaut
                     <select id="new-user-profile"></select>
                   </label>
@@ -984,9 +988,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=access-scope-2026"></script>
-    <script src="scripts/renderers.js?v=access-scope-2026"></script>
-    <script src="scripts/api.js?v=access-scope-2026"></script>
-    <script src="app.js?v=access-scope-2026"></script>
+    <script src="scripts/data.js?v=user-passwords-2026"></script>
+    <script src="scripts/renderers.js?v=user-passwords-2026"></script>
+    <script src="scripts/api.js?v=user-passwords-2026"></script>
+    <script src="app.js?v=user-passwords-2026"></script>
   </body>
 </html>
