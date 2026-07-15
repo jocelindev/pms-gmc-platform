@@ -73,6 +73,7 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
 - Le formulaire `KPI et formules` est aligne sur `Copie de Catalogu.xlsx` : 26 champs, 74 KPI, 11 groupes de rattachement, 0 formule manquante et 13 cibles a completer.
 - Le moteur PMS rapproche automatiquement les deux formulaires par `pole + KPI + periode`, applique la formule du catalogue, puis alimente le tableau de bord et l'onglet `Suivi par pole`.
 - Meme sans donnees de calcul, les KPI du formulaire `KPI et formules` restent visibles par pole avec le statut `En attente calcul`.
+- Dans l'administration, `Enregistrer` conserve l'UID et le mapping des champs; `Synchroniser depuis Kobo` utilise le token API pour importer les soumissions et rendre les KPI visibles.
 
 ## Contenu de cette version
 

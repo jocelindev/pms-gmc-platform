@@ -1275,10 +1275,13 @@ textarea {
 
 .admin-kobo-actions {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   margin-top: 14px;
 }
 
-.admin-kobo-actions .primary-action {
+.admin-kobo-actions .primary-action,
+.admin-kobo-actions .ghost-action {
   width: 100%;
   min-height: 44px;
 }
@@ -2571,6 +2574,7 @@ td small {
   .kpi-engine-grid,
   .admin-summary-grid,
   .admin-kobo-form,
+  .admin-kobo-actions,
   .kobo-logic-grid,
   .objective-profile-main,
   .objective-field-section-grid,

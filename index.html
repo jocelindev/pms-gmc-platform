@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=kpi-reference-2026" />
+    <link rel="stylesheet" href="styles.css?v=admin-kobo-sync-2026" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -820,6 +820,10 @@
                     <input id="admin-kobo-reference-form-id" class="search-input" placeholder="ex. aKPIFormules2026" />
                   </label>
                   <label>
+                    Token API Kobo
+                    <input id="admin-kobo-reference-token" class="search-input" type="password" autocomplete="off" placeholder="Token API pour synchroniser" />
+                  </label>
+                  <label>
                     Champ ID KPI
                     <input id="admin-kobo-reference-id-field" class="search-input" value="id_kpi" />
                   </label>
@@ -928,6 +932,9 @@
                   <button class="primary-action" id="admin-kobo-reference-save" type="button">
                     Enregistrer le formulaire KPI et formules
                   </button>
+                  <button class="ghost-action" id="admin-kobo-reference-sync" type="button">
+                    Synchroniser depuis Kobo
+                  </button>
                 </div>
                 <div class="connector-status empty" id="admin-kobo-reference-status">
                   Aucun formulaire KPI/formules configure.
@@ -949,6 +956,10 @@
                   <label>
                     ID formulaire donnees de calcul
                     <input id="admin-kobo-calculation-form-id" class="search-input" placeholder="ex. aDonneesCalculKPI2026" />
+                  </label>
+                  <label>
+                    Token API Kobo
+                    <input id="admin-kobo-calculation-token" class="search-input" type="password" autocomplete="off" placeholder="Token API pour synchroniser" />
                   </label>
                   <label>
                     Champ pole
@@ -986,6 +997,9 @@
                 <div class="connector-actions admin-kobo-actions">
                   <button class="primary-action" id="admin-kobo-calculation-save" type="button">
                     Enregistrer le formulaire donnees de calcul
+                  </button>
+                  <button class="ghost-action" id="admin-kobo-calculation-sync" type="button">
+                    Synchroniser depuis Kobo
                   </button>
                 </div>
                 <div class="connector-status empty" id="admin-kobo-calculation-status">
@@ -1155,9 +1169,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=kpi-reference-2026"></script>
-    <script src="scripts/renderers.js?v=kpi-reference-2026"></script>
-    <script src="scripts/api.js?v=kpi-reference-2026"></script>
-    <script src="app.js?v=kpi-reference-2026"></script>
+    <script src="scripts/data.js?v=admin-kobo-sync-2026"></script>
+    <script src="scripts/renderers.js?v=admin-kobo-sync-2026"></script>
+    <script src="scripts/api.js?v=admin-kobo-sync-2026"></script>
+    <script src="app.js?v=admin-kobo-sync-2026"></script>
   </body>
 </html>
