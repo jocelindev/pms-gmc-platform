@@ -1780,6 +1780,11 @@ td {
   display: block;
 }
 
+.connector-status .status-note {
+  margin-top: 6px;
+  font-size: 0.86rem;
+}
+
 .connector-status.empty,
 .upload-summary.empty {
   background: var(--surface-soft);

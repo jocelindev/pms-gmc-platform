@@ -71,5 +71,12 @@
         body: form,
       });
     },
+    syncKoboForm(form) {
+      return request("/kobo/sync", {
+        method: "POST",
+        body: form,
+        timeout: 20000,
+      });
+    },
   };
 })();

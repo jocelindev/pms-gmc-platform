@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS kobo_form_fields (
 
 CREATE TABLE IF NOT EXISTS kobo_submissions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  submission_uid TEXT,
   form_uid TEXT NOT NULL,
   pole_id TEXT,
   branch TEXT,
@@ -220,6 +221,7 @@ CREATE INDEX IF NOT EXISTS idx_user_access_pole ON user_access(pole_id);
 CREATE INDEX IF NOT EXISTS idx_kpis_pole ON kpis(pole_id);
 CREATE INDEX IF NOT EXISTS idx_objectives_period ON kpi_objectives(period);
 CREATE INDEX IF NOT EXISTS idx_kobo_submissions_form ON kobo_submissions(form_uid);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kobo_submissions_uid ON kobo_submissions(form_uid, submission_uid);
 CREATE INDEX IF NOT EXISTS idx_reports_pole_period ON reports(pole_id, period);
 
 CREATE VIEW IF NOT EXISTS v_user_access_details AS

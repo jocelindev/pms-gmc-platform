@@ -450,12 +450,6 @@
 
   function bindKoboActions() {
     const syncButton = $("#sync-button");
-    if (syncButton) {
-      syncButton.addEventListener("click", () => {
-        showToast("Synchronisation KoboToolbox lancee: 7 domaines et 44 formules verifies.");
-      });
-    }
-
     const serverInput = $("#kobo-server-url");
     const uidInput = $("#kobo-form-uid");
     const tokenInput = $("#kobo-api-token");
@@ -464,6 +458,76 @@
     const fileInput = $("#kobo-form-file");
     const dropZone = $("#kobo-drop-zone");
     const tokenToggle = $("#toggle-kobo-token");
+    const statusBox = $("#kobo-connection-status");
+
+    const setKoboStatus = (className, content) => {
+      statusBox.className = `connector-status ${className}`;
+      statusBox.innerHTML = content;
+    };
+
+    const readKoboConnection = () => {
+      const serverUrl = normalizeKoboServerUrl(serverInput.value || state.koboActiveForm?.origin || "");
+      const formUid = (uidInput.value || state.koboActiveForm?.uid || "").trim();
+      const token = tokenInput.value.trim();
+      return { serverUrl, formUid, token };
+    };
+
+    const syncKoboForm = async (triggerButton) => {
+      const { serverUrl, formUid, token } = readKoboConnection();
+
+      if (!serverUrl || !formUid || !token) {
+        setKoboStatus("warning", "Renseignez le serveur, l'ID formulaire et le jeton API.");
+        showToast("Synchronisation Kobo incomplete: informations manquantes.");
+        return;
+      }
+
+      if (/\s/.test(formUid)) {
+        setKoboStatus("warning", "L'ID formulaire ne doit pas contenir d'espace.");
+        showToast("ID formulaire Kobo a verifier.");
+        return;
+      }
+
+      if (!api?.syncKoboForm) {
+        setKoboStatus("warning", "Le service de synchronisation Kobo n'est pas disponible.");
+        showToast("Synchronisation Kobo indisponible pour le moment.");
+        return;
+      }
+
+      const previousText = triggerButton?.textContent;
+      if (triggerButton) {
+        triggerButton.disabled = true;
+        triggerButton.textContent = "Synchronisation...";
+      }
+      setKoboStatus("warning", `<strong>${escapeHtml(formUid)}</strong><span>Connexion a KoboToolbox en cours...</span>`);
+
+      try {
+        const result = await api.syncKoboForm({ serverUrl, formUid, token });
+        serverInput.value = serverUrl;
+        uidInput.value = result.activeForm?.uid || formUid;
+        state.koboActiveForm = result.activeForm;
+        renderKoboActiveForm();
+
+        const fieldsDetected = result.fieldsDetected ?? state.koboActiveForm?.fields?.length ?? 0;
+        const submissionsImported = result.submissionsImported ?? 0;
+        const warning = result.syncWarning
+          ? `<span class="status-note">${escapeHtml(result.syncWarning)}</span>`
+          : "";
+        setKoboStatus(
+          result.syncWarning ? "warning" : "success",
+          `<strong>${escapeHtml(uidInput.value)}</strong><span>${fieldsDetected} champ(s) detecte(s) - ${submissionsImported} soumission(s) lue(s)</span>${warning}`
+        );
+        showToast(`Kobo synchronise: ${fieldsDetected} champ(s), ${submissionsImported} soumission(s).`);
+      } catch (error) {
+        console.warn("Synchronisation Kobo impossible.", error);
+        setKoboStatus("warning", `Synchronisation impossible: ${escapeHtml(error.message)}`);
+        showToast(`Synchronisation Kobo impossible: ${error.message}`);
+      } finally {
+        if (triggerButton) {
+          triggerButton.disabled = false;
+          triggerButton.textContent = previousText;
+        }
+      }
+    };
 
     tokenToggle.addEventListener("click", () => {
       const showToken = tokenInput.type === "password";
@@ -471,47 +535,11 @@
       tokenToggle.textContent = showToken ? "Masquer" : "Afficher";
     });
 
-    connectButton.addEventListener("click", async () => {
-      const serverUrl = normalizeKoboServerUrl(serverInput.value);
-      const formUid = uidInput.value.trim();
-      const token = tokenInput.value.trim();
+    if (syncButton) {
+      syncButton.addEventListener("click", () => syncKoboForm(syncButton));
+    }
 
-      if (!serverUrl || !formUid || !token) {
-        $("#kobo-connection-status").className = "connector-status warning";
-        $("#kobo-connection-status").textContent = "Renseignez le serveur, l'ID formulaire et le jeton API.";
-        showToast("Connexion Kobo incomplete: informations manquantes.");
-        return;
-      }
-
-      if (/\s/.test(formUid)) {
-        $("#kobo-connection-status").className = "connector-status warning";
-        $("#kobo-connection-status").textContent = "L'ID formulaire ne doit pas contenir d'espace.";
-        showToast("ID formulaire Kobo a verifier.");
-        return;
-      }
-
-      serverInput.value = serverUrl;
-      state.koboActiveForm = {
-        mode: "Connexion KoboToolbox",
-        name: formUid,
-        origin: serverUrl,
-        detail: "Connexion prete pour synchroniser les soumissions du formulaire Kobo.",
-        status: "Connecte",
-        statusClass: "green",
-        fields: [
-          { name: "_submission_time", type: "Meta Kobo", label: "Date de soumission" },
-          { name: "periode_reporting", type: "Mapping PMS", label: "Periode de reporting" },
-          { name: "branch_id", type: "Mapping PMS", label: "Filiale" },
-          { name: "kpi_id", type: "Mapping PMS", label: "Code KPI" },
-          { name: "kpi_value", type: "Mapping PMS", label: "Valeur collectee" },
-        ],
-      };
-
-      $("#kobo-connection-status").className = "connector-status success";
-      $("#kobo-connection-status").innerHTML = `<strong>${escapeHtml(formUid)}</strong><span>${escapeHtml(serverUrl)}</span>`;
-      renderKoboActiveForm();
-      await persistKoboActiveForm("Formulaire KoboToolbox connecte au PMS.");
-    });
+    connectButton.addEventListener("click", () => syncKoboForm(connectButton));
 
     clearButton.addEventListener("click", () => {
       serverInput.value = "";

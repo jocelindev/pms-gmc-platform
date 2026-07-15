@@ -12,7 +12,9 @@ import sqlite3
 import unicodedata
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, unquote, urlparse
+from urllib.request import Request, urlopen
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -31,6 +33,18 @@ PASSWORD_ITERATIONS = 210_000
 DEFAULT_ADMIN_PASSWORD = os.environ.get("PMS_ADMIN_PASSWORD", "Admin@2026!")
 DEFAULT_USER_PASSWORD = os.environ.get("PMS_DEFAULT_USER_PASSWORD", "Palladium@2026!")
 MIN_PASSWORD_LENGTH = 8
+KOBO_REQUEST_TIMEOUT = 15
+KOBO_SUBMISSION_LIMIT = 500
+KOBO_FIELD_ALIASES = {
+    "pole_id": ["pole_id", "pole", "id_pole", "pole_name", "pole_responsable"],
+    "branch": ["branch_id", "branch", "filiale", "pays", "bu", "business_unit"],
+    "kpi_name": ["kpi_id", "id_kpi", "kpi", "kpi_name", "nom_kpi", "indicateur"],
+    "collector": ["_submitted_by", "submitted_by", "collector", "collecteur", "username", "responsable"],
+    "submitted_at": ["_submission_time", "_date_submitted", "submission_time", "submitted_at", "end", "today"],
+    "period": ["periode_reporting", "periode", "period", "periode_objectif", "mois", "date_reporting"],
+    "value": ["kpi_value", "valeur", "value", "valeur_kpi", "resultat", "score", "realisation"],
+    "validation_status": ["validation_status", "statut_validation", "validation_hierarchique", "validation"],
+}
 
 
 def hash_password(password: str) -> str:
@@ -71,7 +85,14 @@ def sanitize_details(value):
     if isinstance(value, dict):
         sanitized = {}
         for key, item in value.items():
-            if "password" in str(key).lower() or "motdepasse" in str(key).lower():
+            key_lower = str(key).lower()
+            if (
+                "password" in key_lower
+                or "motdepasse" in key_lower
+                or "token" in key_lower
+                or "secret" in key_lower
+                or "authorization" in key_lower
+            ):
                 sanitized[key] = "***"
             else:
                 sanitized[key] = sanitize_details(item)
@@ -122,6 +143,17 @@ def migrate_database(conn: sqlite3.Connection) -> None:
     if "must_change_password" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
         changed = True
+
+    submission_columns = {row["name"] for row in conn.execute("PRAGMA table_info(kobo_submissions)").fetchall()}
+    if "submission_uid" not in submission_columns:
+        conn.execute("ALTER TABLE kobo_submissions ADD COLUMN submission_uid TEXT")
+        changed = True
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_kobo_submissions_uid
+        ON kobo_submissions(form_uid, submission_uid)
+        """
+    )
 
     admin_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
     default_hash = hash_password(DEFAULT_USER_PASSWORD)
@@ -429,6 +461,7 @@ def active_kobo_form(conn: sqlite3.Connection) -> dict | None:
         ).fetchall()
     )
     return {
+        "uid": form["uid"],
         "mode": form["source_type"],
         "name": form["title"],
         "origin": form["server_url"] or form["uid"],
@@ -969,6 +1002,311 @@ def save_report(payload: dict) -> dict:
         return report_to_front(row)
 
 
+def normalize_kobo_server_url(raw_url: str) -> str:
+    value = (raw_url or "").strip()
+    if not value:
+        return ""
+    candidate = value if re.match(r"^https?://", value, re.I) else f"https://{value}"
+    parsed = urlparse(candidate)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    path = parsed.path.rstrip("/")
+    if path.endswith("/api/v2"):
+        path = path[: -len("/api/v2")]
+    return f"{parsed.scheme}://{parsed.netloc}{path}"
+
+
+def kobo_api_url(server_url: str, api_path: str) -> str:
+    return f"{server_url.rstrip('/')}/{api_path.lstrip('/')}"
+
+
+def kobo_request_json(server_url: str, api_path: str, token: str) -> dict | list:
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "PMS-GMC-Platform/1.0",
+    }
+    if token:
+        headers["Authorization"] = f"Token {token}"
+
+    request = Request(kobo_api_url(server_url, api_path), headers=headers)
+    try:
+        with urlopen(request, timeout=KOBO_REQUEST_TIMEOUT) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            return json.loads(response.read().decode(charset))
+    except HTTPError as exc:
+        detail = exc.read(500).decode("utf-8", errors="ignore").strip()
+        if exc.code in (401, 403):
+            raise ValueError("Jeton API Kobo refuse ou droits insuffisants pour ce formulaire.") from exc
+        if exc.code == 404:
+            raise ValueError("Formulaire Kobo introuvable avec cet UID.") from exc
+        suffix = f" Detail: {detail[:160]}" if detail else ""
+        raise ValueError(f"KoboToolbox a repondu avec l'erreur {exc.code}.{suffix}") from exc
+    except URLError as exc:
+        raise ValueError(f"Serveur Kobo injoignable: {exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError("La reponse Kobo n'est pas un JSON exploitable.") from exc
+
+
+def kobo_label_to_text(value) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        for item in value:
+            text = kobo_label_to_text(item)
+            if text:
+                return text
+        return ""
+    if isinstance(value, dict):
+        for key in ("fr", "French", "Francais", "default", "English", "en"):
+            text = kobo_label_to_text(value.get(key))
+            if text:
+                return text
+        for item in value.values():
+            text = kobo_label_to_text(item)
+            if text:
+                return text
+    return ""
+
+
+def extract_kobo_form_title(asset: dict, fallback_uid: str) -> str:
+    content = asset.get("content") if isinstance(asset, dict) else {}
+    settings = content.get("settings") if isinstance(content, dict) else {}
+    if isinstance(settings, dict):
+        title = settings.get("form_title") or settings.get("title")
+        if title:
+            return str(title)
+    return str(asset.get("name") or asset.get("uid") or fallback_uid)
+
+
+def extract_kobo_asset_fields(asset: dict) -> list[dict]:
+    content = asset.get("content") if isinstance(asset, dict) else {}
+    survey = content.get("survey") if isinstance(content, dict) else []
+    if not isinstance(survey, list):
+        return []
+
+    fields = []
+    skipped_types = {"begin_group", "end_group", "begin_repeat", "end_repeat"}
+    for item in survey:
+        if not isinstance(item, dict):
+            continue
+        field_type = str(item.get("type") or "Champ Kobo").strip()
+        if field_type in skipped_types:
+            continue
+        field_name = str(item.get("name") or item.get("$kuid") or "").strip()
+        if not field_name:
+            continue
+        fields.append(
+            {
+                "name": field_name,
+                "type": field_type,
+                "label": kobo_label_to_text(item.get("label")) or field_name,
+            }
+        )
+    return fields[:80]
+
+
+def extract_kobo_submissions(payload: dict | list) -> list[dict]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in ("results", "data", "submissions"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+    if any(str(key).startswith("_") for key in payload):
+        return [payload]
+    return []
+
+
+def normalize_submission_key(value: str) -> str:
+    normalized = unicodedata.normalize("NFD", value or "")
+    ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", "_", ascii_value.lower()).strip("_")
+
+
+def flatten_submission(submission: dict, prefix: str = "") -> dict:
+    flattened = {}
+    for key, value in submission.items():
+        full_key = f"{prefix}/{key}" if prefix else str(key)
+        if isinstance(value, dict):
+            flattened.update(flatten_submission(value, full_key))
+        elif not isinstance(value, list):
+            flattened[full_key] = value
+    return flattened
+
+
+def submission_value(submission: dict, aliases: list[str]):
+    flattened = flatten_submission(submission)
+    lookup = {}
+    suffix_lookup = {}
+    for key, value in flattened.items():
+        lookup[normalize_submission_key(key)] = value
+        suffix_lookup[normalize_submission_key(key.split("/")[-1])] = value
+
+    for alias in aliases:
+        normalized_alias = normalize_submission_key(alias)
+        if normalized_alias in lookup:
+            return lookup[normalized_alias]
+        if normalized_alias in suffix_lookup:
+            return suffix_lookup[normalized_alias]
+    return None
+
+
+def submission_uid(submission: dict) -> str:
+    explicit_id = submission_value(
+        submission,
+        ["_uuid", "uuid", "_id", "id", "_submission_id", "meta/instanceID", "instanceID"],
+    )
+    if explicit_id not in (None, ""):
+        return str(explicit_id)
+    raw = json.dumps(submission, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
+def resolve_submission_pole_id(conn: sqlite3.Connection, value) -> str | None:
+    if value in (None, ""):
+        return None
+    raw_value = str(value).strip()
+    row = conn.execute(
+        """
+        SELECT id
+        FROM poles
+        WHERE id = ?
+           OR lower(name) = lower(?)
+        LIMIT 1
+        """,
+        (raw_value, raw_value),
+    ).fetchone()
+    return row["id"] if row else None
+
+
+def sync_kobo_form(payload: dict) -> dict:
+    server_url = normalize_kobo_server_url(str(payload.get("serverUrl") or payload.get("origin") or ""))
+    form_uid = str(payload.get("formUid") or payload.get("uid") or payload.get("name") or "").strip()
+    token = str(payload.get("token") or payload.get("apiToken") or "").strip()
+    if not server_url or not form_uid:
+        raise ValueError("Adresse serveur Kobo et UID formulaire obligatoires.")
+    if not token:
+        raise ValueError("Jeton API Kobo obligatoire pour synchroniser le formulaire.")
+
+    encoded_uid = quote(form_uid, safe="")
+    asset = kobo_request_json(server_url, f"/api/v2/assets/{encoded_uid}/", token)
+    if not isinstance(asset, dict):
+        raise ValueError("Metadonnees Kobo inattendues pour ce formulaire.")
+
+    form_title = extract_kobo_form_title(asset, form_uid)
+    fields = extract_kobo_asset_fields(asset)
+    data_warning = ""
+    submissions = []
+    try:
+        data = kobo_request_json(
+            server_url,
+            f"/api/v2/assets/{encoded_uid}/data/?format=json&limit={KOBO_SUBMISSION_LIMIT}",
+            token,
+        )
+        submissions = extract_kobo_submissions(data)
+    except ValueError as exc:
+        data_warning = str(exc)
+
+    with db_connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO kobo_forms (uid, title, server_url, source_type, status, updated_at)
+            VALUES (?, ?, ?, 'Connexion KoboToolbox', 'Connecte', CURRENT_TIMESTAMP)
+            ON CONFLICT(uid) DO UPDATE SET
+              title = excluded.title,
+              server_url = excluded.server_url,
+              source_type = excluded.source_type,
+              status = excluded.status,
+              updated_at = CURRENT_TIMESTAMP
+            """,
+            (form_uid, form_title, server_url),
+        )
+        form_id = conn.execute("SELECT id FROM kobo_forms WHERE uid = ?", (form_uid,)).fetchone()["id"]
+        conn.execute("DELETE FROM kobo_form_fields WHERE form_id = ?", (form_id,))
+        for field in fields:
+            conn.execute(
+                """
+                INSERT INTO kobo_form_fields (form_id, field_name, field_label, field_type, mapped_to)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (form_id, field["name"], field["label"], field["type"], None),
+            )
+
+        imported = 0
+        for submission in submissions[:KOBO_SUBMISSION_LIMIT]:
+            uid = submission_uid(submission)
+            values = {key: submission_value(submission, aliases) for key, aliases in KOBO_FIELD_ALIASES.items()}
+            pole_id = resolve_submission_pole_id(conn, values.get("pole_id"))
+            conn.execute(
+                """
+                INSERT INTO kobo_submissions (
+                  submission_uid,
+                  form_uid,
+                  pole_id,
+                  branch,
+                  kpi_name,
+                  collector,
+                  submitted_at,
+                  period,
+                  value,
+                  validation_status,
+                  raw_payload_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(form_uid, submission_uid) DO UPDATE SET
+                  pole_id = excluded.pole_id,
+                  branch = excluded.branch,
+                  kpi_name = excluded.kpi_name,
+                  collector = excluded.collector,
+                  submitted_at = excluded.submitted_at,
+                  period = excluded.period,
+                  value = excluded.value,
+                  validation_status = excluded.validation_status,
+                  raw_payload_json = excluded.raw_payload_json
+                """,
+                (
+                    uid,
+                    form_uid,
+                    pole_id,
+                    values.get("branch"),
+                    values.get("kpi_name"),
+                    values.get("collector"),
+                    values.get("submitted_at"),
+                    values.get("period"),
+                    None if values.get("value") is None else str(values.get("value")),
+                    values.get("validation_status") or "A valider",
+                    json.dumps(submission, ensure_ascii=False),
+                ),
+            )
+            imported += 1
+
+        audit(
+            conn,
+            "Synchronisation Kobo",
+            "kobo_form",
+            form_uid,
+            {"serverUrl": server_url, "fields": len(fields), "submissions": imported, "warning": data_warning},
+        )
+        conn.commit()
+        active_form = active_kobo_form(conn) or {}
+        synced_at = conn.execute("SELECT CURRENT_TIMESTAMP AS synced_at").fetchone()["synced_at"]
+
+    detail = f"{len(fields)} champ(s) detecte(s), {imported} soumission(s) lue(s)."
+    if data_warning:
+        detail = f"{detail} Soumissions non importees: {data_warning}"
+    active_form["detail"] = detail
+    active_form["lastSyncAt"] = synced_at
+    return {
+        "activeForm": active_form,
+        "fieldsDetected": len(fields),
+        "submissionsImported": imported,
+        "syncWarning": data_warning,
+        "lastSyncAt": synced_at,
+    }
+
+
 def save_kobo_form(payload: dict) -> dict:
     name = str(payload.get("name") or "").strip()
     origin = str(payload.get("origin") or "").strip()
@@ -1079,6 +1417,9 @@ class PMSHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/kobo/forms":
                 self.send_json(save_kobo_form(payload))
+                return
+            if path == "/api/kobo/sync":
+                self.send_json(sync_kobo_form(payload))
                 return
             self.send_error_json(404, "Endpoint API introuvable.")
         except Exception as exc:

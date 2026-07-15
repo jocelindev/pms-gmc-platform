@@ -62,6 +62,14 @@ Ouvrir le fichier suivant dans un navigateur :
 C:\Users\dquin\Documents\developpement Web\pms-gmc-platform\index.html
 ```
 
+## Synchronisation KoboCollect
+
+L'onglet KoboCollect permet maintenant de renseigner l'adresse serveur KoboToolbox, l'UID du formulaire et le jeton API, puis de lancer une synchronisation via `/api/kobo/sync`.
+
+- Le serveur lit les metadonnees du formulaire Kobo et enregistre les champs detectes dans SQLite.
+- Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.
+- Le jeton API sert uniquement a la synchronisation courante : il n'est pas renvoye a l'interface ni affiche comme formulaire actif.
+
 ## Contenu de cette version
 
 - Tableau de bord groupe COMEX.
