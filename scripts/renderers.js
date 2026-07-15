@@ -604,7 +604,60 @@
   }
 
   function kpiStatusText(status) {
-    return status === "green" ? "Vert" : status === "red" ? "Rouge" : "Orange";
+    if (status === "green") return "Vert";
+    if (status === "red") return "Rouge";
+    if (status === "gray") return "A verifier";
+    return "Orange";
+  }
+
+  function renderCalculationEnginePanel(state) {
+    const panel = $("#kpi-engine-panel");
+    if (!panel) return;
+    const quality = state.kpiCalculationQuality || {};
+    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const status = $("#kpi-engine-status");
+    const summary = $("#kpi-engine-summary");
+    const proposals = $("#kpi-engine-proposals");
+    const selectedPoleResults = results.filter((item) => item.poleId === state.currentPoleMonitor);
+    const configured = Boolean(quality.configured);
+    const calculated = quality.calculatedCount || results.length || 0;
+    const calculationGroups = quality.calculationGroups || 0;
+    const matchRate = quality.matchRate || 0;
+
+    if (status) {
+      status.className = `status-pill ${configured ? (calculated ? "green" : "amber") : "gray"}`;
+      status.textContent = configured ? (calculated ? "Calcul actif" : "A synchroniser") : "A configurer";
+    }
+
+    if (summary) {
+      const cards = [
+        { label: "KPI calcules", value: calculated, hint: "tous poles" },
+        { label: "KPI du pole", value: selectedPoleResults.length, hint: "filtre actif" },
+        { label: "Rapprochement", value: `${matchRate}%`, hint: `${quality.matchedCalculationGroups || 0}/${calculationGroups} groupes` },
+        { label: "Ecarts", value: quality.unmatchedCalculationCount || 0, hint: "pole, KPI ou periode" },
+      ];
+      summary.innerHTML = cards
+        .map(
+          (card) => `
+            <div class="kpi-engine-stat">
+              <span>${escapeHtml(card.label)}</span>
+              <strong>${escapeHtml(card.value)}</strong>
+              <small>${escapeHtml(card.hint)}</small>
+            </div>
+          `
+        )
+        .join("");
+    }
+
+    if (proposals) {
+      const items = quality.proposals?.length
+        ? quality.proposals
+        : ["Configurer puis synchroniser les deux formulaires KoboCollect pour activer le calcul automatique."];
+      proposals.innerHTML = items
+        .slice(0, 3)
+        .map((item) => `<span>${escapeHtml(item)}</span>`)
+        .join("");
+    }
   }
 
   function renderPoleKpiDirectory(state) {
@@ -614,6 +667,8 @@
     const title = $("#pole-kpi-directory-title");
     const poleSelect = $("#pole-monitor-select");
     if (!directory) return;
+
+    renderCalculationEnginePanel(state);
 
     const accessContext = getPoleAccessContext(state);
     const authorizedPoles = accessContext.poles.length ? accessContext.poles : reporting.poles;
@@ -666,6 +721,12 @@
                               <div><dt>Objectif</dt><dd>${escapeHtml(kpi.target)}</dd></div>
                               <div><dt>Tendance</dt><dd>${escapeHtml(kpi.trend)}</dd></div>
                               <div><dt>Source Kobo</dt><dd>${escapeHtml(kpi.source)}</dd></div>
+                              ${
+                                kpi.calculated
+                                  ? `<div><dt>Periode</dt><dd>${escapeHtml(kpi.period || "Kobo")}</dd></div>
+                                     <div><dt>Methode</dt><dd>${escapeHtml(kpi.method || "Calcul PMS")}</dd></div>`
+                                  : ""
+                              }
                             </dl>
                           </section>
                         `

@@ -71,6 +71,7 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
 - Le jeton API sert uniquement a la synchronisation courante : il n'est pas renvoye a l'interface ni affiche comme formulaire actif.
 - Dans Administration > KoboCollecte, la logique PMS distingue deux formulaires : un formulaire `KPI et formules` par pole, et un formulaire `Elements de calcul` qui collecte les donnees brutes utilisees par ces formules.
 - Le formulaire `KPI et formules` est aligne sur `Copie de Catalogu.xlsx` : 26 champs, 74 KPI, 11 groupes de rattachement, 0 formule manquante et 13 cibles a completer.
+- Le moteur PMS rapproche automatiquement les deux formulaires par `pole + KPI + periode`, applique la formule du catalogue, puis alimente le tableau de bord et l'onglet `Suivi par pole`.
 
 ## Contenu de cette version
 

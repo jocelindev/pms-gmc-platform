@@ -851,6 +851,57 @@ textarea {
   gap: 14px;
 }
 
+.kpi-engine-panel {
+  margin-bottom: 16px;
+}
+
+.kpi-engine-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kpi-engine-stat {
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  background: rgba(31, 56, 100, 0.04);
+  padding: 12px;
+  min-width: 0;
+}
+
+.kpi-engine-stat span,
+.kpi-engine-stat small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.kpi-engine-stat strong {
+  display: block;
+  color: var(--palladium-blue);
+  font-size: 24px;
+  margin: 5px 0 3px;
+}
+
+.kpi-engine-proposals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.kpi-engine-proposals span {
+  border: 1px solid rgba(214, 168, 56, 0.32);
+  border-radius: 999px;
+  background: rgba(214, 168, 56, 0.12);
+  color: var(--palladium-blue);
+  padding: 7px 10px;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
 .pole-kpi-directory {
   display: grid;
   gap: 16px;
@@ -2517,6 +2568,7 @@ td small {
   .selected-pole-summary,
   .selected-kpi-grid,
   .pole-kpi-items,
+  .kpi-engine-grid,
   .admin-summary-grid,
   .admin-kobo-form,
   .kobo-logic-grid,
@@ -2589,6 +2641,7 @@ td small {
   .selected-pole-summary,
   .selected-kpi-grid,
   .pole-kpi-items,
+  .kpi-engine-grid,
   .admin-summary-grid,
   .admin-kobo-form,
   .kobo-logic-grid,

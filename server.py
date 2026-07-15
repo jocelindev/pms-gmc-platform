@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import hmac
 import json
@@ -44,6 +45,70 @@ KOBO_FIELD_ALIASES = {
     "period": ["periode_reporting", "periode", "period", "periode_objectif", "mois", "date_reporting"],
     "value": ["kpi_value", "valeur", "value", "valeur_kpi", "resultat", "score", "realisation"],
     "validation_status": ["validation_status", "statut_validation", "validation_hierarchique", "validation"],
+}
+CATALOG_POLE_ALIASES = {
+    "direction finance comptabilite": "DFC",
+    "direction finance et comptabilite": "DFC",
+    "dfc": "DFC",
+    "pole systeme management qualite": "PSMQ",
+    "pole systeme de management de la qualite": "PSMQ",
+    "psmq": "PSMQ",
+    "pole wfm": "WFM",
+    "wfm": "WFM",
+    "pole projet drive": "DRIVE",
+    "drive": "DRIVE",
+    "pole commercial": "COM",
+    "commercial": "COM",
+    "pole marketing communication": "COM",
+    "pole marketing et communication": "COM",
+    "pole gestionnaire compte": "GDC",
+    "pole gestionnaire de compte": "GDC",
+    "pole recouvrement": "REC",
+    "recouvrement": "REC",
+    "bu retail distribution": "BRD",
+    "bu retail et distribution": "BRD",
+    "hoope ci": "BRD",
+    "hoope cote ivoire": "BRD",
+    "hoope cote d ivoire": "BRD",
+    "hoope niger": "BRD",
+    "hoope nig": "BRD",
+    "bu bpo": "BPO",
+    "bpo": "BPO",
+    "bu innovation developpement": "BID",
+    "bu innovation et developpement": "BID",
+    "aaim": "BID",
+    "dpb": "BID",
+    "sci": "BID",
+    "pole performance amelioration continue": "PAC",
+    "pole performance et amelioration continue": "PAC",
+    "pac": "PAC",
+    "pole voix client epc": "EPC",
+    "pole voix du client epc": "EPC",
+    "epc": "EPC",
+    "direction systeme informatique": "DSI",
+    "direction du systeme informatique": "DSI",
+    "dsi": "DSI",
+    "direction capital humain": "DCH",
+    "direction du capital humain": "DCH",
+    "dch": "DCH",
+    "pole moyens generaux": "PMG",
+    "pmg": "PMG",
+}
+LOWER_IS_BETTER_TERMS = {
+    "abandon",
+    "absence",
+    "absenteisme",
+    "anomalie",
+    "creance",
+    "delai",
+    "duree",
+    "erreur",
+    "incident",
+    "indisponibilite",
+    "perte",
+    "retard",
+    "risque",
+    "rupture",
 }
 
 
@@ -565,6 +630,7 @@ def list_users(conn: sqlite3.Connection) -> list[dict]:
 
 def get_bootstrap_payload() -> dict:
     with db_connect() as conn:
+        kpi_results, kpi_quality = calculate_kpi_results(conn)
         return {
             "profiles": list_profiles(conn),
             "users": list_users(conn),
@@ -573,6 +639,9 @@ def get_bootstrap_payload() -> dict:
             "reportHistory": list_reports(conn),
             "activeKoboForm": active_kobo_form(conn),
             "koboSources": list_kobo_sources(conn),
+            "koboSubmissions": list_kobo_submissions(conn),
+            "kpiCalculationResults": kpi_results,
+            "kpiCalculationQuality": kpi_quality,
         }
 
 
@@ -1232,6 +1301,562 @@ def resolve_submission_pole_id(conn: sqlite3.Connection, value) -> str | None:
     return row["id"] if row else None
 
 
+def normalize_match_key(value) -> str:
+    normalized = unicodedata.normalize("NFD", str(value or ""))
+    ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", " ", ascii_value.lower()).strip()
+
+
+def resolve_catalog_pole_id(conn: sqlite3.Connection, value) -> str | None:
+    if value in (None, ""):
+        return None
+    raw_value = str(value).strip()
+    direct_id = resolve_submission_pole_id(conn, raw_value)
+    if direct_id:
+        return direct_id
+
+    normalized = normalize_match_key(raw_value)
+    alias_id = CATALOG_POLE_ALIASES.get(normalized)
+    if alias_id:
+        return alias_id
+
+    for alias, pole_id in CATALOG_POLE_ALIASES.items():
+        if alias and (alias in normalized or normalized in alias):
+            return pole_id
+
+    rows = conn.execute("SELECT id, name FROM poles").fetchall()
+    for row in rows:
+        pole_name = normalize_match_key(row["name"])
+        if pole_name and (normalized == pole_name or normalized in pole_name or pole_name in normalized):
+            return row["id"]
+    return None
+
+
+def parse_raw_payload(row: sqlite3.Row) -> dict:
+    raw_payload = row["raw_payload_json"] if "raw_payload_json" in row.keys() else None
+    if raw_payload:
+        try:
+            payload = json.loads(raw_payload)
+            if isinstance(payload, dict):
+                return payload
+        except json.JSONDecodeError:
+            pass
+    return {
+        "pole_id": row["pole_id"] if "pole_id" in row.keys() else None,
+        "branch": row["branch"] if "branch" in row.keys() else None,
+        "kpi_name": row["kpi_name"] if "kpi_name" in row.keys() else None,
+        "period": row["period"] if "period" in row.keys() else None,
+        "value": row["value"] if "value" in row.keys() else None,
+        "validation_status": row["validation_status"] if "validation_status" in row.keys() else None,
+    }
+
+
+def mapped_submission_value(source: dict, submission: dict, mapped_to: str, aliases: list[str] | None = None):
+    mapped_fields = source.get("mappedFields") or {}
+    candidates = [
+        mapped_fields.get(mapped_to),
+        mapped_to,
+        *(aliases or []),
+    ]
+    return submission_value(submission, [candidate for candidate in candidates if candidate])
+
+
+def text_or_empty(value) -> str:
+    if value in (None, ""):
+        return ""
+    return str(value).strip()
+
+
+def parse_number(value) -> float | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    text = unicodedata.normalize("NFD", str(value))
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = text.replace("\u00a0", " ").strip()
+    match = re.search(r"[-+]?\d+(?:[\s.]\d{3})*(?:,\d+)?|[-+]?\d+(?:\.\d+)?", text)
+    if not match:
+        return None
+    number_text = match.group(0).replace(" ", "")
+    if "," in number_text and "." in number_text:
+        number_text = number_text.replace(".", "").replace(",", ".")
+    else:
+        number_text = number_text.replace(",", ".")
+    try:
+        return float(number_text)
+    except ValueError:
+        return None
+
+
+def format_number(value: float, decimals: int = 1) -> str:
+    if value is None:
+        return "N/A"
+    if abs(value - round(value)) < 0.005:
+        return f"{round(value):,}".replace(",", " ")
+    return f"{value:,.{decimals}f}".replace(",", " ").rstrip("0").rstrip(".")
+
+
+def format_calculated_value(value: float, unit: str) -> str:
+    normalized_unit = normalize_match_key(unit)
+    if "pourcentage" in normalized_unit or normalized_unit == "%" or "%" in str(unit or ""):
+        return f"{format_number(value)}%"
+    if "fcfa" in normalized_unit or "xof" in normalized_unit or "montant" in normalized_unit:
+        return f"{format_number(value, 0)} FCFA"
+    if "minute" in normalized_unit:
+        return f"{format_number(value)} min"
+    if "jour" in normalized_unit:
+        return f"{format_number(value)} j"
+    return format_number(value)
+
+
+def parse_target_rule(target: str, kpi_name: str = "", formula: str = "") -> dict:
+    target_text = str(target or "")
+    normalized = normalize_match_key(target_text)
+    numbers = [parse_number(match) for match in re.findall(r"[-+]?\d+(?:[,.]\d+)?", target_text)]
+    numbers = [number for number in numbers if number is not None]
+    lower_better = "<" in target_text or any(term in normalize_match_key(f"{kpi_name} {formula}") for term in LOWER_IS_BETTER_TERMS)
+
+    if not numbers:
+        return {"mode": "none", "value": None, "lowerBetter": lower_better}
+    if "<" in target_text or "maximum" in normalized or "max" in normalized:
+        return {"mode": "max", "value": numbers[0], "lowerBetter": True}
+    if ">" in target_text or "minimum" in normalized or "min" in normalized:
+        return {"mode": "min", "value": numbers[0], "lowerBetter": False}
+    if len(numbers) >= 2 and re.search(r"\d\s*[-–]\s*\d", target_text):
+        return {"mode": "range", "min": min(numbers[:2]), "max": max(numbers[:2]), "lowerBetter": False}
+    return {"mode": "max" if lower_better else "min", "value": numbers[0], "lowerBetter": lower_better}
+
+
+def rag_status(value: float | None, target: str, kpi_name: str = "", formula: str = "") -> str:
+    if value is None:
+        return "gray"
+    rule = parse_target_rule(target, kpi_name, formula)
+    mode = rule.get("mode")
+    if mode == "none":
+        return "gray"
+    if mode == "range":
+        low = float(rule["min"])
+        high = float(rule["max"])
+        margin = max((high - low) * 0.15, max(abs(high), 1) * 0.05)
+        if low <= value <= high:
+            return "green"
+        if (low - margin) <= value <= (high + margin):
+            return "amber"
+        return "red"
+
+    target_value = rule.get("value")
+    if target_value in (None, 0):
+        return "gray"
+    target_value = float(target_value)
+    if mode == "max":
+        if value <= target_value:
+            return "green"
+        if value <= target_value * 1.1:
+            return "amber"
+        return "red"
+    if value >= target_value:
+        return "green"
+    if value >= target_value * 0.9:
+        return "amber"
+    return "red"
+
+
+def normalize_formula_expression(formula: str) -> str:
+    normalized = unicodedata.normalize("NFD", str(formula or ""))
+    text = normalized.encode("ascii", "ignore").decode("ascii").lower()
+    text = text.replace("×", "*").replace("÷", "/")
+    text = re.sub(r"(?<=\d),(?=\d)", ".", text)
+    text = re.sub(r"(?<=\d|\))\s*[x]\s*(?=\d|\(|[a-z])", " * ", text)
+    text = re.sub(r"\bx\b", " * ", text)
+    text = re.sub(r"\bfois\b", " * ", text)
+    text = re.sub(r"\bpourcent\b|%", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def ratio_formula_with_parentheses(expression: str) -> str:
+    compact = re.sub(r"\s+", "", expression)
+    if compact.count("/") == 1 and compact.endswith("*100") and not compact.startswith("("):
+        left, right = compact.split("/", 1)
+        right = right[:-4]
+        if left and right:
+            return f"({left})/({right})*100"
+    return expression
+
+
+def safe_eval_expression(expression: str, variables: dict[str, float]) -> float | None:
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError:
+        return None
+
+    allowed_nodes = (
+        ast.Expression,
+        ast.BinOp,
+        ast.UnaryOp,
+        ast.Constant,
+        ast.Name,
+        ast.Load,
+        ast.Add,
+        ast.Sub,
+        ast.Mult,
+        ast.Div,
+        ast.Pow,
+        ast.Mod,
+        ast.USub,
+        ast.UAdd,
+    )
+    for node in ast.walk(tree):
+        if not isinstance(node, allowed_nodes):
+            return None
+        if isinstance(node, ast.Constant) and not isinstance(node.value, (int, float)):
+            return None
+        if isinstance(node, ast.Name) and node.id not in variables:
+            return None
+    try:
+        result = eval(compile(tree, "<kpi_formula>", "eval"), {"__builtins__": {}}, variables)
+    except (ArithmeticError, NameError, TypeError, ValueError):
+        return None
+    if not isinstance(result, (int, float)):
+        return None
+    return float(result)
+
+
+def aggregate_numeric_elements(elements: list[dict]) -> tuple[dict[str, float], list[float]]:
+    values: dict[str, float] = {}
+    raw_numbers = []
+    for element in elements:
+        number = parse_number(element.get("value"))
+        if number is None:
+            continue
+        raw_numbers.append(number)
+        label = normalize_match_key(element.get("label") or "valeur")
+        if not label:
+            label = "valeur"
+        values[label] = values.get(label, 0.0) + number
+    return values, raw_numbers
+
+
+def evaluate_kpi_formula(formula: str, elements: list[dict]) -> tuple[float | None, str, list[str]]:
+    warnings: list[str] = []
+    element_values, raw_numbers = aggregate_numeric_elements(elements)
+    formula_key = normalize_match_key(formula)
+    if not element_values:
+        return None, "Aucune valeur numerique", ["Aucune valeur numerique exploitable dans le formulaire donnees."]
+
+    if "moyenne" in formula_key and raw_numbers:
+        return sum(raw_numbers) / len(raw_numbers), "Moyenne des elements Kobo", warnings
+
+    if formula:
+        expression = normalize_formula_expression(formula)
+        variables: dict[str, float] = {}
+        for index, label in enumerate(sorted(element_values, key=len, reverse=True)):
+            variable = f"v{index}"
+            pattern = rf"(?<![a-z0-9]){re.escape(label)}(?![a-z0-9])"
+            expression, count = re.subn(pattern, variable, expression)
+            if count:
+                variables[variable] = element_values[label]
+        expression = ratio_formula_with_parentheses(expression)
+        if variables and not re.search(r"\b(?!v\d+\b)[a-z_]+\b", expression):
+            result = safe_eval_expression(expression, variables)
+            if result is not None:
+                return result, "Formule catalogue appliquee", warnings
+        warnings.append("Formule non interpretee automatiquement: verifier les libelles des elements.")
+
+    for preferred in ("resultat", "valeur kpi", "kpi value", "realisation", "score"):
+        preferred_key = normalize_match_key(preferred)
+        for label, value in element_values.items():
+            if preferred_key in label:
+                return value, "Valeur KPI directe", warnings
+
+    if len(element_values) == 1:
+        label, value = next(iter(element_values.items()))
+        return value, f"Valeur unique Kobo: {label}", warnings
+
+    return None, "Calcul a verifier", warnings or ["Plusieurs elements trouves, mais aucune formule exploitable."]
+
+
+def status_class_from_validation(status: str) -> str:
+    normalized = normalize_match_key(status)
+    if any(term in normalized for term in ("valide", "ok", "approuve")):
+        return "green"
+    if any(term in normalized for term in ("erreur", "rejete", "critique")):
+        return "red"
+    if any(term in normalized for term in ("retard", "manquant", "attente", "valider")):
+        return "amber"
+    return "gray"
+
+
+def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT
+          s.form_uid,
+          s.branch,
+          s.kpi_name,
+          s.collector,
+          s.period,
+          s.validation_status,
+          s.created_at,
+          p.name AS pole_name,
+          f.title AS form_title,
+          f.source_type
+        FROM kobo_submissions s
+        LEFT JOIN poles p ON p.id = s.pole_id
+        LEFT JOIN kobo_forms f ON f.uid = s.form_uid
+        ORDER BY s.created_at DESC, s.id DESC
+        LIMIT 120
+        """
+    ).fetchall()
+    submissions = []
+    for row in rows:
+        status = row["validation_status"] or "A valider"
+        submissions.append(
+            {
+                "form": row["form_title"] or row["form_uid"],
+                "branch": row["branch"] or row["pole_name"] or row["period"] or "Perimetre non renseigne",
+                "kpi": row["kpi_name"] or "KPI non renseigne",
+                "collector": row["collector"] or "KoboCollect",
+                "status": status,
+                "className": status_class_from_validation(status),
+                "period": row["period"] or "",
+                "sourceRole": kobo_source_role(row["source_type"] or ""),
+            }
+        )
+    return submissions
+
+
+def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
+    sources = list_kobo_sources(conn)
+    source_by_role: dict[str, dict] = {}
+    for source in sources:
+        source_by_role.setdefault(source["role"], source)
+
+    reference_source = source_by_role.get("referentielKpi")
+    calculation_source = source_by_role.get("donneesCalcul")
+    quality = {
+        "configured": bool(reference_source and calculation_source),
+        "referenceCount": 0,
+        "calculationRecords": 0,
+        "calculationGroups": 0,
+        "matchedCalculationGroups": 0,
+        "calculatedCount": 0,
+        "unmatchedCalculationCount": 0,
+        "uncalculatedCount": 0,
+        "missingTargetCount": 0,
+        "missingFormulaCount": 0,
+        "matchRate": 0,
+        "calculationRate": 0,
+        "warnings": [],
+        "proposals": [],
+    }
+
+    if not reference_source or not calculation_source:
+        quality["proposals"].append(
+            "Configurer les deux formulaires dans Administration > KoboCollecte : KPI/formules puis donnees de calcul."
+        )
+        return [], quality
+
+    reference_rows = conn.execute(
+        """
+        SELECT *
+        FROM kobo_submissions
+        WHERE form_uid = ?
+        ORDER BY created_at DESC, id DESC
+        """,
+        (reference_source["formId"],),
+    ).fetchall()
+    calculation_rows = conn.execute(
+        """
+        SELECT *
+        FROM kobo_submissions
+        WHERE form_uid = ?
+        ORDER BY created_at DESC, id DESC
+        """,
+        (calculation_source["formId"],),
+    ).fetchall()
+
+    quality["referenceCount"] = len(reference_rows)
+    quality["calculationRecords"] = len(calculation_rows)
+    if not reference_rows:
+        quality["warnings"].append("Aucune soumission trouvee pour le formulaire KPI/formules.")
+    if not calculation_rows:
+        quality["warnings"].append("Aucune soumission trouvee pour le formulaire donnees de calcul.")
+
+    references: list[dict] = []
+    reference_lookup: dict[tuple[str, str], dict] = {}
+    reference_by_kpi: dict[str, dict | None] = {}
+
+    for row in reference_rows:
+        payload = parse_raw_payload(row)
+        pole_raw = mapped_submission_value(
+            reference_source,
+            payload,
+            "pole",
+            ["groupe_de_rattachement", "sous_entite_pole_filiale", "pole_id", "pole"],
+        )
+        pole_id = resolve_catalog_pole_id(conn, pole_raw or row["pole_id"])
+        kpi_code = text_or_empty(mapped_submission_value(reference_source, payload, "id", ["id_kpi", "kpi_id", "code"]))
+        kpi_name = text_or_empty(
+            mapped_submission_value(reference_source, payload, "title", ["intitule_du_kpi", "kpi_name", "kpi"])
+        )
+        if not pole_id or not (kpi_code or kpi_name):
+            quality["warnings"].append("Reference KPI ignoree: pole ou KPI non reconnu.")
+            continue
+
+        record = {
+            "poleId": pole_id,
+            "kpiId": kpi_code or normalize_match_key(kpi_name).upper(),
+            "kpiName": kpi_name or kpi_code,
+            "formula": text_or_empty(mapped_submission_value(reference_source, payload, "formula", ["formule_de_calcul"])),
+            "target": text_or_empty(mapped_submission_value(reference_source, payload, "target", ["valeur_cible", "objectif"])),
+            "unit": text_or_empty(mapped_submission_value(reference_source, payload, "unit", ["unite_de_mesure", "unite"])),
+            "sourceData": text_or_empty(
+                mapped_submission_value(reference_source, payload, "sourceData", ["source_de_la_donnee", "source_donnee"])
+            ),
+            "owner": text_or_empty(mapped_submission_value(reference_source, payload, "owner", ["responsable_du_kpi"])),
+            "collectionFrequency": text_or_empty(
+                mapped_submission_value(reference_source, payload, "collectionFrequency", ["frequence_de_collecte"])
+            ),
+            "reportingFrequency": text_or_empty(
+                mapped_submission_value(reference_source, payload, "reportingFrequency", ["periodicite_du_reporting"])
+            ),
+        }
+        references.append(record)
+        if not record["formula"]:
+            quality["missingFormulaCount"] += 1
+        if not record["target"]:
+            quality["missingTargetCount"] += 1
+
+        keys = [record["kpiId"], record["kpiName"]]
+        for key_value in keys:
+            key = normalize_match_key(key_value)
+            if not key:
+                continue
+            reference_lookup[(pole_id, key)] = record
+            if key not in reference_by_kpi:
+                reference_by_kpi[key] = record
+            elif reference_by_kpi[key] and reference_by_kpi[key]["poleId"] != pole_id:
+                reference_by_kpi[key] = None
+
+    groups: dict[tuple[str, str, str], dict] = {}
+    for row in calculation_rows:
+        payload = parse_raw_payload(row)
+        pole_raw = mapped_submission_value(calculation_source, payload, "pole", ["pole_id", "pole", "groupe_de_rattachement"])
+        pole_id = resolve_catalog_pole_id(conn, pole_raw or row["pole_id"])
+        kpi_raw = mapped_submission_value(calculation_source, payload, "kpi", ["id_kpi", "kpi_id", "kpi_name", "kpi"])
+        period_raw = mapped_submission_value(calculation_source, payload, "period", ["periode_reporting", "periode", "period"])
+        element_raw = mapped_submission_value(
+            calculation_source,
+            payload,
+            "element",
+            ["element_id", "element", "variable", "rubrique"],
+        )
+        value_raw = mapped_submission_value(calculation_source, payload, "value", ["valeur_element", "value", "valeur"])
+        branch_raw = mapped_submission_value(calculation_source, payload, "branch", ["filiale", "branch", "pays"])
+        validation_raw = mapped_submission_value(
+            calculation_source,
+            payload,
+            "validation",
+            ["validation_hierarchique", "validation_status"],
+        )
+
+        kpi_key = normalize_match_key(kpi_raw or row["kpi_name"])
+        period_label = text_or_empty(period_raw or row["period"] or "Periode non renseignee")
+        if not pole_id or not kpi_key:
+            quality["warnings"].append("Ligne de donnees ignoree: pole ou KPI non reconnu.")
+            continue
+
+        group_key = (pole_id, kpi_key, normalize_match_key(period_label))
+        group = groups.setdefault(
+            group_key,
+            {
+                "poleId": pole_id,
+                "kpiKey": kpi_key,
+                "kpiRaw": text_or_empty(kpi_raw or row["kpi_name"]),
+                "period": period_label,
+                "elements": [],
+            },
+        )
+        group["elements"].append(
+            {
+                "label": text_or_empty(element_raw or "valeur"),
+                "value": value_raw if value_raw not in (None, "") else row["value"],
+                "branch": text_or_empty(branch_raw or row["branch"]),
+                "validation": text_or_empty(validation_raw or row["validation_status"]),
+            }
+        )
+
+    quality["calculationGroups"] = len(groups)
+    results: list[dict] = []
+    pole_names = {row["id"]: row["name"] for row in conn.execute("SELECT id, name FROM poles").fetchall()}
+
+    for group in groups.values():
+        reference = reference_lookup.get((group["poleId"], group["kpiKey"])) or reference_by_kpi.get(group["kpiKey"])
+        if not reference:
+            quality["unmatchedCalculationCount"] += 1
+            continue
+
+        quality["matchedCalculationGroups"] += 1
+        value, method, formula_warnings = evaluate_kpi_formula(reference["formula"], group["elements"])
+        if value is None:
+            quality["uncalculatedCount"] += 1
+            quality["warnings"].extend(formula_warnings[:1])
+            continue
+
+        status = rag_status(value, reference["target"], reference["kpiName"], reference["formula"])
+        result = {
+            "id": f"{group['poleId']}:{reference['kpiId']}:{normalize_submission_key(group['period'])}",
+            "poleId": group["poleId"],
+            "poleName": pole_names.get(group["poleId"], group["poleId"]),
+            "kpiId": reference["kpiId"],
+            "kpiName": reference["kpiName"],
+            "period": group["period"],
+            "value": round(value, 4),
+            "valueLabel": format_calculated_value(value, reference["unit"]),
+            "target": reference["target"] or "A completer",
+            "unit": reference["unit"],
+            "status": status,
+            "trend": "Calcul Kobo",
+            "source": calculation_source["formId"],
+            "formula": reference["formula"] or "Formule a completer",
+            "sourceData": reference["sourceData"],
+            "method": method,
+            "elementsCount": len(group["elements"]),
+            "warnings": formula_warnings,
+        }
+        results.append(result)
+
+    if quality["calculationGroups"]:
+        quality["matchRate"] = round((quality["matchedCalculationGroups"] / quality["calculationGroups"]) * 100)
+        quality["calculationRate"] = round((quality["calculatedCount"] / quality["calculationGroups"]) * 100)
+    quality["calculatedCount"] = len(results)
+    if quality["calculationGroups"]:
+        quality["calculationRate"] = round((len(results) / quality["calculationGroups"]) * 100)
+
+    if quality["unmatchedCalculationCount"]:
+        quality["proposals"].append(
+            "Uniformiser les champs pole_id, id_kpi et periode_reporting dans les deux formulaires pour supprimer les ecarts."
+        )
+    if quality["missingTargetCount"]:
+        quality["proposals"].append("Completer les valeurs cibles dans le formulaire KPI/formules pour fiabiliser le statut vert/orange/rouge.")
+    if quality["missingFormulaCount"]:
+        quality["proposals"].append("Formaliser les formules restantes avec les memes libelles que les elements collectes.")
+    if not results and quality["configured"]:
+        quality["proposals"].append("Synchroniser les deux formulaires Kobo apres configuration pour alimenter les dashboards.")
+    if not quality["proposals"]:
+        quality["proposals"].append("Maintenir le meme id_kpi dans les deux formulaires pour garder le calcul automatique stable.")
+
+    unique_warnings = []
+    for warning in quality["warnings"]:
+        if warning and warning not in unique_warnings:
+            unique_warnings.append(warning)
+    quality["warnings"] = unique_warnings[:8]
+    return sorted(results, key=lambda item: (item["poleName"], item["kpiName"], item["period"])), quality
+
+
 def sync_kobo_form(payload: dict) -> dict:
     server_url = normalize_kobo_server_url(str(payload.get("serverUrl") or payload.get("origin") or ""))
     form_uid = str(payload.get("formUid") or payload.get("uid") or payload.get("name") or "").strip()
@@ -1261,10 +1886,35 @@ def sync_kobo_form(payload: dict) -> dict:
         data_warning = str(exc)
 
     with db_connect() as conn:
+        existing_form = conn.execute(
+            """
+            SELECT id, source_type
+            FROM kobo_forms
+            WHERE uid = ?
+            """,
+            (form_uid,),
+        ).fetchone()
+        source_type = "Connexion KoboToolbox"
+        existing_mappings: dict[str, str | None] = {}
+        if existing_form:
+            existing_role = kobo_source_role(existing_form["source_type"])
+            if existing_role != "autre":
+                source_type = existing_form["source_type"]
+            existing_mappings = {
+                row["field_name"]: row["mapped_to"]
+                for row in conn.execute(
+                    """
+                    SELECT field_name, mapped_to
+                    FROM kobo_form_fields
+                    WHERE form_id = ?
+                    """,
+                    (existing_form["id"],),
+                ).fetchall()
+            }
         conn.execute(
             """
             INSERT INTO kobo_forms (uid, title, server_url, source_type, status, updated_at)
-            VALUES (?, ?, ?, 'Connexion KoboToolbox', 'Connecte', CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, 'Connecte', CURRENT_TIMESTAMP)
             ON CONFLICT(uid) DO UPDATE SET
               title = excluded.title,
               server_url = excluded.server_url,
@@ -1272,7 +1922,7 @@ def sync_kobo_form(payload: dict) -> dict:
               status = excluded.status,
               updated_at = CURRENT_TIMESTAMP
             """,
-            (form_uid, form_title, server_url),
+            (form_uid, form_title, server_url, source_type),
         )
         form_id = conn.execute("SELECT id FROM kobo_forms WHERE uid = ?", (form_uid,)).fetchone()["id"]
         conn.execute("DELETE FROM kobo_form_fields WHERE form_id = ?", (form_id,))
@@ -1282,7 +1932,7 @@ def sync_kobo_form(payload: dict) -> dict:
                 INSERT INTO kobo_form_fields (form_id, field_name, field_label, field_type, mapped_to)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (form_id, field["name"], field["label"], field["type"], None),
+                (form_id, field["name"], field["label"], field["type"], existing_mappings.get(field["name"])),
             )
 
         imported = 0
@@ -1343,6 +1993,7 @@ def sync_kobo_form(payload: dict) -> dict:
         conn.commit()
         active_form = active_kobo_form(conn) or {}
         synced_at = conn.execute("SELECT CURRENT_TIMESTAMP AS synced_at").fetchone()["synced_at"]
+        kpi_results, kpi_quality = calculate_kpi_results(conn)
 
     detail = f"{len(fields)} champ(s) detecte(s), {imported} soumission(s) lue(s)."
     if data_warning:
@@ -1355,6 +2006,8 @@ def sync_kobo_form(payload: dict) -> dict:
         "submissionsImported": imported,
         "syncWarning": data_warning,
         "lastSyncAt": synced_at,
+        "kpiCalculationResults": kpi_results,
+        "kpiCalculationQuality": kpi_quality,
     }
 
 

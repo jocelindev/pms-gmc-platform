@@ -50,11 +50,89 @@
     }));
   }
 
+  const reportingBaseline = JSON.parse(JSON.stringify(PMS_DATA.reporting));
+
+  function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function resetReportingToBaseline() {
+    Object.keys(PMS_DATA.reporting).forEach((key) => {
+      delete PMS_DATA.reporting[key];
+    });
+    Object.assign(PMS_DATA.reporting, clone(reportingBaseline));
+  }
+
+  function statusLabel(status) {
+    if (status === "green") return "Valide";
+    if (status === "amber") return "A surveiller";
+    if (status === "red") return "Plan requis";
+    return "A verifier";
+  }
+
+  function scoreFromKpis(kpis) {
+    if (!kpis.length) return 0;
+    const weights = { green: 100, amber: 70, red: 35, gray: 50 };
+    const score = kpis.reduce((sum, kpi) => sum + (weights[kpi.status] || 50), 0) / kpis.length;
+    return Math.round(score);
+  }
+
+  function latestPeriod(results) {
+    const periods = results.map((item) => item.period).filter(Boolean);
+    return periods[0] || "Kobo";
+  }
+
+  function applyCalculatedKpisToReporting() {
+    resetReportingToBaseline();
+    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    if (!results.length) return;
+
+    const byPole = new Map();
+    results.forEach((result) => {
+      if (!result.poleId) return;
+      const items = byPole.get(result.poleId) || [];
+      items.push({
+        id: result.kpiId,
+        name: result.kpiName,
+        value: result.valueLabel,
+        target: result.target || "A completer",
+        trend: result.trend || "Calcul Kobo",
+        status: result.status || "gray",
+        source: result.source || "KoboCollect",
+        calculated: true,
+        period: result.period,
+        formula: result.formula,
+        method: result.method,
+        elementsCount: result.elementsCount,
+      });
+      byPole.set(result.poleId, items);
+    });
+
+    byPole.forEach((kpis, poleId) => {
+      PMS_DATA.reporting.kpisByPole[poleId] = kpis;
+      const pole = PMS_DATA.reporting.poles.find((item) => item.id === poleId);
+      if (!pole) return;
+      const redCount = kpis.filter((item) => item.status === "red").length;
+      const amberCount = kpis.filter((item) => item.status === "amber").length;
+      const score = scoreFromKpis(kpis);
+      pole.kpiCount = kpis.length;
+      pole.score = score;
+      pole.rag = redCount ? "red" : amberCount ? "amber" : "green";
+      pole.quality = state.kpiCalculationQuality?.matchRate || pole.quality || 0;
+      pole.readiness = state.kpiCalculationQuality?.calculationRate || score;
+      pole.status = statusLabel(pole.rag);
+      pole.lastReport = latestPeriod(results.filter((item) => item.poleId === poleId));
+      pole.lateSubmissions = state.kpiCalculationQuality?.unmatchedCalculationCount || 0;
+    });
+  }
+
   const state = {
     koboSubmissions: JSON.parse(JSON.stringify(PMS_DATA.koboSubmissions)),
     validationQueue: JSON.parse(JSON.stringify(PMS_DATA.validationQueue)),
     reportHistory: JSON.parse(JSON.stringify(PMS_DATA.reporting.history)),
     koboActiveForm: null,
+    kpiCalculationResults: [],
+    kpiCalculationQuality: null,
     kpiObjectives: [],
     platformUsers: buildSeedUsers(),
     platformAccessRoles: [
@@ -184,6 +262,15 @@
     if (Array.isArray(payload.reportHistory)) {
       state.reportHistory = payload.reportHistory;
     }
+    if (Array.isArray(payload.koboSubmissions)) {
+      state.koboSubmissions = payload.koboSubmissions;
+    }
+    if (Array.isArray(payload.kpiCalculationResults)) {
+      state.kpiCalculationResults = payload.kpiCalculationResults;
+    }
+    if (payload.kpiCalculationQuality) {
+      state.kpiCalculationQuality = payload.kpiCalculationQuality;
+    }
     if (payload.activeKoboForm) {
       state.koboActiveForm = payload.activeKoboForm;
     }
@@ -197,6 +284,7 @@
         state.calculationKoboSource = calculationSource;
       }
     }
+    applyCalculatedKpisToReporting();
     state.databaseConnected = true;
   }
 
@@ -514,6 +602,14 @@
         serverInput.value = serverUrl;
         uidInput.value = result.activeForm?.uid || formUid;
         state.koboActiveForm = result.activeForm;
+        if (Array.isArray(result.kpiCalculationResults)) {
+          state.kpiCalculationResults = result.kpiCalculationResults;
+        }
+        if (result.kpiCalculationQuality) {
+          state.kpiCalculationQuality = result.kpiCalculationQuality;
+        }
+        applyCalculatedKpisToReporting();
+        renderAll(state);
         renderKoboActiveForm();
 
         const fieldsDetected = result.fieldsDetected ?? state.koboActiveForm?.fields?.length ?? 0;
