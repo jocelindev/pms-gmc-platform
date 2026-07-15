@@ -1182,9 +1182,45 @@ textarea {
   grid-column: 1 / -1;
 }
 
-.admin-kobo-form.admin-kobo-source-form {
-  grid-template-columns: minmax(0, 1fr);
+.admin-kobo-form.admin-kobo-dual-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.kobo-logic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kobo-logic-card {
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 14px;
+}
+
+.kobo-logic-card span {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--palladium-blue);
+  color: #fff;
+  font-weight: 900;
+}
+
+.kobo-logic-card strong {
+  display: block;
+  margin: 10px 0 5px;
+  color: var(--palladium-blue);
+}
+
+.kobo-logic-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
 }
 
 .admin-kobo-actions {
@@ -1336,6 +1372,16 @@ textarea {
 }
 
 .objective-field-list {
+  display: grid;
+  gap: 16px;
+}
+
+.objective-field-section h4 {
+  margin: 0 0 10px;
+  color: var(--palladium-blue);
+}
+
+.objective-field-section-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
@@ -2474,8 +2520,9 @@ td small {
   .pole-kpi-items,
   .admin-summary-grid,
   .admin-kobo-form,
+  .kobo-logic-grid,
   .objective-profile-main,
-  .objective-field-list,
+  .objective-field-section-grid,
   .report-workspace {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2545,8 +2592,9 @@ td small {
   .pole-kpi-items,
   .admin-summary-grid,
   .admin-kobo-form,
+  .kobo-logic-grid,
   .objective-profile-main,
-  .objective-field-list,
+  .objective-field-section-grid,
   .permission-checks,
   .report-workspace,
   .report-summary,

@@ -1008,18 +1008,23 @@
     const catalogProfile = getObjectiveCatalogProfile(selectedKpiItem, selectedPole);
     const objectiveTemplate = PMS_DATA.objectiveKoboTemplate || {};
     const objectives = state.kpiObjectives || [];
-    const countFields = objectiveTemplate.requiredFields?.length || 0;
+    const countFields = (objectiveTemplate.requiredFields?.length || 0) + (objectiveTemplate.calculationFields?.length || 0);
+    const referenceSource = state.objectiveKoboSource;
+    const calculationSource = state.calculationKoboSource;
     const objectiveSummary = $("#objective-summary-cards");
 
     if (objectiveSummary) {
-      const countFields = objectiveTemplate.requiredFields?.length || 0;
       const selectedPoleObjectives = objectives.filter((objective) => objective.poleId === selectedPole.id).length;
-      const objectiveSource = state.objectiveKoboSource;
       objectiveSummary.innerHTML = `
         <div class="admin-summary-card">
-          <span>Source objectifs</span>
-          <strong>KoboCollect</strong>
-          <small>${escapeHtml(objectiveSource?.formId || "Formulaire a connecter")}</small>
+          <span>Formulaire 1</span>
+          <strong>KPI + formules</strong>
+          <small>${escapeHtml(referenceSource?.formId || "A connecter")}</small>
+        </div>
+        <div class="admin-summary-card">
+          <span>Formulaire 2</span>
+          <strong>Donnees calcul</strong>
+          <small>${escapeHtml(calculationSource?.formId || "A connecter")}</small>
         </div>
         <div class="admin-summary-card">
           <span>Reference KPI</span>
@@ -1032,12 +1037,76 @@
           <small>${selectedPoleObjectives} depuis Kobo pour le pole actif</small>
         </div>
         <div class="admin-summary-card">
-          <span>Mapping Kobo</span>
+          <span>Champs attendus</span>
           <strong>${countFields}</strong>
-          <small>champs lus dans le formulaire objectifs</small>
+          <small>sur les deux formulaires Kobo</small>
         </div>
       `;
     }
+
+    const fillKoboSourceForm = (source, config) => {
+      if (!source) return;
+      const setValue = (selector, value) => {
+        const input = $(selector);
+        if (input && value) input.value = value;
+      };
+      setValue(config.server, source.serverUrl);
+      setValue(config.form, source.formId);
+      Object.entries(config.fields).forEach(([mappedTo, selector]) => {
+        setValue(selector, source.mappedFields?.[mappedTo]);
+      });
+    };
+
+    fillKoboSourceForm(referenceSource, {
+      server: "#admin-kobo-reference-server",
+      form: "#admin-kobo-reference-form-id",
+      fields: {
+        pole: "#admin-kobo-reference-pole-field",
+        kpi: "#admin-kobo-reference-kpi-field",
+        name: "#admin-kobo-reference-name-field",
+        formula: "#admin-kobo-reference-formula-field",
+        target: "#admin-kobo-reference-target-field",
+        unit: "#admin-kobo-reference-unit-field",
+        frequency: "#admin-kobo-reference-frequency-field",
+        validation: "#admin-kobo-reference-validation-field",
+      },
+    });
+    fillKoboSourceForm(calculationSource, {
+      server: "#admin-kobo-calculation-server",
+      form: "#admin-kobo-calculation-form-id",
+      fields: {
+        pole: "#admin-kobo-calculation-pole-field",
+        kpi: "#admin-kobo-calculation-kpi-field",
+        period: "#admin-kobo-calculation-period-field",
+        element: "#admin-kobo-calculation-element-field",
+        value: "#admin-kobo-calculation-value-field",
+        branch: "#admin-kobo-calculation-branch-field",
+        date: "#admin-kobo-calculation-date-field",
+        validation: "#admin-kobo-calculation-validation-field",
+      },
+    });
+
+    const setKoboSourceStatus = (selector, source, fallback) => {
+      const status = $(selector);
+      if (!status) return;
+      if (!source) {
+        status.className = "connector-status empty";
+        status.textContent = fallback;
+        return;
+      }
+      status.className = "connector-status success";
+      status.innerHTML = `<strong>${escapeHtml(source.formId)}</strong><span>${escapeHtml(source.serverUrl)}</span>`;
+    };
+    setKoboSourceStatus(
+      "#admin-kobo-reference-status",
+      referenceSource,
+      "Aucun formulaire KPI/formules configure."
+    );
+    setKoboSourceStatus(
+      "#admin-kobo-calculation-status",
+      calculationSource,
+      "Aucun formulaire de donnees de calcul configure."
+    );
 
     const catalogStatus = $("#objective-catalog-status");
     if (catalogStatus) {
@@ -1096,13 +1165,28 @@
 
     const fieldList = $("#objective-kobo-fields");
     if (fieldList) {
-      fieldList.innerHTML = (objectiveTemplate.requiredFields || [])
+      const fieldGroups = [
+        { title: "Formulaire 1 - KPI et formules", fields: objectiveTemplate.requiredFields || [] },
+        { title: "Formulaire 2 - Elements de calcul", fields: objectiveTemplate.calculationFields || [] },
+      ];
+      fieldList.innerHTML = fieldGroups
         .map(
-          (field) => `
-            <div class="objective-field-item">
-              <strong>${escapeHtml(field.key)}</strong>
-              <span>${escapeHtml(field.label)}</span>
-              <small>${escapeHtml(field.block)} - ${escapeHtml(field.source)}</small>
+          (group) => `
+            <div class="objective-field-section">
+              <h4>${escapeHtml(group.title)}</h4>
+              <div class="objective-field-section-grid">
+                ${group.fields
+                  .map(
+                    (field) => `
+                      <div class="objective-field-item">
+                        <strong>${escapeHtml(field.key)}</strong>
+                        <span>${escapeHtml(field.label)}</span>
+                        <small>${escapeHtml(field.block)} - ${escapeHtml(field.source)}</small>
+                      </div>
+                    `
+                  )
+                  .join("")}
+              </div>
             </div>
           `
         )
@@ -1113,7 +1197,7 @@
     if (controlList) {
       controlList.innerHTML = `
         <div class="objective-control-group">
-          ${(objectiveTemplate.publicationChecklist || [])
+          ${(objectiveTemplate.koboLogicSteps || objectiveTemplate.publicationChecklist || [])
             .map((item) => `<span>${escapeHtml(item)}</span>`)
             .join("")}
         </div>

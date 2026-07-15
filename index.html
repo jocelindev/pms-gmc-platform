@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=kobo-sync-2026" />
+    <link rel="stylesheet" href="styles.css?v=kobo-two-forms-2026" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -770,59 +770,144 @@
               <section class="panel span-3 admin-kobo-source-panel">
                 <div class="panel-header">
                   <div>
-                    <p class="eyebrow">Formulaire KoboCollect</p>
-                    <h3>Source unique des objectifs KPI</h3>
+                    <p class="eyebrow">Logique KoboCollect</p>
+                    <h3>Deux formulaires pour alimenter le PMS</h3>
                   </div>
                 </div>
-                <div class="admin-kobo-form admin-kobo-source-form">
+                <div class="kobo-logic-grid">
+                  <div class="kobo-logic-card">
+                    <span>1</span>
+                    <strong>KPI et formules</strong>
+                    <p>Liste les KPI par pole, les objectifs, les frequences et la formule de calcul.</p>
+                  </div>
+                  <div class="kobo-logic-card">
+                    <span>2</span>
+                    <strong>Elements de calcul</strong>
+                    <p>Collecte les donnees brutes utilisees par les formules pour calculer chaque KPI.</p>
+                  </div>
+                  <div class="kobo-logic-card">
+                    <span>3</span>
+                    <strong>Calcul PMS</strong>
+                    <p>Rapproche les deux sources par pole, KPI et periode pour alimenter les dashboards.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel span-3 admin-kobo-source-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Formulaire 1</p>
+                    <h3>KPIs et formules de calcul par pole</h3>
+                  </div>
+                </div>
+                <div class="admin-kobo-form admin-kobo-dual-form">
                   <label>
                     Adresse serveur Kobo
-                    <input id="admin-kobo-server" class="search-input" inputmode="url" placeholder="https://kf.kobotoolbox.org" />
+                    <input id="admin-kobo-reference-server" class="search-input" inputmode="url" placeholder="https://kf.kobotoolbox.org" />
                   </label>
                   <label>
-                    ID formulaire objectifs
-                    <input id="admin-kobo-form-id" class="search-input" placeholder="ex. aObjectifsKPI2026" />
-                  </label>
-                  <label>
-                    Champ KPI
-                    <input id="admin-kobo-kpi-field" class="search-input" value="kpi_id" />
-                  </label>
-                  <label>
-                    Champ objectif
-                    <input id="admin-kobo-target-field" class="search-input" value="objectif_kpi" />
-                  </label>
-                  <label>
-                    Champ periode
-                    <input id="admin-kobo-period-field" class="search-input" value="periode_objectif" />
+                    ID formulaire KPI / formules
+                    <input id="admin-kobo-reference-form-id" class="search-input" placeholder="ex. aKPIFormules2026" />
                   </label>
                   <label>
                     Champ pole
-                    <input id="admin-kobo-pole-field" class="search-input" value="pole_id" />
+                    <input id="admin-kobo-reference-pole-field" class="search-input" value="pole_id" />
+                  </label>
+                  <label>
+                    Champ KPI
+                    <input id="admin-kobo-reference-kpi-field" class="search-input" value="kpi_id" />
+                  </label>
+                  <label>
+                    Champ intitule KPI
+                    <input id="admin-kobo-reference-name-field" class="search-input" value="intitule_kpi" />
+                  </label>
+                  <label>
+                    Champ formule
+                    <input id="admin-kobo-reference-formula-field" class="search-input" value="formule_calcul" />
+                  </label>
+                  <label>
+                    Champ objectif
+                    <input id="admin-kobo-reference-target-field" class="search-input" value="objectif_kpi" />
                   </label>
                   <label>
                     Champ unite
-                    <input id="admin-kobo-unit-field" class="search-input" value="unite_mesure" />
+                    <input id="admin-kobo-reference-unit-field" class="search-input" value="unite_mesure" />
                   </label>
                   <label>
                     Champ frequence
-                    <input id="admin-kobo-frequency-field" class="search-input" value="frequence_collecte" />
-                  </label>
-                  <label>
-                    Champ source donnee
-                    <input id="admin-kobo-source-field" class="search-input" value="source_donnee" />
+                    <input id="admin-kobo-reference-frequency-field" class="search-input" value="frequence_collecte" />
                   </label>
                   <label>
                     Champ validation
-                    <input id="admin-kobo-validation-field" class="search-input" value="validation_hierarchique" />
+                    <input id="admin-kobo-reference-validation-field" class="search-input" value="validation_hierarchique" />
                   </label>
                 </div>
                 <div class="connector-actions admin-kobo-actions">
-                  <button class="primary-action" id="admin-kobo-source-save" type="button">
-                    Utiliser ce formulaire KoboCollect
+                  <button class="primary-action" id="admin-kobo-reference-save" type="button">
+                    Enregistrer le formulaire KPI et formules
                   </button>
                 </div>
-                <div class="connector-status empty" id="admin-kobo-status">
-                  Aucun formulaire KoboCollect d'objectifs configure. Les objectifs ne sont pas saisis manuellement dans la plateforme.
+                <div class="connector-status empty" id="admin-kobo-reference-status">
+                  Aucun formulaire KPI/formules configure.
+                </div>
+              </section>
+
+              <section class="panel span-3 admin-kobo-source-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Formulaire 2</p>
+                    <h3>Elements de calcul des KPI</h3>
+                  </div>
+                </div>
+                <div class="admin-kobo-form admin-kobo-dual-form">
+                  <label>
+                    Adresse serveur Kobo
+                    <input id="admin-kobo-calculation-server" class="search-input" inputmode="url" placeholder="https://kf.kobotoolbox.org" />
+                  </label>
+                  <label>
+                    ID formulaire donnees de calcul
+                    <input id="admin-kobo-calculation-form-id" class="search-input" placeholder="ex. aDonneesCalculKPI2026" />
+                  </label>
+                  <label>
+                    Champ pole
+                    <input id="admin-kobo-calculation-pole-field" class="search-input" value="pole_id" />
+                  </label>
+                  <label>
+                    Champ KPI
+                    <input id="admin-kobo-calculation-kpi-field" class="search-input" value="kpi_id" />
+                  </label>
+                  <label>
+                    Champ periode
+                    <input id="admin-kobo-calculation-period-field" class="search-input" value="periode_reporting" />
+                  </label>
+                  <label>
+                    Champ element de calcul
+                    <input id="admin-kobo-calculation-element-field" class="search-input" value="element_id" />
+                  </label>
+                  <label>
+                    Champ valeur
+                    <input id="admin-kobo-calculation-value-field" class="search-input" value="valeur_element" />
+                  </label>
+                  <label>
+                    Champ filiale
+                    <input id="admin-kobo-calculation-branch-field" class="search-input" value="filiale" />
+                  </label>
+                  <label>
+                    Champ date collecte
+                    <input id="admin-kobo-calculation-date-field" class="search-input" value="date_collecte" />
+                  </label>
+                  <label>
+                    Champ validation
+                    <input id="admin-kobo-calculation-validation-field" class="search-input" value="validation_hierarchique" />
+                  </label>
+                </div>
+                <div class="connector-actions admin-kobo-actions">
+                  <button class="primary-action" id="admin-kobo-calculation-save" type="button">
+                    Enregistrer le formulaire donnees de calcul
+                  </button>
+                </div>
+                <div class="connector-status empty" id="admin-kobo-calculation-status">
+                  Aucun formulaire de donnees de calcul configure.
                 </div>
               </section>
 
@@ -830,7 +915,7 @@
                 <div class="panel-header">
                   <div>
                     <p class="eyebrow">Structure KoboCollect</p>
-                    <h3>Champs attendus pour le formulaire objectifs</h3>
+                    <h3>Champs attendus pour les deux formulaires</h3>
                   </div>
                   <span class="status-pill green" id="objective-field-count">0 champ</span>
                 </div>
@@ -988,9 +1073,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=kobo-sync-2026"></script>
-    <script src="scripts/renderers.js?v=kobo-sync-2026"></script>
-    <script src="scripts/api.js?v=kobo-sync-2026"></script>
-    <script src="app.js?v=kobo-sync-2026"></script>
+    <script src="scripts/data.js?v=kobo-two-forms-2026"></script>
+    <script src="scripts/renderers.js?v=kobo-two-forms-2026"></script>
+    <script src="scripts/api.js?v=kobo-two-forms-2026"></script>
+    <script src="app.js?v=kobo-two-forms-2026"></script>
   </body>
 </html>

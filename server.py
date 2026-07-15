@@ -472,6 +472,56 @@ def active_kobo_form(conn: sqlite3.Connection) -> dict | None:
     }
 
 
+def kobo_source_role(source_type: str) -> str:
+    value = (source_type or "").lower()
+    if "donnees de calcul" in value:
+        return "donneesCalcul"
+    if "referentiel" in value or "objectifs kpi" in value:
+        return "referentielKpi"
+    return "autre"
+
+
+def list_kobo_sources(conn: sqlite3.Connection) -> list[dict]:
+    forms = conn.execute(
+        """
+        SELECT id, uid, title, server_url, source_type, status
+        FROM kobo_forms
+        ORDER BY updated_at DESC, id DESC
+        """
+    ).fetchall()
+    sources = []
+    for form in forms:
+        role = kobo_source_role(form["source_type"])
+        if role == "autre":
+            continue
+        fields = conn.execute(
+            """
+            SELECT field_name, mapped_to
+            FROM kobo_form_fields
+            WHERE form_id = ?
+            ORDER BY id
+            """,
+            (form["id"],),
+        ).fetchall()
+        mapped_fields = {
+            row["mapped_to"]: row["field_name"]
+            for row in fields
+            if row["mapped_to"] and row["field_name"]
+        }
+        sources.append(
+            {
+                "role": role,
+                "serverUrl": form["server_url"] or "",
+                "formId": form["uid"],
+                "title": form["title"],
+                "mode": form["source_type"],
+                "status": form["status"],
+                "mappedFields": mapped_fields,
+            }
+        )
+    return sources
+
+
 def user_to_front(row: sqlite3.Row, default_pole_id: str | None = None, default_pole_name: str | None = None) -> dict:
     return {
         "id": row["id"],
@@ -522,6 +572,7 @@ def get_bootstrap_payload() -> dict:
             "objectives": list_objectives(conn),
             "reportHistory": list_reports(conn),
             "activeKoboForm": active_kobo_form(conn),
+            "koboSources": list_kobo_sources(conn),
         }
 
 
@@ -1317,7 +1368,8 @@ def save_kobo_form(payload: dict) -> dict:
         raise ValueError("Nom du formulaire Kobo obligatoire.")
 
     uid = slugify(name)
-    if mode.lower().startswith("connexion"):
+    mode_lower = mode.lower()
+    if mode_lower.startswith("connexion") or "kobocollect" in mode_lower:
         uid = name
 
     with db_connect() as conn:

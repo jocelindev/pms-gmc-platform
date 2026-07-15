@@ -69,6 +69,7 @@ L'onglet KoboCollect permet maintenant de renseigner l'adresse serveur KoboToolb
 - Le serveur lit les metadonnees du formulaire Kobo et enregistre les champs detectes dans SQLite.
 - Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.
 - Le jeton API sert uniquement a la synchronisation courante : il n'est pas renvoye a l'interface ni affiche comme formulaire actif.
+- Dans Administration > KoboCollecte, la logique PMS distingue deux formulaires : un formulaire `KPI et formules` par pole, et un formulaire `Elements de calcul` qui collecte les donnees brutes utilisees par ces formules.
 
 ## Contenu de cette version
 
