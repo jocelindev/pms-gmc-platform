@@ -19,7 +19,6 @@
   const viewTitles = {
     dashboard: "Dashboard KPI par pole",
     poles: "Suivi des performances par pole",
-    kobo: "Supervision KoboCollect",
     kpis: "Referentiel KPI",
     alerts: "Notifications",
     actions: "Plans d'action",
@@ -460,7 +459,6 @@
   }
 
   function bindKoboActions() {
-    const syncButton = $("#sync-button");
     const serverInput = $("#kobo-server-url");
     const uidInput = $("#kobo-form-uid");
     const tokenInput = $("#kobo-api-token");
@@ -545,10 +543,6 @@
       tokenInput.type = showToken ? "text" : "password";
       tokenToggle.textContent = showToken ? "Masquer" : "Afficher";
     });
-
-    if (syncButton) {
-      syncButton.addEventListener("click", () => syncKoboForm(syncButton));
-    }
 
     connectButton.addEventListener("click", () => syncKoboForm(connectButton));
 

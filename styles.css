@@ -325,8 +325,7 @@ button {
   letter-spacing: 0;
 }
 
-.dashboard-mode .topbar .filters label,
-.dashboard-mode .topbar .filters #sync-button {
+.dashboard-mode .topbar .filters label {
   display: none;
 }
 

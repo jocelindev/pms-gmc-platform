@@ -62,9 +62,9 @@ Ouvrir le fichier suivant dans un navigateur :
 C:\Users\dquin\Documents\developpement Web\pms-gmc-platform\index.html
 ```
 
-## Synchronisation KoboCollect
+## Configuration KoboCollect
 
-L'onglet KoboCollect permet maintenant de renseigner l'adresse serveur KoboToolbox, l'UID du formulaire et le jeton API, puis de lancer une synchronisation via `/api/kobo/sync`.
+La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'est l'espace de parametrage des formulaires qui alimentent la plateforme.
 
 - Le serveur lit les metadonnees du formulaire Kobo et enregistre les champs detectes dans SQLite.
 - Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.
@@ -75,7 +75,7 @@ L'onglet KoboCollect permet maintenant de renseigner l'adresse serveur KoboToolb
 ## Contenu de cette version
 
 - Tableau de bord groupe COMEX.
-- Supervision KoboCollect/KoboToolbox.
+- Configuration KoboCollect/KoboToolbox dans Administration.
 - Pipeline KoboCollect vers PMS : reception, controle, mapping, calcul KPI et publication.
 - File de validation des anomalies avant integration.
 - Referentiel KPI.
