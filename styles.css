@@ -376,169 +376,233 @@ button {
   min-width: min(520px, 100%);
 }
 
-.calendar-slicer {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 10px 28px rgba(31, 56, 100, 0.07);
-  display: grid;
-  gap: 14px;
-  margin-bottom: 16px;
-  padding: 16px;
-}
-
-.calendar-slicer-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: 16px;
-}
-
-.calendar-slicer-head h2 {
-  color: var(--palladium-blue);
-  font-size: 20px;
-  margin: 0;
-}
-
-.calendar-slicer-head p:not(.eyebrow) {
-  color: var(--muted);
-  margin: 5px 0 0;
-}
-
-.calendar-presets {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.calendar-preset,
-.calendar-nav,
-.calendar-day {
-  border: 1px solid var(--border);
+.calendar-slicer.powerbi-ribbon {
   background: #fff;
-  color: var(--palladium-blue);
-  font-weight: 900;
-}
-
-.calendar-preset {
-  border-radius: 999px;
-  min-height: 34px;
-  padding: 0 12px;
-}
-
-.calendar-preset.active {
-  border-color: var(--palladium-blue);
-  background: var(--palladium-blue);
-  color: #fff;
-}
-
-.calendar-slicer-body {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   display: grid;
-  grid-template-columns: minmax(260px, 330px) minmax(240px, 1fr);
-  gap: 14px;
+  gap: 6px;
+  margin: -8px -8px 18px;
 }
 
-.calendar-month-card,
-.calendar-range-card {
-  border: 1px solid rgba(31, 56, 100, 0.14);
-  border-radius: 8px;
-  background: var(--surface-soft);
-  padding: 12px;
+.powerbi-ribbon-top {
+  align-items: stretch;
+  background: var(--palladium-gold);
+  border: 2px solid rgba(31, 56, 100, 0.12);
+  border-radius: 18px 18px 8px 8px;
+  display: grid;
+  grid-template-columns: minmax(310px, 1.2fr) minmax(260px, 0.9fr) minmax(240px, 0.8fr) minmax(160px, 0.5fr);
+  min-height: 82px;
+  overflow: hidden;
 }
 
-.calendar-month-head {
+.powerbi-brand-block {
   align-items: center;
   display: grid;
-  grid-template-columns: 36px 1fr 36px;
-  gap: 8px;
-  margin-bottom: 10px;
-  text-align: center;
+  grid-template-columns: 128px minmax(150px, 1fr) 72px;
+  gap: 14px;
+  padding: 10px 18px;
 }
 
-.calendar-month-head strong {
-  color: var(--palladium-blue);
-  text-transform: capitalize;
+.powerbi-logo {
+  align-items: center;
+  border: 4px solid #050505;
+  border-radius: 999px;
+  color: #050505;
+  display: flex;
+  font-size: 24px;
+  font-weight: 950;
+  height: 45px;
+  justify-content: center;
+  letter-spacing: 0.02em;
+  width: 98px;
 }
 
-.calendar-nav {
+.powerbi-brand-block strong {
+  color: #050505;
+  font-size: clamp(25px, 2.6vw, 34px);
+  font-weight: 950;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.powerbi-doc-icon {
+  border: 3px solid #050505;
   border-radius: 8px;
-  min-height: 34px;
+  height: 50px;
+  position: relative;
+  width: 38px;
 }
 
-.calendar-weekdays,
-.calendar-grid-month {
+.powerbi-doc-icon::after {
+  align-items: center;
+  border: 3px solid #050505;
+  border-radius: 999px;
+  content: "$";
+  display: flex;
+  font-size: 13px;
+  font-weight: 950;
+  height: 24px;
+  justify-content: center;
+  position: absolute;
+  right: -16px;
+  top: 6px;
+  width: 24px;
+}
+
+.powerbi-doc-icon span {
+  background: #050505;
+  display: block;
+  height: 3px;
+  margin: 8px 8px 0;
+}
+
+.powerbi-actors {
+  border-left: 2px solid #050505;
+  border-right: 2px solid #050505;
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.calendar-weekdays {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 900;
-  margin-bottom: 5px;
+  grid-template-rows: 30px 1fr;
   text-align: center;
-  text-transform: uppercase;
 }
 
-.calendar-day {
-  aspect-ratio: 1;
-  border-radius: 8px;
+.powerbi-actors > span {
+  border-bottom: 1px dotted rgba(5, 5, 5, 0.55);
+  color: #050505;
+  font-size: 18px;
+  font-weight: 900;
+  padding-top: 4px;
+}
+
+.powerbi-actors div {
+  align-items: center;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+  padding: 8px 28px;
+}
+
+.actor-toggle {
+  border: 2px solid rgba(31, 56, 100, 0.75);
+  background: #fffef5;
+  color: var(--palladium-blue);
+  font-weight: 900;
   min-height: 34px;
 }
 
-.calendar-day.muted {
-  color: #94a3b8;
-  background: #f8fafc;
-}
-
-.calendar-day.today {
-  border-color: var(--palladium-gold);
-}
-
-.calendar-day.selected {
-  background: rgba(31, 56, 100, 0.1);
-  border-color: rgba(31, 56, 100, 0.28);
-}
-
-.calendar-day.edge {
-  background: var(--palladium-blue);
-  border-color: var(--palladium-blue);
+.actor-toggle.active {
+  background: #2b2d31;
+  border-color: #5c5f66;
   color: #fff;
 }
 
-.calendar-range-card {
-  align-content: start;
+.powerbi-date-card {
+  align-content: center;
+  border-right: 2px solid #050505;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 4px;
+  padding: 10px 16px;
 }
 
-.calendar-range-card .primary-action {
-  grid-column: span 2;
-}
-
-.calendar-active-period {
-  grid-column: span 2;
-  border-left: 4px solid var(--palladium-gold);
-  background: #fff;
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-
-.calendar-active-period span,
-.calendar-active-period small {
-  color: var(--muted);
+.powerbi-date-card span,
+.powerbi-filter-box span {
+  background: #fbd600;
+  color: #172554;
   display: block;
-  font-size: 12px;
+  font-size: 16px;
+  font-weight: 950;
+  padding: 2px 5px;
+}
+
+.powerbi-date-card input {
+  border: 0;
+  border-bottom: 2px solid rgba(31, 56, 100, 0.45);
+  background: rgba(255, 255, 255, 0.48);
+  color: #0870d8;
+  font-size: 25px;
+  font-weight: 950;
+  min-height: 38px;
+  padding: 0 34px 0 6px;
+  width: 100%;
+}
+
+.powerbi-date-card::after {
+  border: solid #0870d8;
+  border-width: 0 2px 2px 0;
+  content: "";
+  height: 16px;
+  justify-self: end;
+  margin-right: 4px;
+  margin-top: -31px;
+  pointer-events: none;
+  transform: rotate(45deg);
+  width: 16px;
+}
+
+.powerbi-signature {
+  align-content: center;
+  color: #0b1c8a;
+  display: grid;
+  font-weight: 900;
+  justify-items: center;
+  padding: 10px;
+  text-align: center;
+}
+
+.powerbi-signature span {
+  color: #050505;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.powerbi-filter-row {
+  align-items: end;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(4, minmax(160px, 1fr)) minmax(250px, 1.2fr) minmax(250px, 1.2fr);
+}
+
+.powerbi-filter-box {
+  background: #fff0a8;
+  border: 1.8px solid #050505;
+  border-radius: 22px;
+  display: grid;
+  gap: 7px;
+  min-height: 70px;
+  padding: 11px 20px 8px;
+}
+
+.powerbi-filter-box select {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.42);
+  border: 0;
+  border-bottom: 1px solid rgba(31, 56, 100, 0.35);
+  border-radius: 0;
+  color: #050505;
+  font-size: 16px;
+  min-height: 24px;
+  padding: 0 28px 0 0;
+}
+
+.powerbi-filter-box::after {
+  border: solid #111827;
+  border-width: 0 1.6px 1.6px 0;
+  content: "";
+  height: 10px;
+  justify-self: end;
+  margin-right: 4px;
+  margin-top: -24px;
+  pointer-events: none;
+  transform: rotate(45deg);
+  width: 10px;
+}
+
+.powerbi-chart-title {
+  color: #2f2f2f;
+  font-size: 19px;
   font-weight: 800;
-}
-
-.calendar-active-period strong {
-  color: var(--palladium-blue);
-  display: block;
-  margin: 3px 0;
+  padding: 0 4px 8px;
+  text-align: center;
 }
 
 label {
@@ -2778,7 +2842,8 @@ td small {
   .kobo-pipeline,
   .kobo-connector-form,
   .active-form-grid,
-  .calendar-slicer-body,
+  .powerbi-ribbon-top,
+  .powerbi-filter-row,
   .selected-pole-summary,
   .selected-kpi-grid,
   .pole-kpi-items,
@@ -2837,7 +2902,6 @@ td small {
   }
 
   .topbar,
-  .calendar-slicer-head,
   .section-intro,
   .panel-header,
   .hero-panel {
@@ -2855,8 +2919,8 @@ td small {
   .kobo-pipeline,
   .kobo-connector-form,
   .active-form-grid,
-  .calendar-slicer-body,
-  .calendar-range-card,
+  .powerbi-ribbon-top,
+  .powerbi-filter-row,
   .selected-pole-summary,
   .selected-kpi-grid,
   .pole-kpi-items,
@@ -2879,13 +2943,20 @@ td small {
     grid-template-columns: 1fr;
   }
 
-  .calendar-presets {
-    justify-content: flex-start;
+  .powerbi-brand-block,
+  .powerbi-actors div {
+    grid-template-columns: 1fr;
+    justify-items: start;
   }
 
-  .calendar-range-card .primary-action,
-  .calendar-active-period {
-    grid-column: auto;
+  .powerbi-actors,
+  .powerbi-date-card {
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .powerbi-filter-box {
+    border-radius: 14px;
   }
 
   .admin-flow {

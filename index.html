@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=calendar-slicer-2026" />
+    <link rel="stylesheet" href="styles.css?v=powerbi-ribbon-2026" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -130,51 +130,72 @@
           </div>
         </header>
 
-        <section class="calendar-slicer" id="calendar-slicer" aria-label="Calendrier de reporting">
-          <div class="calendar-slicer-head">
-            <div>
-              <p class="eyebrow">Calendrier</p>
-              <h2>Filtre periode type Power BI</h2>
-              <p id="calendar-summary">Periode active a definir.</p>
+        <section class="calendar-slicer powerbi-ribbon" id="calendar-slicer" aria-label="Filtres de reporting">
+          <div class="powerbi-ribbon-top">
+            <div class="powerbi-brand-block">
+              <div class="powerbi-logo">P</div>
+              <strong>KPIS GMC</strong>
+              <div class="powerbi-doc-icon" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
             </div>
-            <div class="calendar-presets" aria-label="Raccourcis de periode">
-              <button class="calendar-preset active" type="button" data-calendar-preset="month">Mois</button>
-              <button class="calendar-preset" type="button" data-calendar-preset="week">Semaine</button>
-              <button class="calendar-preset" type="button" data-calendar-preset="quarter">Trimestre</button>
-              <button class="calendar-preset" type="button" data-calendar-preset="year">Annee</button>
-              <button class="calendar-preset" type="button" data-calendar-preset="today">Aujourd'hui</button>
+            <div class="powerbi-actors">
+              <span>ACTEURS</span>
+              <div>
+                <button class="actor-toggle active" type="button" data-actor-scope="responsable">RESPONSABLE</button>
+                <button class="actor-toggle" type="button" data-actor-scope="direction">DIRECTION</button>
+              </div>
+            </div>
+            <label class="powerbi-date-card">
+              <span>DATE</span>
+              <input id="calendar-date-input" inputmode="numeric" maxlength="8" placeholder="20260715" />
+            </label>
+            <div class="powerbi-signature">
+              <strong>GMC GROUP</strong>
+              <span id="calendar-summary">Periode active</span>
             </div>
           </div>
-          <div class="calendar-slicer-body">
-            <div class="calendar-month-card">
-              <div class="calendar-month-head">
-                <button class="calendar-nav" id="calendar-prev-month" type="button" aria-label="Mois precedent">&lt;</button>
-                <strong id="calendar-month-title">Juillet 2026</strong>
-                <button class="calendar-nav" id="calendar-next-month" type="button" aria-label="Mois suivant">&gt;</button>
-              </div>
-              <div class="calendar-weekdays" aria-hidden="true">
-                <span>Lun</span>
-                <span>Mar</span>
-                <span>Mer</span>
-                <span>Jeu</span>
-                <span>Ven</span>
-                <span>Sam</span>
-                <span>Dim</span>
-              </div>
-              <div class="calendar-grid-month" id="calendar-grid"></div>
-            </div>
-            <div class="calendar-range-card">
-              <label>
-                Date debut
-                <input id="calendar-start" class="search-input" type="date" />
-              </label>
-              <label>
-                Date fin
-                <input id="calendar-end" class="search-input" type="date" />
-              </label>
-              <button class="primary-action" id="calendar-apply" type="button">Appliquer la periode</button>
-              <div class="calendar-active-period" id="calendar-active-period"></div>
-            </div>
+          <div class="powerbi-filter-row">
+            <label class="powerbi-filter-box">
+              <span>Pole</span>
+              <select id="calendar-pole-filter"></select>
+            </label>
+            <label class="powerbi-filter-box">
+              <span>Filiale</span>
+              <select id="calendar-branch-filter">
+                <option value="Groupe">Groupe</option>
+                <option value="Cote d'Ivoire">Cote d'Ivoire</option>
+                <option value="Benin">Benin</option>
+                <option value="Cameroun">Cameroun</option>
+                <option value="Congo">Congo</option>
+                <option value="Guinee-Bissau">Guinee-Bissau</option>
+                <option value="Guinee Conakry">Guinee Conakry</option>
+              </select>
+            </label>
+            <label class="powerbi-filter-box">
+              <span>Cycle</span>
+              <select id="calendar-cycle-filter">
+                <option>Hebdomadaire</option>
+                <option selected>Mensuel</option>
+                <option>Trimestriel</option>
+                <option>Semestriel</option>
+                <option>Annuel</option>
+              </select>
+            </label>
+            <label class="powerbi-filter-box">
+              <span>Statut</span>
+              <select id="calendar-status-filter">
+                <option value="Tous">Tous</option>
+                <option value="A verifier">A verifier</option>
+                <option value="A surveiller">A surveiller</option>
+                <option value="Plan requis">Plan requis</option>
+                <option value="Valide">Valide</option>
+              </select>
+            </label>
+            <div class="powerbi-chart-title">Dashboard KPI par pole</div>
+            <div class="powerbi-chart-title">Rapports par periode</div>
           </div>
         </section>
 
@@ -1218,9 +1239,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=calendar-slicer-2026"></script>
-    <script src="scripts/renderers.js?v=calendar-slicer-2026"></script>
-    <script src="scripts/api.js?v=calendar-slicer-2026"></script>
-    <script src="app.js?v=calendar-slicer-2026"></script>
+    <script src="scripts/data.js?v=powerbi-ribbon-2026"></script>
+    <script src="scripts/renderers.js?v=powerbi-ribbon-2026"></script>
+    <script src="scripts/api.js?v=powerbi-ribbon-2026"></script>
+    <script src="app.js?v=powerbi-ribbon-2026"></script>
   </body>
 </html>

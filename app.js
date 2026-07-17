@@ -205,6 +205,19 @@
     return date.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   }
 
+  function parseCompactDate(value) {
+    const digits = String(value || "").replace(/\D/g, "");
+    if (digits.length !== 8) return null;
+    const year = Number(digits.slice(0, 4));
+    const month = Number(digits.slice(4, 6));
+    const day = Number(digits.slice(6, 8));
+    const date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+      return null;
+    }
+    return date;
+  }
+
   function buildCalendarSelection(preset = "month", anchorDate = new Date()) {
     const anchor = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
     let start = anchor;
@@ -237,6 +250,7 @@
       preset,
       start: toIsoDate(start),
       end: toIsoDate(end),
+      selectedDate: toIsoDate(anchor),
       label,
       viewYear: anchor.getFullYear(),
       viewMonth: anchor.getMonth(),
@@ -248,6 +262,13 @@
     if (preset === "quarter") return "Trimestriel";
     if (preset === "year") return "Annuel";
     return "Mensuel";
+  }
+
+  function presetFromCycle(cycle) {
+    if (cycle === "Hebdomadaire") return "week";
+    if (cycle === "Trimestriel") return "quarter";
+    if (cycle === "Annuel") return "year";
+    return "month";
   }
 
   function syncPeriodFilterFromCalendar() {
@@ -333,6 +354,10 @@
     kpiCalculationQuality: null,
     kpiObjectives: [],
     calendar: buildCalendarSelection("month", new Date()),
+    actorScope: "responsable",
+    calendarPoleFilter: PMS_DATA.reporting.defaultPole,
+    calendarBranchFilter: "Groupe",
+    calendarStatusFilter: "Tous",
     platformUsers: buildSeedUsers(),
     platformAccessRoles: [
       {
@@ -1069,6 +1094,11 @@
   function bindCalendarActions() {
     const slicer = $("#calendar-slicer");
     if (!slicer) return;
+    const dateInput = $("#calendar-date-input");
+    const poleFilter = $("#calendar-pole-filter");
+    const branchFilter = $("#calendar-branch-filter");
+    const cycleFilter = $("#calendar-cycle-filter");
+    const statusFilter = $("#calendar-status-filter");
 
     document.querySelectorAll("[data-calendar-preset]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1086,6 +1116,74 @@
 
     $("#calendar-prev-month")?.addEventListener("click", () => setCalendarView(-1));
     $("#calendar-next-month")?.addEventListener("click", () => setCalendarView(1));
+
+    document.querySelectorAll("[data-actor-scope]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.actorScope = button.dataset.actorScope || "responsable";
+        renderCalendarSlicer(state);
+        showToast(
+          state.actorScope === "direction"
+            ? "Vue acteur: Direction."
+            : "Vue acteur: Responsable de pole."
+        );
+      });
+    });
+
+    dateInput?.addEventListener("change", () => {
+      const selectedDate = parseCompactDate(dateInput.value);
+      if (!selectedDate) {
+        showToast("Format attendu pour la date: AAAAMMJJ, exemple 20260715.");
+        renderCalendarSlicer(state);
+        return;
+      }
+      const preset = presetFromCycle(state.currentReportCycle);
+      applyCalendarSelection(
+        buildCalendarSelection(preset, selectedDate),
+        "Date appliquee au reporting."
+      );
+    });
+
+    poleFilter?.addEventListener("change", () => {
+      state.calendarPoleFilter = poleFilter.value;
+      if (poleFilter.value !== "Tous") {
+        const allowedPole = getAllowedPoleFromScope(poleFilter.value);
+        state.currentPoleMonitor = allowedPole;
+        state.currentReportPole = allowedPole;
+      }
+      renderCalendarSlicer(state);
+      renderPoleControls(state);
+      renderPoleMonitor(state);
+      renderReportControls(state);
+      renderReportWorkspace(state);
+      showToast(poleFilter.value === "Tous" ? "Tous les poles sont visibles." : "Filtre pole applique.");
+    });
+
+    branchFilter?.addEventListener("change", () => {
+      state.calendarBranchFilter = branchFilter.value;
+      const topbarBranch = $("#branch-filter");
+      if (topbarBranch) topbarBranch.value = branchFilter.value;
+      showToast(`Filiale active: ${branchFilter.value}.`);
+    });
+
+    cycleFilter?.addEventListener("change", () => {
+      state.currentPoleCycle = cycleFilter.value;
+      state.currentReportCycle = cycleFilter.value;
+      const anchor = fromIsoDate(state.calendar.start) || new Date();
+      applyCalendarSelection(
+        buildCalendarSelection(presetFromCycle(cycleFilter.value), anchor),
+        `Cycle ${cycleFilter.value.toLowerCase()} applique.`
+      );
+    });
+
+    statusFilter?.addEventListener("change", () => {
+      state.calendarStatusFilter = statusFilter.value;
+      renderCalendarSlicer(state);
+      showToast(
+        statusFilter.value === "Tous"
+          ? "Tous les statuts sont visibles."
+          : `Statut ${statusFilter.value.toLowerCase()} selectionne.`
+      );
+    });
 
     slicer.addEventListener("click", (event) => {
       const dayButton = event.target.closest("[data-calendar-date]");

@@ -220,9 +220,14 @@
     const monthTitle = $("#calendar-month-title");
     const startInput = $("#calendar-start");
     const endInput = $("#calendar-end");
+    const dateInput = $("#calendar-date-input");
     const summary = $("#calendar-summary");
     const activePeriod = $("#calendar-active-period");
     const grid = $("#calendar-grid");
+    const poleFilter = $("#calendar-pole-filter");
+    const branchFilter = $("#calendar-branch-filter");
+    const cycleFilter = $("#calendar-cycle-filter");
+    const statusFilter = $("#calendar-status-filter");
 
     if (monthTitle) {
       monthTitle.textContent = new Date(viewYear, viewMonth, 1).toLocaleDateString("fr-FR", {
@@ -232,8 +237,9 @@
     }
     if (startInput) startInput.value = calendar.start || "";
     if (endInput) endInput.value = calendar.end || "";
+    if (dateInput) dateInput.value = String(calendar.selectedDate || calendar.start || "").replaceAll("-", "");
     if (summary) {
-      summary.textContent = `Periode active : ${calendarPeriodLabel(calendar)}`;
+      summary.textContent = calendarPeriodLabel(calendar);
     }
     if (activePeriod) {
       activePeriod.innerHTML = `
@@ -246,6 +252,33 @@
     document.querySelectorAll("[data-calendar-preset]").forEach((button) => {
       button.classList.toggle("active", button.dataset.calendarPreset === calendar.preset);
     });
+    document.querySelectorAll("[data-actor-scope]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.actorScope === (state.actorScope || "responsable"));
+    });
+
+    if (poleFilter) {
+      const accessContext = getPoleAccessContext(state);
+      const authorizedPoles = accessContext.poles.length ? accessContext.poles : PMS_DATA.reporting.poles;
+      poleFilter.innerHTML = [
+        `<option value="Tous">Tous</option>`,
+        ...authorizedPoles.map(
+          (pole) => `<option value="${escapeHtml(pole.id)}" ${pole.id === state.currentPoleMonitor ? "selected" : ""}>${escapeHtml(pole.name)}</option>`
+        ),
+      ].join("");
+      poleFilter.value = state.calendarPoleFilter || state.currentPoleMonitor || "Tous";
+    }
+
+    if (branchFilter) {
+      branchFilter.value = state.calendarBranchFilter || $("#branch-filter")?.value || "Groupe";
+    }
+
+    if (cycleFilter) {
+      cycleFilter.value = state.currentReportCycle || state.currentPoleCycle || "Mensuel";
+    }
+
+    if (statusFilter) {
+      statusFilter.value = state.calendarStatusFilter || "Tous";
+    }
 
     if (!grid) return;
     const firstDay = new Date(viewYear, viewMonth, 1);
