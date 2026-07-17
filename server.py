@@ -63,6 +63,9 @@ CATALOG_POLE_ALIASES = {
     "pole marketing et communication": "COM",
     "pole gestionnaire compte": "GDC",
     "pole gestionnaire de compte": "GDC",
+    "dcm": "GDC",
+    "direction comptes": "GDC",
+    "direction des comptes": "GDC",
     "pole recouvrement": "REC",
     "recouvrement": "REC",
     "bu retail distribution": "BRD",
@@ -84,6 +87,8 @@ CATALOG_POLE_ALIASES = {
     "pac": "PAC",
     "pole voix client epc": "EPC",
     "pole voix du client epc": "EPC",
+    "pole epc": "EPC",
+    "poles epc": "EPC",
     "epc": "EPC",
     "direction systeme informatique": "DSI",
     "direction du systeme informatique": "DSI",
@@ -93,6 +98,9 @@ CATALOG_POLE_ALIASES = {
     "dch": "DCH",
     "pole moyens generaux": "PMG",
     "pmg": "PMG",
+    "consolide": "PAC",
+    "consolidee": "PAC",
+    "performance globale": "PAC",
 }
 LOWER_IS_BETTER_TERMS = {
     "abandon",
@@ -1703,12 +1711,12 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             reference_source,
             payload,
             "pole",
-            ["groupe_de_rattachement", "sous_entite_pole_filiale", "pole_id", "pole"],
+            ["groupe_de_rattachement", "sous_entite_pole_filiale", "direction_pole", "direction", "pole_id", "pole"],
         )
         pole_id = resolve_catalog_pole_id(conn, pole_raw or row["pole_id"])
-        kpi_code = text_or_empty(mapped_submission_value(reference_source, payload, "id", ["id_kpi", "kpi_id", "code"]))
+        kpi_code = text_or_empty(mapped_submission_value(reference_source, payload, "id", ["id_kpi", "kpi_id", "code", "n", "numero"]))
         kpi_name = text_or_empty(
-            mapped_submission_value(reference_source, payload, "title", ["intitule_du_kpi", "kpi_name", "kpi"])
+            mapped_submission_value(reference_source, payload, "title", ["intitule_du_kpi", "indicateur_kpi", "indicateur", "kpi_name", "kpi"])
         )
         if not pole_id or not (kpi_code or kpi_name):
             quality["warnings"].append("Reference KPI ignoree: pole ou KPI non reconnu.")
@@ -1718,15 +1726,15 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "poleId": pole_id,
             "kpiId": kpi_code or normalize_match_key(kpi_name).upper(),
             "kpiName": kpi_name or kpi_code,
-            "formula": text_or_empty(mapped_submission_value(reference_source, payload, "formula", ["formule_de_calcul"])),
-            "target": text_or_empty(mapped_submission_value(reference_source, payload, "target", ["valeur_cible", "objectif"])),
+            "formula": text_or_empty(mapped_submission_value(reference_source, payload, "formula", ["formule_de_calcul", "formule"])),
+            "target": text_or_empty(mapped_submission_value(reference_source, payload, "target", ["valeur_cible", "seuil_cible", "objectif", "objectif_cible"])),
             "unit": text_or_empty(mapped_submission_value(reference_source, payload, "unit", ["unite_de_mesure", "unite"])),
             "sourceData": text_or_empty(
                 mapped_submission_value(reference_source, payload, "sourceData", ["source_de_la_donnee", "source_donnee"])
             ),
             "owner": text_or_empty(mapped_submission_value(reference_source, payload, "owner", ["responsable_du_kpi"])),
             "collectionFrequency": text_or_empty(
-                mapped_submission_value(reference_source, payload, "collectionFrequency", ["frequence_de_collecte"])
+                mapped_submission_value(reference_source, payload, "collectionFrequency", ["frequence_de_collecte", "frequence"])
             ),
             "reportingFrequency": text_or_empty(
                 mapped_submission_value(reference_source, payload, "reportingFrequency", ["periodicite_du_reporting"])
@@ -1752,17 +1760,37 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     groups: dict[tuple[str, str, str], dict] = {}
     for row in calculation_rows:
         payload = parse_raw_payload(row)
-        pole_raw = mapped_submission_value(calculation_source, payload, "pole", ["pole_id", "pole", "groupe_de_rattachement"])
+        pole_raw = mapped_submission_value(
+            calculation_source,
+            payload,
+            "pole",
+            ["pole_id", "pole", "groupe_de_rattachement", "direction_pole", "direction"],
+        )
         pole_id = resolve_catalog_pole_id(conn, pole_raw or row["pole_id"])
-        kpi_raw = mapped_submission_value(calculation_source, payload, "kpi", ["id_kpi", "kpi_id", "kpi_name", "kpi"])
-        period_raw = mapped_submission_value(calculation_source, payload, "period", ["periode_reporting", "periode", "period"])
+        kpi_raw = mapped_submission_value(
+            calculation_source,
+            payload,
+            "kpi",
+            ["id_kpi", "kpi_id", "kpi_name", "kpi", "indicateur_kpi", "indicateur", "indicateur_qualite", "indicateur_dcm_conformite"],
+        )
+        period_raw = mapped_submission_value(
+            calculation_source,
+            payload,
+            "period",
+            ["periode_reporting", "periode", "period", "date_collecte", "mois", "semaine"],
+        )
         element_raw = mapped_submission_value(
             calculation_source,
             payload,
             "element",
-            ["element_id", "element", "variable", "rubrique"],
+            ["element_id", "element", "variable", "rubrique", "donnees_a_collecter", "indicateur_financier", "indicateur_wfm", "parametre"],
         )
-        value_raw = mapped_submission_value(calculation_source, payload, "value", ["valeur_element", "value", "valeur"])
+        value_raw = mapped_submission_value(
+            calculation_source,
+            payload,
+            "value",
+            ["valeur_element", "value", "valeur", "valeur_j", "valeur_du_jour_j", "score", "resultat"],
+        )
         branch_raw = mapped_submission_value(calculation_source, payload, "branch", ["filiale", "branch", "pays"])
         validation_raw = mapped_submission_value(
             calculation_source,

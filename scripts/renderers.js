@@ -49,6 +49,36 @@
 
     if (matchedProfile) return { ...matchedProfile, fromCatalog: true };
 
+    const formulaProfile = (PMS_DATA.formulaDictionary || []).find((item) => {
+      const normalizedFormulaName = normalizeLookup(item.name);
+      return normalizedFormulaName === normalizedName || normalizedFormulaName.includes(normalizedName) || normalizedName.includes(normalizedFormulaName);
+    });
+
+    if (formulaProfile) {
+      return {
+        id: `FORM-${formulaProfile.id}`,
+        title: formulaProfile.name,
+        definition: formulaProfile.usage || "Reference issue de la fiche de collecte GMC.",
+        type: formulaProfile.category || "KPI metier",
+        unit: formulaProfile.target?.includes("%") || formulaProfile.name?.includes("%") ? "% (Pourcentage)" : "Selon formule",
+        formula: formulaProfile.formula || "A completer",
+        target: formulaProfile.target || "A completer",
+        collectionFrequency: formulaProfile.frequency || "A preciser",
+        reportingFrequency: formulaProfile.frequency || "A preciser",
+        dataSource: formulaProfile.source || "GMC_FICHE_COLLECTE_V2.xlsx",
+        responsible: pole.owner || "Responsable KPI",
+        respondent: pole.owner || "Producteur donnee",
+        respondentFunction: "Responsable du pole",
+        year: "2026",
+        hierarchicalValidation: "Sous reserve",
+        validator: "N+1",
+        reference: formulaProfile.source || "FORMULE",
+        documentStatus: "Reference fichier collecte",
+        attention: "Valeur calculee automatiquement lorsque le formulaire donnees de calcul est synchronise.",
+        fromCatalog: true,
+      };
+    }
+
     return {
       id: "A definir",
       title: kpiName || "KPI a selectionner",
@@ -337,7 +367,7 @@
             <div>
               <span class="code-chip">${escapeHtml(form.code)}</span>
               <strong>${escapeHtml(form.title)}</strong>
-              <p>${escapeHtml(form.cadence)}</p>
+              <p>${escapeHtml(form.cadence)}${form.sourceSheet ? ` - Onglet ${escapeHtml(form.sourceSheet)}` : ""}</p>
             </div>
             <ul>
               ${form.sections.map((section) => `<li>${escapeHtml(section)}</li>`).join("")}
@@ -408,16 +438,18 @@
   }
 
   function renderKpiTable(filter = "") {
-    const rows = filterRows(PMS_DATA.formulaDictionary, filter, ["id", "direction", "name", "category", "frequency", "target"]);
+    const rows = filterRows(PMS_DATA.formulaDictionary, filter, ["id", "direction", "name", "category", "formula", "frequency", "target"]);
     $("#kpi-table").innerHTML = rows
       .map((item) => {
-        const status = item.target.includes("<=") || item.target.includes(">=") ? "green" : "amber";
+        const target = item.target || "";
+        const status = target.includes("<=") || target.includes(">=") ? "green" : "amber";
         return `
           <tr>
             <td><strong>${escapeHtml(item.name)}</strong><br><small>${escapeHtml(item.category)}</small></td>
             <td>${escapeHtml(item.direction)}</td>
             <td>${escapeHtml(item.frequency)}</td>
-            <td>${escapeHtml(item.target)}</td>
+            <td>${escapeHtml(target || "A completer")}</td>
+            <td>${escapeHtml(item.formula || "Formule a completer")}</td>
             <td>${escapeHtml(item.source)} #${escapeHtml(item.id)}</td>
             <td>${statusPill(status === "green" ? "Cadre defini" : "Cible a preciser", status)}</td>
           </tr>
@@ -719,11 +751,13 @@
                             </div>
                             <div class="pole-kpi-value">${escapeHtml(kpi.value)}</div>
                             <dl>
+                              <div><dt>Categorie</dt><dd>${escapeHtml(kpi.category || "Non classe")}</dd></div>
                               <div><dt>Objectif</dt><dd>${escapeHtml(kpi.target)}</dd></div>
                               <div><dt>Tendance</dt><dd>${escapeHtml(kpi.trend)}</dd></div>
                               <div><dt>Source Kobo</dt><dd>${escapeHtml(kpi.source)}</dd></div>
                               <div><dt>Periode</dt><dd>${escapeHtml(kpi.period || "Kobo")}</dd></div>
                               <div><dt>Methode</dt><dd>${escapeHtml(kpi.method || (kpi.pendingCalculation ? "Donnees de calcul attendues" : "Calcul PMS"))}</dd></div>
+                              <div><dt>Formule</dt><dd>${escapeHtml(kpi.formula || "A completer")}</dd></div>
                             </dl>
                           </section>
                         `
@@ -805,7 +839,7 @@
       <article class="metric-card">
         <span class="metric-label">Score performance</span>
         <strong>${pole.score}</strong>
-        <span class="trend ${pole.rag === "red" ? "negative" : "positive"}">${statusPill(pole.rag === "green" ? "Vert" : pole.rag === "red" ? "Rouge" : "Orange", pole.rag)}</span>
+        <span class="trend ${pole.rag === "red" ? "negative" : "positive"}">${statusPill(ragLabel(pole.rag), pole.rag)}</span>
       </article>
       <article class="metric-card">
         <span class="metric-label">Qualite Kobo</span>
@@ -971,7 +1005,7 @@
       <article class="report-kpi-card">
         <span>Score pole</span>
         <strong>${pole.score}</strong>
-        ${statusPill(pole.rag === "green" ? "Vert" : pole.rag === "red" ? "Rouge" : "Orange", pole.rag)}
+        ${statusPill(ragLabel(pole.rag), pole.rag)}
       </article>
       <article class="report-kpi-card">
         <span>KPIs suivis</span>
@@ -1021,7 +1055,7 @@
                     <td>${escapeHtml(kpi.target)}</td>
                     <td>${escapeHtml(kpi.trend)}</td>
                     <td>${escapeHtml(kpi.source)}</td>
-                    <td>${statusPill(kpi.status === "green" ? "Vert" : kpi.status === "red" ? "Rouge" : "Orange", kpi.status)}</td>
+                    <td>${statusPill(kpiStatusText(kpi.status), kpi.status)}</td>
                   </tr>
                 `
               )
@@ -1070,6 +1104,7 @@
     const referenceSource = state.objectiveKoboSource;
     const calculationSource = state.calculationKoboSource;
     const sourceProfile = objectiveTemplate.sourceWorkbookProfile || {};
+    const collectionProfile = objectiveTemplate.collectionWorkbookProfile || {};
     const objectiveSummary = $("#objective-summary-cards");
 
     if (objectiveSummary) {
@@ -1104,6 +1139,11 @@
           <span>Catalogue source</span>
           <strong>${sourceProfile.kpiCount || 0}</strong>
           <small>${sourceProfile.groupCount || 0} groupes / ${sourceProfile.categoryCount || 0} categories</small>
+        </div>
+        <div class="admin-summary-card">
+          <span>Fiche collecte</span>
+          <strong>${collectionProfile.formulaCount || 0}</strong>
+          <small>${collectionProfile.collectionSheets || 0} onglets metier depuis ${escapeHtml(collectionProfile.fileName || "GMC")}</small>
         </div>
         <div class="admin-summary-card">
           <span>Controle qualite</span>
@@ -1256,7 +1296,7 @@
         { title: "Formulaire 1 - KPI et formules", fields: objectiveTemplate.requiredFields || [] },
         { title: "Formulaire 2 - Elements de calcul", fields: objectiveTemplate.calculationFields || [] },
       ];
-      fieldList.innerHTML = fieldGroups
+      const fieldGroupsMarkup = fieldGroups
         .map(
           (group) => `
             <div class="objective-field-section">
@@ -1278,6 +1318,30 @@
           `
         )
         .join("");
+      const workbookMarkup = (collectionProfile.sheets || []).length
+        ? `
+          <div class="objective-field-section">
+            <h4>Structure issue de ${escapeHtml(collectionProfile.fileName || "la fiche de collecte")}</h4>
+            <div class="collection-sheet-grid">
+              ${(collectionProfile.sheets || [])
+                .map(
+                  (sheet) => `
+                    <article class="collection-sheet-card">
+                      <div>
+                        <span>${escapeHtml(sheet.code)}</span>
+                        <strong>${escapeHtml(sheet.title)}</strong>
+                        <small>${escapeHtml(sheet.cadence)}</small>
+                      </div>
+                      <p>${escapeHtml((sheet.expectedFields || []).slice(0, 8).join(", "))}</p>
+                    </article>
+                  `
+                )
+                .join("")}
+            </div>
+          </div>
+        `
+        : "";
+      fieldList.innerHTML = fieldGroupsMarkup + workbookMarkup;
     }
 
     const controlList = $("#objective-control-list");

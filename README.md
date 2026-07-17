@@ -70,9 +70,9 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
 - Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.
 - Le jeton API sert uniquement a la synchronisation courante : il n'est pas renvoye a l'interface ni affiche comme formulaire actif.
 - Dans Administration > KoboCollecte, la logique PMS distingue deux formulaires : un formulaire `KPI et formules` par pole, et un formulaire `Elements de calcul` qui collecte les donnees brutes utilisees par ces formules.
-- Le formulaire `KPI et formules` est aligne sur `Copie de Catalogu.xlsx` : 26 champs, 74 KPI, 11 groupes de rattachement, 0 formule manquante et 13 cibles a completer.
+- Le formulaire `KPI et formules` reste compatible avec `Copie de Catalogu.xlsx` et exploite aussi `GMC_FICHE_COLLECTE_V2.xlsx`, notamment la feuille `FORMULE` : 44 KPI/formules metier et 7 onglets de collecte.
 - Le moteur PMS rapproche automatiquement les deux formulaires par `pole + KPI + periode`, applique la formule du catalogue, puis alimente le tableau de bord et l'onglet `Suivi par pole`.
-- Meme sans donnees de calcul, les KPI du formulaire `KPI et formules` restent visibles par pole avec le statut `En attente calcul`.
+- Meme sans donnees de calcul, les KPI issus de la fiche de collecte restent visibles par pole avec le statut `En attente Kobo`.
 - Dans l'administration, `Enregistrer` conserve l'UID et le mapping des champs; `Synchroniser depuis Kobo` utilise le token API pour importer les soumissions et rendre les KPI visibles.
 
 ## Contenu de cette version

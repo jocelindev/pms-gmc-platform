@@ -982,6 +982,11 @@ textarea {
   border-left-color: var(--red-text);
 }
 
+.pole-kpi-item.status-gray {
+  border-left-color: #64748b;
+  background: #f8fafc;
+}
+
 .pole-kpi-item-head {
   display: flex;
   justify-content: space-between;
@@ -1462,6 +1467,46 @@ textarea {
   color: var(--text);
   margin: 4px 0;
   font-weight: 800;
+}
+
+.collection-sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.collection-sheet-card {
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.collection-sheet-card span {
+  color: var(--palladium-gold);
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.collection-sheet-card strong {
+  color: var(--palladium-blue);
+  display: block;
+}
+
+.collection-sheet-card small,
+.collection-sheet-card p {
+  color: var(--muted);
+}
+
+.collection-sheet-card p {
+  margin: 0;
+  line-height: 1.45;
 }
 
 .objective-control-list {
@@ -2577,6 +2622,7 @@ td small {
   .admin-kobo-actions,
   .kobo-logic-grid,
   .objective-profile-main,
+  .collection-sheet-grid,
   .objective-field-section-grid,
   .report-workspace {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2650,6 +2696,7 @@ td small {
   .admin-kobo-form,
   .kobo-logic-grid,
   .objective-profile-main,
+  .collection-sheet-grid,
   .objective-field-section-grid,
   .permission-checks,
   .report-workspace,

@@ -77,27 +77,117 @@
     return Math.round(score);
   }
 
+  function normalizeLookup(value) {
+    return String(value ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  function resolveFormulaPoleId(direction) {
+    const normalized = normalizeLookup(direction).toUpperCase();
+    const aliases = {
+      "POLE EPC": "EPC",
+      EPC: "EPC",
+      DCM: "GDC",
+      CONSOLIDE: "PAC",
+    };
+    return aliases[normalized] || normalized;
+  }
+
+  function upsertKpiItem(byPole, poleId, item) {
+    const items = byPole.get(poleId) || [];
+    const itemId = normalizeLookup(item.id).replace(/^form\s+/, "");
+    const itemName = normalizeLookup(item.name);
+    const existingIndex = items.findIndex((existing) => {
+      const existingId = normalizeLookup(existing.id).replace(/^form\s+/, "");
+      const existingName = normalizeLookup(existing.name);
+      return (itemId && existingId === itemId) || (itemName && existingName === itemName);
+    });
+
+    if (existingIndex >= 0) {
+      items[existingIndex] = { ...items[existingIndex], ...item };
+    } else {
+      items.push(item);
+    }
+    byPole.set(poleId, items);
+  }
+
+  function refreshPoleMetrics(poleId, kpis, options = {}) {
+    const pole = PMS_DATA.reporting.poles.find((item) => item.id === poleId);
+    if (!pole || !kpis.length) return;
+    const redCount = kpis.filter((item) => item.status === "red").length;
+    const amberCount = kpis.filter((item) => item.status === "amber").length;
+    const grayCount = kpis.filter((item) => item.status === "gray").length;
+    const score = scoreFromKpis(kpis);
+    pole.kpiCount = kpis.length;
+    pole.score = score;
+    pole.rag = redCount ? "red" : amberCount ? "amber" : grayCount ? "gray" : "green";
+    pole.status = statusLabel(pole.rag);
+    pole.lastReport = options.lastReport || pole.lastReport || "Reference fichier collecte";
+    pole.quality = options.quality ?? pole.quality ?? 0;
+    pole.readiness = options.readiness ?? score;
+    pole.lateSubmissions = options.lateSubmissions ?? pole.lateSubmissions ?? 0;
+  }
+
+  function seedFormulaDictionaryToReporting() {
+    const formulas = Array.isArray(PMS_DATA.formulaDictionary) ? PMS_DATA.formulaDictionary : [];
+    const byPole = new Map();
+
+    formulas.forEach((formula) => {
+      const poleId = resolveFormulaPoleId(formula.direction);
+      if (!PMS_DATA.reporting.poles.some((pole) => pole.id === poleId)) return;
+      upsertKpiItem(byPole, poleId, {
+        id: `FORM-${formula.id}`,
+        name: formula.name,
+        value: "En attente Kobo",
+        target: formula.target || "A completer",
+        trend: formula.frequency || "A synchroniser",
+        status: "gray",
+        source: formula.source || "GMC_FICHE_COLLECTE_V2.xlsx",
+        calculated: false,
+        pendingCalculation: true,
+        period: "A collecter",
+        formula: formula.formula || "Formule a completer",
+        method: "Reference fichier collecte, donnees Kobo attendues",
+        category: formula.category,
+      });
+    });
+
+    byPole.forEach((kpis, poleId) => {
+      PMS_DATA.reporting.kpisByPole[poleId] = kpis;
+      refreshPoleMetrics(poleId, kpis, {
+        lastReport: "Reference fichier collecte",
+        readiness: 0,
+      });
+    });
+  }
+
   function latestPeriod(results) {
     const periods = results.map((item) => item.period).filter(Boolean);
-    return periods[0] || "Kobo";
+    return periods[0] || "";
   }
 
   function applyCalculatedKpisToReporting() {
     resetReportingToBaseline();
+    seedFormulaDictionaryToReporting();
     const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
     const referenceKpis = Array.isArray(state.kpiCalculationQuality?.referenceKpis)
       ? state.kpiCalculationQuality.referenceKpis
       : [];
     if (!results.length && !referenceKpis.length) return;
 
-    const byPole = new Map();
+    const byPole = new Map(
+      PMS_DATA.reporting.poles.map((pole) => [pole.id, [...(PMS_DATA.reporting.kpisByPole[pole.id] || [])]])
+    );
     const calculatedKeys = new Set(results.map((result) => `${result.poleId}:${result.kpiId}`));
     referenceKpis
       .filter((kpi) => !calculatedKeys.has(`${kpi.poleId}:${kpi.kpiId}`))
       .forEach((kpi) => {
         if (!kpi.poleId) return;
-        const items = byPole.get(kpi.poleId) || [];
-        items.push({
+        upsertKpiItem(byPole, kpi.poleId, {
           id: kpi.kpiId,
           name: kpi.kpiName,
           value: kpi.valueLabel || "En attente calcul",
@@ -111,13 +201,11 @@
           formula: kpi.formula,
           method: kpi.method || "Donnees de calcul attendues",
         });
-        byPole.set(kpi.poleId, items);
       });
 
     results.forEach((result) => {
       if (!result.poleId) return;
-      const items = byPole.get(result.poleId) || [];
-      items.push({
+      upsertKpiItem(byPole, result.poleId, {
         id: result.kpiId,
         name: result.kpiName,
         value: result.valueLabel,
@@ -131,27 +219,18 @@
         method: result.method,
         elementsCount: result.elementsCount,
       });
-      byPole.set(result.poleId, items);
     });
 
     byPole.forEach((kpis, poleId) => {
       PMS_DATA.reporting.kpisByPole[poleId] = kpis;
-      const pole = PMS_DATA.reporting.poles.find((item) => item.id === poleId);
-      if (!pole) return;
-      const redCount = kpis.filter((item) => item.status === "red").length;
-      const amberCount = kpis.filter((item) => item.status === "amber").length;
-      const grayCount = kpis.filter((item) => item.status === "gray").length;
-      const score = scoreFromKpis(kpis);
       const matchRate = Number(state.kpiCalculationQuality?.matchRate);
       const calculationRate = Number(state.kpiCalculationQuality?.calculationRate);
-      pole.kpiCount = kpis.length;
-      pole.score = score;
-      pole.rag = redCount ? "red" : amberCount ? "amber" : grayCount ? "gray" : "green";
-      pole.quality = Number.isFinite(matchRate) ? matchRate : pole.quality || 0;
-      pole.readiness = Number.isFinite(calculationRate) ? calculationRate : score;
-      pole.status = statusLabel(pole.rag);
-      pole.lastReport = latestPeriod(results.filter((item) => item.poleId === poleId)) || "Reference Kobo";
-      pole.lateSubmissions = state.kpiCalculationQuality?.unmatchedCalculationCount || 0;
+      refreshPoleMetrics(poleId, kpis, {
+        quality: Number.isFinite(matchRate) ? matchRate : undefined,
+        readiness: Number.isFinite(calculationRate) ? calculationRate : undefined,
+        lastReport: latestPeriod(results.filter((item) => item.poleId === poleId)) || "Reference Kobo",
+        lateSubmissions: state.kpiCalculationQuality?.unmatchedCalculationCount || 0,
+      });
     });
   }
 
@@ -1620,6 +1699,7 @@
 
   async function init() {
     await hydrateFromDatabase();
+    applyCalculatedKpisToReporting();
     renderAll(state);
     document.body.classList.add("dashboard-mode");
     bindNavigation();
