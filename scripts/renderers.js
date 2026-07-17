@@ -171,6 +171,109 @@
       .join("");
   }
 
+  function parseIsoDate(value) {
+    const [year, month, day] = String(value || "")
+      .split("-")
+      .map((part) => Number(part));
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day);
+  }
+
+  function dateToIso(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function addDays(date, days) {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
+  function formatDisplayDate(value) {
+    const date = parseIsoDate(value);
+    if (!date) return "A definir";
+    return date.toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  function calendarPeriodLabel(calendar = {}) {
+    const start = formatDisplayDate(calendar.start);
+    const end = formatDisplayDate(calendar.end);
+    return start === end ? start : `${start} - ${end}`;
+  }
+
+  function renderCalendarSlicer(state = {}) {
+    const panel = $("#calendar-slicer");
+    if (!panel) return;
+    const calendar = state.calendar || {};
+    const viewYear = Number(calendar.viewYear) || 2026;
+    const viewMonth = Number.isInteger(calendar.viewMonth) ? calendar.viewMonth : 6;
+    const selectedStart = parseIsoDate(calendar.start);
+    const selectedEnd = parseIsoDate(calendar.end);
+    const todayIso = dateToIso(new Date());
+    const monthTitle = $("#calendar-month-title");
+    const startInput = $("#calendar-start");
+    const endInput = $("#calendar-end");
+    const summary = $("#calendar-summary");
+    const activePeriod = $("#calendar-active-period");
+    const grid = $("#calendar-grid");
+
+    if (monthTitle) {
+      monthTitle.textContent = new Date(viewYear, viewMonth, 1).toLocaleDateString("fr-FR", {
+        month: "long",
+        year: "numeric",
+      });
+    }
+    if (startInput) startInput.value = calendar.start || "";
+    if (endInput) endInput.value = calendar.end || "";
+    if (summary) {
+      summary.textContent = `Periode active : ${calendarPeriodLabel(calendar)}`;
+    }
+    if (activePeriod) {
+      activePeriod.innerHTML = `
+        <span>Selection active</span>
+        <strong>${escapeHtml(calendarPeriodLabel(calendar))}</strong>
+        <small>${escapeHtml(calendar.label || "Filtre calendrier")}</small>
+      `;
+    }
+
+    document.querySelectorAll("[data-calendar-preset]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.calendarPreset === calendar.preset);
+    });
+
+    if (!grid) return;
+    const firstDay = new Date(viewYear, viewMonth, 1);
+    const firstOffset = (firstDay.getDay() + 6) % 7;
+    const gridStart = addDays(firstDay, -firstOffset);
+    const startTime = selectedStart?.getTime();
+    const endTime = selectedEnd?.getTime();
+
+    grid.innerHTML = Array.from({ length: 42 }, (_, index) => {
+      const date = addDays(gridStart, index);
+      const iso = dateToIso(date);
+      const time = date.getTime();
+      const isCurrentMonth = date.getMonth() === viewMonth;
+      const isInRange = startTime && endTime && time >= Math.min(startTime, endTime) && time <= Math.max(startTime, endTime);
+      const isRangeEdge = iso === calendar.start || iso === calendar.end;
+      const classes = [
+        "calendar-day",
+        isCurrentMonth ? "" : "muted",
+        iso === todayIso ? "today" : "",
+        isInRange ? "selected" : "",
+        isRangeEdge ? "edge" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return `<button class="${classes}" type="button" data-calendar-date="${iso}">${date.getDate()}</button>`;
+    }).join("");
+  }
+
   function ragLabel(status) {
     if (status === "green") return "Vert";
     if (status === "red") return "Rouge";
@@ -996,6 +1099,7 @@
     const redCount = kpis.filter((item) => item.status === "red").length;
     const amberCount = kpis.filter((item) => item.status === "amber").length;
     const greenCount = kpis.filter((item) => item.status === "green").length;
+    const activePeriod = state.calendar?.label || $("#period-filter")?.value || cycle.value;
 
     $("#report-preview-title").textContent = `${cycle.value} - ${pole.name}`;
     $("#report-status-pill").className = `status-pill ${statusClass}`;
@@ -1018,9 +1122,9 @@
         <small>Completude et controles</small>
       </article>
       <article class="report-kpi-card">
-        <span>Deadline</span>
-        <strong>${escapeHtml(cycle.deadline)}</strong>
-        <small>${escapeHtml(cycle.scope)}</small>
+        <span>Periode</span>
+        <strong>${escapeHtml(activePeriod)}</strong>
+        <small>Deadline: ${escapeHtml(cycle.deadline)}</small>
       </article>
     `;
 
@@ -1029,7 +1133,7 @@
         <div>
           <p class="eyebrow">Rapport ${escapeHtml(cycle.value)}</p>
           <h4>${escapeHtml(pole.name)}</h4>
-          <p>Responsable: ${escapeHtml(pole.owner)} | Dernier rapport: ${escapeHtml(pole.lastReport)}</p>
+          <p>Periode: ${escapeHtml(activePeriod)} | Responsable: ${escapeHtml(pole.owner)} | Dernier rapport: ${escapeHtml(pole.lastReport)}</p>
         </div>
         <button class="ghost-action" id="submit-report">Soumettre validation</button>
       </div>
@@ -1066,7 +1170,7 @@
       <div class="report-narrative">
         <strong>Synthese automatique</strong>
         <p>
-          Le rapport ${escapeHtml(cycle.value.toLowerCase())} du ${escapeHtml(pole.name)} consolide les donnees Kobo,
+          Le rapport ${escapeHtml(cycle.value.toLowerCase())} du ${escapeHtml(pole.name)} sur ${escapeHtml(activePeriod)} consolide les donnees Kobo,
           les ecarts aux objectifs, les alertes RAG et les plans d'action. Les KPI rouges doivent obligatoirement
           etre commentes avant validation N+1.
         </p>
@@ -1643,6 +1747,7 @@
     renderExecutiveAlerts();
     renderSparkline();
     renderCatalogStats();
+    renderCalendarSlicer(state);
     renderPoleSummaryTables(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
@@ -1674,6 +1779,7 @@
     renderPoleControls,
     renderKoboTable,
     renderKpiTable,
+    renderCalendarSlicer,
     renderPoleMonitor,
     renderValidationQueue,
     renderReportControls,

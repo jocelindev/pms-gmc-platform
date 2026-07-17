@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=gmc-fiche-collecte-2026" />
+    <link rel="stylesheet" href="styles.css?v=calendar-slicer-2026" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -129,6 +129,54 @@
             </label>
           </div>
         </header>
+
+        <section class="calendar-slicer" id="calendar-slicer" aria-label="Calendrier de reporting">
+          <div class="calendar-slicer-head">
+            <div>
+              <p class="eyebrow">Calendrier</p>
+              <h2>Filtre periode type Power BI</h2>
+              <p id="calendar-summary">Periode active a definir.</p>
+            </div>
+            <div class="calendar-presets" aria-label="Raccourcis de periode">
+              <button class="calendar-preset active" type="button" data-calendar-preset="month">Mois</button>
+              <button class="calendar-preset" type="button" data-calendar-preset="week">Semaine</button>
+              <button class="calendar-preset" type="button" data-calendar-preset="quarter">Trimestre</button>
+              <button class="calendar-preset" type="button" data-calendar-preset="year">Annee</button>
+              <button class="calendar-preset" type="button" data-calendar-preset="today">Aujourd'hui</button>
+            </div>
+          </div>
+          <div class="calendar-slicer-body">
+            <div class="calendar-month-card">
+              <div class="calendar-month-head">
+                <button class="calendar-nav" id="calendar-prev-month" type="button" aria-label="Mois precedent">&lt;</button>
+                <strong id="calendar-month-title">Juillet 2026</strong>
+                <button class="calendar-nav" id="calendar-next-month" type="button" aria-label="Mois suivant">&gt;</button>
+              </div>
+              <div class="calendar-weekdays" aria-hidden="true">
+                <span>Lun</span>
+                <span>Mar</span>
+                <span>Mer</span>
+                <span>Jeu</span>
+                <span>Ven</span>
+                <span>Sam</span>
+                <span>Dim</span>
+              </div>
+              <div class="calendar-grid-month" id="calendar-grid"></div>
+            </div>
+            <div class="calendar-range-card">
+              <label>
+                Date debut
+                <input id="calendar-start" class="search-input" type="date" />
+              </label>
+              <label>
+                Date fin
+                <input id="calendar-end" class="search-input" type="date" />
+              </label>
+              <button class="primary-action" id="calendar-apply" type="button">Appliquer la periode</button>
+              <div class="calendar-active-period" id="calendar-active-period"></div>
+            </div>
+          </div>
+        </section>
 
         <section class="view active" id="dashboard" aria-labelledby="view-title">
           <div class="hero-panel">
@@ -1170,9 +1218,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=gmc-fiche-collecte-2026"></script>
-    <script src="scripts/renderers.js?v=gmc-fiche-collecte-2026"></script>
-    <script src="scripts/api.js?v=gmc-fiche-collecte-2026"></script>
-    <script src="app.js?v=gmc-fiche-collecte-2026"></script>
+    <script src="scripts/data.js?v=calendar-slicer-2026"></script>
+    <script src="scripts/renderers.js?v=calendar-slicer-2026"></script>
+    <script src="scripts/api.js?v=calendar-slicer-2026"></script>
+    <script src="app.js?v=calendar-slicer-2026"></script>
   </body>
 </html>

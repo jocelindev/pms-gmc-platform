@@ -78,6 +78,7 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
 ## Contenu de cette version
 
 - Tableau de bord groupe COMEX.
+- Calendrier global type Power BI pour filtrer les periodes de suivi et de reporting.
 - Configuration KoboCollect/KoboToolbox dans Administration.
 - Pipeline KoboCollect vers PMS : reception, controle, mapping, calcul KPI et publication.
 - File de validation des anomalies avant integration.

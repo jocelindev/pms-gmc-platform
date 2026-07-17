@@ -6,6 +6,7 @@
     renderAll,
     renderKoboTable,
     renderKpiTable,
+    renderCalendarSlicer,
     renderPoleControls,
     renderPoleMonitor,
     renderValidationQueue,
@@ -170,6 +171,95 @@
     return periods[0] || "";
   }
 
+  function toIsoDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function fromIsoDate(value) {
+    const [year, month, day] = String(value || "")
+      .split("-")
+      .map((part) => Number(part));
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day);
+  }
+
+  function addCalendarDays(date, days) {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+  }
+
+  function endOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  }
+
+  function startOfWeek(date) {
+    const day = (date.getDay() + 6) % 7;
+    return addCalendarDays(date, -day);
+  }
+
+  function formatMonthLabel(date) {
+    return date.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  }
+
+  function buildCalendarSelection(preset = "month", anchorDate = new Date()) {
+    const anchor = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
+    let start = anchor;
+    let end = anchor;
+    let label = "Periode personnalisee";
+
+    if (preset === "today") {
+      label = "Aujourd'hui";
+    } else if (preset === "week") {
+      start = startOfWeek(anchor);
+      end = addCalendarDays(start, 6);
+      label = `Semaine du ${start.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}`;
+    } else if (preset === "quarter") {
+      const quarterStartMonth = Math.floor(anchor.getMonth() / 3) * 3;
+      start = new Date(anchor.getFullYear(), quarterStartMonth, 1);
+      end = new Date(anchor.getFullYear(), quarterStartMonth + 3, 0);
+      label = `T${Math.floor(anchor.getMonth() / 3) + 1} ${anchor.getFullYear()}`;
+    } else if (preset === "year") {
+      start = new Date(anchor.getFullYear(), 0, 1);
+      end = new Date(anchor.getFullYear(), 11, 31);
+      label = `Annuel ${anchor.getFullYear()}`;
+    } else {
+      start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+      end = endOfMonth(anchor);
+      label = formatMonthLabel(anchor).replace(/^\w/, (letter) => letter.toUpperCase());
+      preset = "month";
+    }
+
+    return {
+      preset,
+      start: toIsoDate(start),
+      end: toIsoDate(end),
+      label,
+      viewYear: anchor.getFullYear(),
+      viewMonth: anchor.getMonth(),
+    };
+  }
+
+  function cycleFromCalendarPreset(preset) {
+    if (preset === "week" || preset === "today") return "Hebdomadaire";
+    if (preset === "quarter") return "Trimestriel";
+    if (preset === "year") return "Annuel";
+    return "Mensuel";
+  }
+
+  function syncPeriodFilterFromCalendar() {
+    const select = $("#period-filter");
+    if (!select || !state.calendar?.label) return;
+    const value = state.calendar.label;
+    if (![...select.options].some((option) => option.value === value)) {
+      select.add(new Option(value, value), 0);
+    }
+    select.value = value;
+  }
+
   function applyCalculatedKpisToReporting() {
     resetReportingToBaseline();
     seedFormulaDictionaryToReporting();
@@ -242,6 +332,7 @@
     kpiCalculationResults: [],
     kpiCalculationQuality: null,
     kpiObjectives: [],
+    calendar: buildCalendarSelection("month", new Date()),
     platformUsers: buildSeedUsers(),
     platformAccessRoles: [
       {
@@ -523,6 +614,7 @@
     state.userAccessScope = session.access || [];
     applyUserAccessScope();
     updateSessionChip();
+    syncPeriodFilterFromCalendar();
     renderAll(state);
     renderKoboActiveForm();
     showApplication();
@@ -947,6 +1039,112 @@
       .filter(Boolean)
       .slice(0, 40)
       .map((header) => ({ name: header, type: "Colonne CSV", label: "Champ importe depuis le fichier CSV" }));
+  }
+
+  function applyCalendarSelection(calendar, toastMessage) {
+    state.calendar = calendar;
+    const reportingCycle = cycleFromCalendarPreset(calendar.preset);
+    state.currentPoleCycle = reportingCycle;
+    state.currentReportCycle = reportingCycle;
+    syncPeriodFilterFromCalendar();
+    renderCalendarSlicer(state);
+    renderPoleControls(state);
+    renderPoleMonitor(state);
+    renderReportControls(state);
+    renderReportWorkspace(state);
+    if (toastMessage) showToast(toastMessage);
+  }
+
+  function setCalendarView(offset) {
+    const current = state.calendar || buildCalendarSelection("month", new Date());
+    const nextView = new Date(current.viewYear, current.viewMonth + offset, 1);
+    state.calendar = {
+      ...current,
+      viewYear: nextView.getFullYear(),
+      viewMonth: nextView.getMonth(),
+    };
+    renderCalendarSlicer(state);
+  }
+
+  function bindCalendarActions() {
+    const slicer = $("#calendar-slicer");
+    if (!slicer) return;
+
+    document.querySelectorAll("[data-calendar-preset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const preset = button.dataset.calendarPreset;
+        const anchor =
+          preset === "today"
+            ? new Date()
+            : new Date(state.calendar.viewYear, state.calendar.viewMonth, 1);
+        applyCalendarSelection(
+          buildCalendarSelection(preset, anchor),
+          `Periode ${button.textContent.trim().toLowerCase()} appliquee au reporting.`
+        );
+      });
+    });
+
+    $("#calendar-prev-month")?.addEventListener("click", () => setCalendarView(-1));
+    $("#calendar-next-month")?.addEventListener("click", () => setCalendarView(1));
+
+    slicer.addEventListener("click", (event) => {
+      const dayButton = event.target.closest("[data-calendar-date]");
+      if (!dayButton) return;
+      const clickedDate = fromIsoDate(dayButton.dataset.calendarDate);
+      if (!clickedDate) return;
+      const currentStart = fromIsoDate(state.calendar.start);
+      const currentEnd = fromIsoDate(state.calendar.end);
+      const clickedIso = toIsoDate(clickedDate);
+      let start = clickedIso;
+      let end = clickedIso;
+
+      if (currentStart && currentEnd && state.calendar.start === state.calendar.end) {
+        if (clickedDate >= currentStart) {
+          start = state.calendar.start;
+          end = clickedIso;
+        } else {
+          start = clickedIso;
+          end = state.calendar.start;
+        }
+      }
+
+      applyCalendarSelection(
+        {
+          ...state.calendar,
+          preset: "custom",
+          start,
+          end,
+          label: start === end ? "Jour selectionne" : "Periode personnalisee",
+          viewYear: clickedDate.getFullYear(),
+          viewMonth: clickedDate.getMonth(),
+        },
+        "Periode personnalisee appliquee."
+      );
+    });
+
+    $("#calendar-apply")?.addEventListener("click", () => {
+      const startInput = $("#calendar-start");
+      const endInput = $("#calendar-end");
+      const startDate = fromIsoDate(startInput?.value);
+      const endDate = fromIsoDate(endInput?.value);
+      if (!startDate || !endDate) {
+        showToast("Renseignez une date de debut et une date de fin.");
+        return;
+      }
+      const start = startDate <= endDate ? startDate : endDate;
+      const end = startDate <= endDate ? endDate : startDate;
+      applyCalendarSelection(
+        {
+          preset: "custom",
+          start: toIsoDate(start),
+          end: toIsoDate(end),
+          label: "Periode personnalisee",
+          viewYear: start.getFullYear(),
+          viewMonth: start.getMonth(),
+        },
+        "Plage de dates appliquee au reporting."
+      );
+    });
   }
 
   function bindFilters() {
@@ -1700,12 +1898,14 @@
   async function init() {
     await hydrateFromDatabase();
     applyCalculatedKpisToReporting();
+    syncPeriodFilterFromCalendar();
     renderAll(state);
     document.body.classList.add("dashboard-mode");
     bindNavigation();
     bindAuthActions();
     bindKoboActions();
     renderKoboActiveForm();
+    bindCalendarActions();
     bindFilters();
     bindPoleMonitoring();
     bindReporting();
