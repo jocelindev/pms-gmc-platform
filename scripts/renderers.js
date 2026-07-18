@@ -755,9 +755,24 @@
     const selectedDate = parseIsoDate(calendar.selectedDate || calendar.end || calendar.start) || new Date();
     const selectedMonth = selectedDate.getMonth();
     const selectedYear = selectedDate.getFullYear();
-    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
     const allowedPoleIds = getCalendarDateScopePoleIds(state);
+    const activeCountry = getActiveCountry(state);
     const dates = new Map();
+    const dailyDates = Array.isArray(state.kpiDailyDates) ? state.kpiDailyDates : [];
+
+    dailyDates.forEach((item) => {
+      if (allowedPoleIds.size && item.poleId && !allowedPoleIds.has(item.poleId)) return;
+      if (!isGroupCountry(activeCountry) && (!item.branch || !matchesCountryScope(item.branch, activeCountry))) return;
+      const date = parseIsoDate(item.date);
+      if (!date || date.getMonth() !== selectedMonth || date.getFullYear() !== selectedYear) return;
+      dates.set(item.date, date);
+    });
+
+    if (dates.size) {
+      return [...dates.values()].sort((left, right) => right.getTime() - left.getTime());
+    }
+
+    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
 
     results.forEach((result) => {
       if (allowedPoleIds.size && result.poleId && !allowedPoleIds.has(result.poleId)) return;

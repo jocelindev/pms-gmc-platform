@@ -284,9 +284,29 @@
   }
 
   function availableCalendarDateIsos({ anchorDate = null, sameMonth = false } = {}) {
-    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
     const allowedPoleIds = calendarDateScopePoleIds();
+    const activeCountry = ensureAllowedCountry(state.calendarBranchFilter);
     const dates = new Map();
+    const dailyDates = Array.isArray(state.kpiDailyDates) ? state.kpiDailyDates : [];
+
+    dailyDates.forEach((item) => {
+      if (allowedPoleIds.size && item.poleId && !allowedPoleIds.has(item.poleId)) return;
+      if (!isGroupCountryValue(activeCountry) && (!item.branch || !countryMatches(item.branch, activeCountry))) return;
+      const date = fromIsoDate(item.date);
+      if (!date) return;
+      if (sameMonth && anchorDate && (date.getFullYear() !== anchorDate.getFullYear() || date.getMonth() !== anchorDate.getMonth())) {
+        return;
+      }
+      dates.set(item.date, date.getTime());
+    });
+
+    if (dates.size) {
+      return [...dates.entries()]
+        .sort((left, right) => right[1] - left[1])
+        .map(([iso]) => iso);
+    }
+
+    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
 
     results.forEach((result) => {
       if (allowedPoleIds.size && result.poleId && !allowedPoleIds.has(result.poleId)) return;
@@ -585,6 +605,7 @@
     reportHistory: JSON.parse(JSON.stringify(PMS_DATA.reporting.history)),
     koboActiveForm: null,
     kpiCalculationResults: [],
+    kpiDailyDates: [],
     kpiCalculationQuality: null,
     kpiObjectives: [],
     calendar: buildMonthToDateSelection(new Date()),
@@ -732,6 +753,9 @@
     }
     if (Array.isArray(payload.kpiCalculationResults)) {
       state.kpiCalculationResults = payload.kpiCalculationResults;
+    }
+    if (Array.isArray(payload.kpiDailyDates)) {
+      state.kpiDailyDates = payload.kpiDailyDates;
     }
     if (payload.kpiCalculationQuality) {
       state.kpiCalculationQuality = payload.kpiCalculationQuality;
@@ -1150,6 +1174,9 @@
         state.koboActiveForm = result.activeForm;
         if (Array.isArray(result.kpiCalculationResults)) {
           state.kpiCalculationResults = result.kpiCalculationResults;
+        }
+        if (Array.isArray(result.kpiDailyDates)) {
+          state.kpiDailyDates = result.kpiDailyDates;
         }
         if (result.kpiCalculationQuality) {
           state.kpiCalculationQuality = result.kpiCalculationQuality;
@@ -2017,6 +2044,9 @@
         });
         if (Array.isArray(result.kpiCalculationResults)) {
           state.kpiCalculationResults = result.kpiCalculationResults;
+        }
+        if (Array.isArray(result.kpiDailyDates)) {
+          state.kpiDailyDates = result.kpiDailyDates;
         }
         if (result.kpiCalculationQuality) {
           state.kpiCalculationQuality = result.kpiCalculationQuality;

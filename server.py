@@ -798,6 +798,7 @@ def get_bootstrap_payload() -> dict:
             "activeKoboForm": active_kobo_form(conn),
             "koboSources": list_kobo_sources(conn),
             "koboSubmissions": list_kobo_submissions(conn),
+            "kpiDailyDates": list_kpi_daily_dates(conn),
             "kpiCalculationResults": kpi_results,
             "kpiCalculationQuality": kpi_quality,
         }
@@ -1898,6 +1899,33 @@ def upsert_kpi_daily_data(
     )
 
 
+def list_kpi_daily_dates(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT
+          data_date,
+          pole_id,
+          branch,
+          kpi_key,
+          COUNT(*) AS rows_count
+        FROM kpi_daily_data
+        GROUP BY data_date, pole_id, branch, kpi_key
+        ORDER BY data_date DESC, pole_id, kpi_key
+        LIMIT 1000
+        """
+    ).fetchall()
+    return [
+        {
+            "date": row["data_date"],
+            "poleId": row["pole_id"],
+            "branch": row["branch"] or "Groupe",
+            "kpiKey": row["kpi_key"],
+            "rowsCount": row["rows_count"],
+        }
+        for row in rows
+    ]
+
+
 def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         """
@@ -2171,17 +2199,70 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 collector=text_or_empty(row["collector"]),
                 raw_payload_json=text_or_empty(row["raw_payload_json"]),
             )
+            continue
+
         add_calculation_group(
             pole_id,
             kpi_key,
             kpi_raw_text,
             period_label,
             element,
-            period_start=period_date.isoformat() if period_date else "",
-            period_end=period_date.isoformat() if period_date else "",
-            period_type="day" if period_date else "period",
+            period_type="period",
         )
 
+    daily_rows = []
+    if calculation_source:
+        daily_rows = conn.execute(
+            """
+            SELECT
+              data_date,
+              pole_id,
+              branch,
+              kpi_key,
+              kpi_raw,
+              element_key,
+              element_label,
+              raw_value,
+              numeric_value,
+              validation_status
+            FROM kpi_daily_data
+            WHERE source_form_uid = ?
+            ORDER BY data_date, pole_id, kpi_key, element_key
+            """,
+            (calculation_source["formId"],),
+        ).fetchall()
+
+    for row in daily_rows:
+        period_date = parse_daily_period_date(row["data_date"])
+        if not period_date:
+            continue
+        element = {
+            "label": text_or_empty(row["element_label"] or row["element_key"] or "valeur"),
+            "value": row["raw_value"] if row["raw_value"] not in (None, "") else row["numeric_value"],
+            "branch": text_or_empty(row["branch"]),
+            "validation": text_or_empty(row["validation_status"]),
+        }
+        calculation_entries.append(
+            {
+                "poleId": row["pole_id"],
+                "kpiKey": row["kpi_key"],
+                "kpiRaw": text_or_empty(row["kpi_raw"]),
+                "periodDate": period_date,
+                "element": element,
+            }
+        )
+        add_calculation_group(
+            row["pole_id"],
+            row["kpi_key"],
+            text_or_empty(row["kpi_raw"]),
+            row["data_date"],
+            element,
+            period_start=period_date.isoformat(),
+            period_end=period_date.isoformat(),
+            period_type="day",
+        )
+
+    quality["dailyDataRows"] = len(daily_rows)
     quality["calculationGroups"] = len(groups)
 
     dated_entries = [entry for entry in calculation_entries if entry["periodDate"]]
@@ -2465,6 +2546,7 @@ def sync_kobo_form(payload: dict) -> dict:
         active_form = active_kobo_form(conn) or {}
         synced_at = conn.execute("SELECT CURRENT_TIMESTAMP AS synced_at").fetchone()["synced_at"]
         kpi_results, kpi_quality = calculate_kpi_results(conn)
+        kpi_daily_dates = list_kpi_daily_dates(conn)
 
     detail = f"{len(fields)} champ(s) detecte(s), {imported} soumission(s) lue(s)."
     if data_warning:
@@ -2477,6 +2559,7 @@ def sync_kobo_form(payload: dict) -> dict:
         "submissionsImported": imported,
         "syncWarning": data_warning,
         "lastSyncAt": synced_at,
+        "kpiDailyDates": kpi_daily_dates,
         "kpiCalculationResults": kpi_results,
         "kpiCalculationQuality": kpi_quality,
     }
