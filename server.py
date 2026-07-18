@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import base64
+import binascii
 import datetime as dt
 import hashlib
 import hmac
@@ -11,11 +13,12 @@ import os
 import re
 import secrets
 import sqlite3
+import time
 import unicodedata
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 
@@ -34,9 +37,42 @@ PERMISSION_LABELS = {
 PASSWORD_ITERATIONS = 210_000
 DEFAULT_ADMIN_PASSWORD = os.environ.get("PMS_ADMIN_PASSWORD", "Admin@2026!")
 DEFAULT_USER_PASSWORD = os.environ.get("PMS_DEFAULT_USER_PASSWORD", "Palladium@2026!")
+SESSION_TTL_SECONDS = int(os.environ.get("PMS_SESSION_TTL_SECONDS", str(8 * 60 * 60)))
+SESSION_SIGNING_SECRET = os.environ.get(
+    "PMS_SESSION_SECRET",
+    hashlib.sha256(f"{DEFAULT_ADMIN_PASSWORD}|pms-gmc-session".encode("utf-8")).hexdigest(),
+)
 MIN_PASSWORD_LENGTH = 8
 KOBO_REQUEST_TIMEOUT = 15
 KOBO_SUBMISSION_LIMIT = 500
+SENSITIVE_DATABASE_TERMS = (
+    "password",
+    "hash",
+    "token",
+    "secret",
+    "authorization",
+    "raw_payload_json",
+)
+DATABASE_TABLE_LABELS = {
+    "app_metadata": "Parametres plateforme",
+    "profiles": "Profils utilisateurs",
+    "permissions": "Permissions",
+    "profile_permissions": "Droits par profil",
+    "poles": "Poles",
+    "users": "Utilisateurs",
+    "user_access": "Affectations utilisateurs",
+    "kpis": "Referentiel KPI",
+    "kpi_objectives": "Objectifs KPI",
+    "kobo_forms": "Formulaires Kobo",
+    "kobo_form_fields": "Champs formulaires Kobo",
+    "kobo_submissions": "Soumissions Kobo",
+    "kpi_daily_data": "Donnees journalieres KPI",
+    "validation_queue": "File de validation",
+    "reports": "Rapports",
+    "notifications": "Notifications",
+    "audit_logs": "Journal d'audit",
+    "v_user_access_details": "Vue droits utilisateurs",
+}
 KOBO_FIELD_ALIASES = {
     "pole_id": ["pole_id", "pole", "id_pole", "pole_name", "pole_responsable"],
     "branch": ["branch_id", "branch", "filiale", "pays", "bu", "business_unit"],
@@ -153,6 +189,53 @@ def verify_password(password: str, stored_hash: str | None) -> bool:
 def validate_password(password: str) -> None:
     if len(password or "") < MIN_PASSWORD_LENGTH:
         raise ValueError(f"Le mot de passe doit contenir au moins {MIN_PASSWORD_LENGTH} caracteres.")
+
+
+def base64url_encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def base64url_decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(f"{value}{padding}".encode("ascii"))
+
+
+def create_session_token(user_id: int, profile: str, permissions: dict) -> str:
+    now = int(time.time())
+    payload = {
+        "userId": user_id,
+        "profile": profile,
+        "permissions": permissions,
+        "iat": now,
+        "exp": now + SESSION_TTL_SECONDS,
+    }
+    payload_part = base64url_encode(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+    signature = hmac.new(
+        SESSION_SIGNING_SECRET.encode("utf-8"),
+        payload_part.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    return f"{payload_part}.{base64url_encode(signature)}"
+
+
+def verify_session_token(token: str) -> dict | None:
+    try:
+        payload_part, signature_part = token.split(".", 1)
+        expected_signature = hmac.new(
+            SESSION_SIGNING_SECRET.encode("utf-8"),
+            payload_part.encode("ascii"),
+            hashlib.sha256,
+        ).digest()
+        if not hmac.compare_digest(base64url_decode(signature_part), expected_signature):
+            return None
+        payload = json.loads(base64url_decode(payload_part).decode("utf-8"))
+        if int(payload.get("exp") or 0) < int(time.time()):
+            return None
+        return payload
+    except (ValueError, TypeError, json.JSONDecodeError, binascii.Error):
+        return None
 
 
 def sanitize_details(value):
@@ -804,6 +887,123 @@ def get_bootstrap_payload() -> dict:
         }
 
 
+def is_sensitive_database_column(column_name: str) -> bool:
+    normalized = str(column_name or "").lower()
+    return any(term in normalized for term in SENSITIVE_DATABASE_TERMS)
+
+
+def quote_sql_identifier(identifier: str) -> str:
+    return f'"{str(identifier).replace(chr(34), chr(34) + chr(34))}"'
+
+
+def list_database_objects(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT name, type
+        FROM sqlite_master
+        WHERE type IN ('table', 'view')
+          AND name NOT LIKE 'sqlite_%'
+        ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END, name
+        """
+    ).fetchall()
+    objects = []
+    for row in rows:
+        name = row["name"]
+        quoted_name = quote_sql_identifier(name)
+        columns = conn.execute(f"PRAGMA table_info({quoted_name})").fetchall()
+        sensitive_columns = [column["name"] for column in columns if is_sensitive_database_column(column["name"])]
+        try:
+            count_row = conn.execute(f"SELECT COUNT(*) AS row_count FROM {quoted_name}").fetchone()
+            row_count = int(count_row["row_count"] if count_row else 0)
+        except sqlite3.DatabaseError:
+            row_count = 0
+        objects.append(
+            {
+                "name": name,
+                "label": DATABASE_TABLE_LABELS.get(name, name.replace("_", " ").title()),
+                "type": "Vue" if row["type"] == "view" else "Table",
+                "rowCount": row_count,
+                "columnCount": len(columns),
+                "sensitiveColumns": sensitive_columns,
+            }
+        )
+    return objects
+
+
+def sanitize_database_value(column_name: str, value):
+    if is_sensitive_database_column(column_name):
+        return "masque"
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return f"{len(value)} octets"
+    if isinstance(value, (int, float)):
+        return value
+    text = str(value)
+    if len(text) > 220:
+        return f"{text[:220]}..."
+    return text
+
+
+def get_database_overview() -> dict:
+    with db_connect() as conn:
+        tables = list_database_objects(conn)
+        return {
+            "database": DB_PATH.name,
+            "updatedAt": dt.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "tables": tables,
+            "totalRows": sum(table["rowCount"] for table in tables),
+        }
+
+
+def get_database_table_preview(table_name: str, limit: int = 50) -> dict:
+    table_name = str(table_name or "").strip()
+    limit = max(1, min(int(limit or 50), 100))
+    with db_connect() as conn:
+        objects = list_database_objects(conn)
+        object_by_name = {item["name"]: item for item in objects}
+        selected = object_by_name.get(table_name)
+        if not selected:
+            raise ValueError("Table introuvable dans la base.")
+
+        quoted_name = quote_sql_identifier(table_name)
+        columns = conn.execute(f"PRAGMA table_info({quoted_name})").fetchall()
+        column_names = [column["name"] for column in columns]
+        rows = conn.execute(f"SELECT * FROM {quoted_name} LIMIT ?", (limit,)).fetchall()
+        return {
+            "name": selected["name"],
+            "label": selected["label"],
+            "type": selected["type"],
+            "rowCount": selected["rowCount"],
+            "limit": limit,
+            "columns": [
+                {
+                    "name": column["name"],
+                    "type": column["type"] or "TEXT",
+                    "sensitive": is_sensitive_database_column(column["name"]),
+                }
+                for column in columns
+            ],
+            "rows": [
+                {column_name: sanitize_database_value(column_name, row[column_name]) for column_name in column_names}
+                for row in rows
+            ],
+        }
+
+
+def require_admin_session(headers) -> dict:
+    authorization = str(headers.get("Authorization") or "").strip()
+    if not authorization.lower().startswith("bearer "):
+        raise PermissionError("Connexion administrateur requise pour visiter la base.")
+    session = verify_session_token(authorization.split(" ", 1)[1].strip())
+    if not session:
+        raise PermissionError("Session expiree. Reconnectez-vous comme administrateur.")
+    permissions = session.get("permissions") or {}
+    if not permissions.get("administration"):
+        raise PermissionError("Acces reserve aux administrateurs.")
+    return session
+
+
 def save_profile_permissions(payload: dict) -> list[dict]:
     profile = str(payload.get("profile") or "").strip()
     permissions = payload.get("permissions") or {}
@@ -1068,6 +1268,7 @@ def authenticate_user(payload: dict) -> dict:
         access = access_for_session(conn, int(user["id"]), user["profile"], permissions)
         audit(conn, "Connexion utilisateur", "user", str(user["id"]), {"profile": user["profile"]})
         conn.commit()
+        session_token = create_session_token(int(user["id"]), user["profile"], permissions)
         return {
             "user": {
                 "id": user["id"],
@@ -1077,6 +1278,7 @@ def authenticate_user(payload: dict) -> dict:
             },
             "permissions": permissions,
             "access": access,
+            "sessionToken": session_token,
         }
 
 
@@ -2626,7 +2828,7 @@ class PMSHandler(BaseHTTPRequestHandler):
     def end_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         super().end_headers()
 
     def log_message(self, format: str, *args) -> None:
@@ -2637,7 +2839,9 @@ class PMSHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+        query = parse_qs(parsed_url.query)
         try:
             if path == "/api/health":
                 self.send_json({"database": str(DB_PATH), "status": "ok"})
@@ -2645,10 +2849,28 @@ class PMSHandler(BaseHTTPRequestHandler):
             if path == "/api/bootstrap":
                 self.send_json(get_bootstrap_payload())
                 return
+            if path == "/api/database/overview":
+                require_admin_session(self.headers)
+                self.send_json(get_database_overview())
+                return
+            if path == "/api/database/table":
+                require_admin_session(self.headers)
+                table_name = query.get("name", [""])[0]
+                limit_raw = query.get("limit", ["50"])[0]
+                try:
+                    limit = int(limit_raw)
+                except ValueError:
+                    limit = 50
+                self.send_json(get_database_table_preview(table_name, limit))
+                return
             if path.startswith("/api/"):
                 self.send_error_json(404, "Endpoint API introuvable.")
                 return
             self.send_static(path)
+        except PermissionError as exc:
+            self.send_error_json(403, str(exc))
+        except ValueError as exc:
+            self.send_error_json(400, str(exc))
         except Exception as exc:
             self.send_error_json(500, str(exc))
 

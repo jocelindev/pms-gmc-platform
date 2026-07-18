@@ -696,6 +696,10 @@
     userAccessScope: [],
     objectiveKoboSource: null,
     calculationKoboSource: null,
+    databaseOverview: null,
+    databaseTablePreview: null,
+    currentDatabaseTable: "",
+    databaseLoading: false,
   };
 
   function showToast(message) {
@@ -786,6 +790,76 @@
     } catch (error) {
       console.warn("Base PMS indisponible, mode local active.", error);
       state.databaseConnected = false;
+    }
+  }
+
+  function preferredDatabaseTable(tables = []) {
+    const names = tables.map((table) => table.name);
+    return (
+      ["kpi_daily_data", "kobo_submissions", "kpis", "kpi_objectives", "user_access", "users"].find((name) =>
+        names.includes(name)
+      ) ||
+      names[0] ||
+      ""
+    );
+  }
+
+  async function loadDatabaseTable(tableName, options = {}) {
+    if (!tableName || !api?.databaseTable) return;
+    if (!state.currentPermissions?.administration) {
+      showToast("Acces reserve aux administrateurs.");
+      return;
+    }
+    state.currentDatabaseTable = tableName;
+    state.databaseLoading = true;
+    try {
+      state.databaseTablePreview = await api.databaseTable(tableName, 50);
+    } catch (error) {
+      console.warn("Lecture table base indisponible.", error);
+      showToast(`Lecture impossible: ${error.message}`);
+    } finally {
+      state.databaseLoading = false;
+      if (options.render !== false) {
+        renderAdmin(state);
+        setAdminTab("database");
+      }
+    }
+  }
+
+  async function loadDatabaseOverview(options = {}) {
+    if (!api?.databaseOverview) {
+      showToast("Visite de la base indisponible pour le moment.");
+      return;
+    }
+    if (!state.currentPermissions?.administration) {
+      showToast("Acces reserve aux administrateurs.");
+      return;
+    }
+    state.databaseLoading = true;
+    if (options.renderStart) {
+      renderAdmin(state);
+      setAdminTab("database");
+    }
+    try {
+      const overview = await api.databaseOverview();
+      state.databaseOverview = overview;
+      const names = (overview.tables || []).map((table) => table.name);
+      const selectedTable = names.includes(state.currentDatabaseTable)
+        ? state.currentDatabaseTable
+        : preferredDatabaseTable(overview.tables || []);
+      if (selectedTable) {
+        await loadDatabaseTable(selectedTable, { render: false });
+      }
+      if (options.toast !== false) {
+        showToast("Base de donnees actualisee.");
+      }
+    } catch (error) {
+      console.warn("Lecture base indisponible.", error);
+      showToast(`Visite de la base impossible: ${error.message}`);
+    } finally {
+      state.databaseLoading = false;
+      renderAdmin(state);
+      setAdminTab("database");
     }
   }
 
@@ -1866,6 +1940,9 @@
     document.querySelectorAll("[data-admin-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         setAdminTab(button.dataset.adminTab);
+        if (button.dataset.adminTab === "database" && !state.databaseOverview) {
+          loadDatabaseOverview({ toast: false, renderStart: true });
+        }
       });
     });
     setAdminTab(state.currentAdminTab);
@@ -1882,6 +1959,8 @@
     const userAccessPole = $("#user-access-pole");
     const userAccessProfile = $("#user-access-profile");
     const saveUserAccessButton = $("#save-user-access");
+    const refreshDatabaseButton = $("#refresh-database-overview");
+    const databaseTableSelect = $("#database-table-select");
     const getPermissionFormValues = () => {
       const permissions = {};
       document.querySelectorAll("[data-permission-key]").forEach((checkbox) => {
@@ -2408,6 +2487,18 @@
       });
     }
 
+    if (refreshDatabaseButton) {
+      refreshDatabaseButton.addEventListener("click", () => {
+        loadDatabaseOverview({ renderStart: true });
+      });
+    }
+
+    if (databaseTableSelect) {
+      databaseTableSelect.addEventListener("change", (event) => {
+        loadDatabaseTable(event.target.value);
+      });
+    }
+
     document.addEventListener("click", (event) => {
       const button = event.target.closest("[data-select-access-profile]");
       if (!button) return;
@@ -2440,6 +2531,12 @@
       renderAdmin(state);
       setAdminTab("access");
       showToast(`Affectation chargee: ${rule.responsible}.`);
+    });
+
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-database-table]");
+      if (!button) return;
+      loadDatabaseTable(button.dataset.databaseTable);
     });
   }
 

@@ -927,6 +927,10 @@
               <strong>Droit d'acces</strong>
               <span>Utilisateurs, profils et poles</span>
             </button>
+            <button class="admin-tab-button" type="button" data-admin-tab="database">
+              <strong>Base de donnees</strong>
+              <span>Tables et donnees</span>
+            </button>
           </div>
 
           <div class="admin-tab-panel active" data-admin-panel="objectives">
@@ -1386,14 +1390,60 @@
               </section>
             </div>
           </div>
+
+          <div class="admin-tab-panel" data-admin-panel="database">
+            <div class="dashboard-grid database-browser-grid">
+              <section class="panel span-3 admin-summary-panel">
+                <div class="admin-summary-head">
+                  <div>
+                    <p class="eyebrow">Base PMS</p>
+                    <h3>Visiter les donnees de la plateforme</h3>
+                  </div>
+                  <div class="admin-flow">
+                    <span>Lecture seule</span>
+                    <span>Champs sensibles masques</span>
+                    <button class="ghost-action" id="refresh-database-overview" type="button">Actualiser</button>
+                  </div>
+                </div>
+                <div class="admin-summary-grid" id="database-summary-cards"></div>
+              </section>
+
+              <section class="panel database-table-selector">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Tables</p>
+                    <h3>Choisir la table a consulter</h3>
+                  </div>
+                </div>
+                <select id="database-table-select" class="search-input" aria-label="Choisir une table de la base"></select>
+                <div class="database-table-list" id="database-table-list"></div>
+              </section>
+
+              <section class="panel span-2 database-preview-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Apercu des donnees</p>
+                    <h3 id="database-preview-title">Selectionnez une table</h3>
+                  </div>
+                  <span class="status-pill gray" id="database-table-status">Lecture seule</span>
+                </div>
+                <div class="table-wrap database-preview-wrap">
+                  <table class="database-preview-table">
+                    <thead id="database-preview-head"></thead>
+                    <tbody id="database-preview-body"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </div>
         </section>
       </main>
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=daily-table-everywhere-2026"></script>
-    <script src="scripts/renderers.js?v=daily-table-everywhere-2026"></script>
-    <script src="scripts/api.js?v=daily-table-everywhere-2026"></script>
-    <script src="app.js?v=daily-table-everywhere-2026"></script>
+    <script src="scripts/data.js?v=database-browser-2026"></script>
+    <script src="scripts/renderers.js?v=database-browser-2026"></script>
+    <script src="scripts/api.js?v=database-browser-2026"></script>
+    <script src="app.js?v=database-browser-2026"></script>
   </body>
 </html>

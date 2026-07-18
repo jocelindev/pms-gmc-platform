@@ -2443,6 +2443,160 @@
       .join("");
   }
 
+  function renderDatabaseBrowser(state) {
+    const summary = $("#database-summary-cards");
+    if (!summary) return;
+
+    const overview = state.databaseOverview;
+    const tables = overview?.tables || [];
+    const selectedName = state.currentDatabaseTable || tables[0]?.name || "";
+    const selectedTable = tables.find((table) => table.name === selectedName) || tables[0];
+    const preview = state.databaseTablePreview?.name === selectedName ? state.databaseTablePreview : null;
+    const formatCount = (value) => new Intl.NumberFormat("fr-FR").format(Number(value) || 0);
+    const dailyTable = tables.find((table) => table.name === "kpi_daily_data");
+    const koboTable = tables.find((table) => table.name === "kobo_submissions");
+
+    if (!overview) {
+      summary.innerHTML = `
+        <div class="admin-summary-card">
+          <span>Base</span>
+          <strong>A charger</strong>
+          <small>Cliquez sur Actualiser pour voir les donnees.</small>
+        </div>
+        <div class="admin-summary-card">
+          <span>Mode</span>
+          <strong>Lecture seule</strong>
+          <small>Aucune modification depuis cet ecran.</small>
+        </div>
+      `;
+      const select = $("#database-table-select");
+      if (select) {
+        select.innerHTML = `<option value="">Actualiser la base</option>`;
+      }
+      const list = $("#database-table-list");
+      if (list) {
+        list.innerHTML = `<div class="database-empty">Les tables s'afficheront apres actualisation.</div>`;
+      }
+      const title = $("#database-preview-title");
+      if (title) title.textContent = "Aucune table chargee";
+      const status = $("#database-table-status");
+      if (status) {
+        status.className = `status-pill ${state.databaseLoading ? "amber" : "gray"}`;
+        status.textContent = state.databaseLoading ? "Chargement" : "Lecture seule";
+      }
+      const head = $("#database-preview-head");
+      const body = $("#database-preview-body");
+      if (head) head.innerHTML = "";
+      if (body) body.innerHTML = `<tr><td>Actualisez pour afficher les donnees de la base.</td></tr>`;
+      return;
+    }
+
+    summary.innerHTML = `
+      <div class="admin-summary-card">
+        <span>Fichier base</span>
+        <strong>${escapeHtml(overview.database || "SQLite")}</strong>
+        <small>Derniere lecture: ${escapeHtml(overview.updatedAt || "")}</small>
+      </div>
+      <div class="admin-summary-card">
+        <span>Tables / vues</span>
+        <strong>${formatCount(tables.length)}</strong>
+        <small>${formatCount(overview.totalRows)} lignes au total</small>
+      </div>
+      <div class="admin-summary-card">
+        <span>Donnees journalieres</span>
+        <strong>${formatCount(dailyTable?.rowCount || 0)}</strong>
+        <small>Table kpi_daily_data</small>
+      </div>
+      <div class="admin-summary-card">
+        <span>Soumissions Kobo</span>
+        <strong>${formatCount(koboTable?.rowCount || 0)}</strong>
+        <small>Table kobo_submissions</small>
+      </div>
+    `;
+
+    const select = $("#database-table-select");
+    if (select) {
+      select.innerHTML = tables
+        .map(
+          (table) => `
+            <option value="${escapeHtml(table.name)}" ${table.name === selectedTable?.name ? "selected" : ""}>
+              ${escapeHtml(table.label)} - ${formatCount(table.rowCount)} ligne(s)
+            </option>
+          `
+        )
+        .join("");
+    }
+
+    const tableList = $("#database-table-list");
+    if (tableList) {
+      tableList.innerHTML = tables.length
+        ? tables
+            .map(
+              (table) => `
+                <button
+                  class="database-table-item ${table.name === selectedTable?.name ? "active" : ""}"
+                  type="button"
+                  data-database-table="${escapeHtml(table.name)}"
+                >
+                  <strong>${escapeHtml(table.label)}</strong>
+                  <span>${escapeHtml(table.name)} - ${formatCount(table.rowCount)} ligne(s) - ${formatCount(table.columnCount)} champ(s)</span>
+                </button>
+              `
+            )
+            .join("")
+        : `<div class="database-empty">Aucune table trouvee.</div>`;
+    }
+
+    const title = $("#database-preview-title");
+    if (title) title.textContent = selectedTable?.label || "Selectionnez une table";
+
+    const status = $("#database-table-status");
+    if (status) {
+      status.className = `status-pill ${state.databaseLoading ? "amber" : "green"}`;
+      status.textContent = state.databaseLoading
+        ? "Chargement"
+        : `${formatCount(preview?.rowCount || selectedTable?.rowCount || 0)} ligne(s)`;
+    }
+
+    const head = $("#database-preview-head");
+    const body = $("#database-preview-body");
+    if (!head || !body) return;
+
+    if (!preview) {
+      head.innerHTML = "";
+      body.innerHTML = `<tr><td>Choisissez une table pour afficher ses donnees.</td></tr>`;
+      return;
+    }
+
+    const columns = preview.columns || [];
+    head.innerHTML = `
+      <tr>
+        ${columns
+          .map(
+            (column) => `
+              <th>
+                ${escapeHtml(column.name)}
+                ${column.sensitive ? `<small>masque</small>` : ""}
+              </th>
+            `
+          )
+          .join("")}
+      </tr>
+    `;
+
+    body.innerHTML = preview.rows?.length
+      ? preview.rows
+          .map(
+            (row) => `
+              <tr>
+                ${columns.map((column) => `<td>${escapeHtml(row[column.name])}</td>`).join("")}
+              </tr>
+            `
+          )
+          .join("")
+      : `<tr><td colspan="${Math.max(columns.length, 1)}">Aucune donnee dans cette table pour le moment.</td></tr>`;
+  }
+
   function renderAdmin(state) {
     const objectiveTable = $("#objective-table");
     if (!objectiveTable) return;
@@ -3009,6 +3163,8 @@
             .join("")
         : `<tr><td colspan="7">Aucune affectation par pole configuree.</td></tr>`;
     }
+
+    renderDatabaseBrowser(state);
   }
 
   function renderAll(state) {

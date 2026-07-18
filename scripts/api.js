@@ -1,6 +1,15 @@
 (function () {
   const API_BASE = window.PMS_API_BASE || `${window.location.origin}/api`;
 
+  function getSessionHeaders() {
+    try {
+      const session = JSON.parse(window.sessionStorage.getItem("pmsSession") || "null");
+      return session?.sessionToken ? { Authorization: `Bearer ${session.sessionToken}` } : {};
+    } catch {
+      return {};
+    }
+  }
+
   async function request(path, options = {}) {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), options.timeout || 2500);
@@ -9,6 +18,7 @@
         method: options.method || "GET",
         headers: {
           "Content-Type": "application/json",
+          ...getSessionHeaders(),
           ...(options.headers || {}),
         },
         body: options.body ? JSON.stringify(options.body) : undefined,
@@ -76,6 +86,14 @@
         method: "POST",
         body: form,
         timeout: 20000,
+      });
+    },
+    databaseOverview() {
+      return request("/database/overview", { timeout: 5000 });
+    },
+    databaseTable(name, limit = 50) {
+      return request(`/database/table?name=${encodeURIComponent(name)}&limit=${encodeURIComponent(limit)}`, {
+        timeout: 5000,
       });
     },
   };
