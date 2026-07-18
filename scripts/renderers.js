@@ -35,6 +35,92 @@
       .trim();
   }
 
+  function getCountryOptions() {
+    const countries = Array.isArray(PMS_DATA.countries) ? PMS_DATA.countries : [];
+    if (countries.length) return countries;
+    return [
+      { id: "Groupe", code: "GROUPE", name: "Groupe", score: 82, quality: 88, readiness: 74, kpiCount: 0, activePoles: 0, lateSubmissions: 0, status: "Consolide", className: "green" },
+      ...(PMS_DATA.branchScores || []).map((branch) => ({
+        id: branch.name,
+        code: branch.name,
+        name: branch.name,
+        score: branch.score,
+        quality: branch.score,
+        readiness: branch.score,
+        kpiCount: 0,
+        activePoles: PMS_DATA.reporting?.poles?.length || 0,
+        lateSubmissions: 0,
+        status: "A verifier",
+        className: "gray",
+      })),
+    ];
+  }
+
+  function countryFilterValue(country = {}) {
+    return country.name || country.id || "Groupe";
+  }
+
+  function isGroupCountry(country = {}) {
+    const normalized = normalizeLookup(country.id || country.name);
+    return normalized === "groupe" || normalized === "groupe consolide";
+  }
+
+  function findCountryByValue(value) {
+    const normalized = normalizeLookup(value || "Groupe");
+    return (
+      getCountryOptions().find((country) =>
+        [country.id, country.code, country.name].some((item) => normalizeLookup(item) === normalized)
+      ) || getCountryOptions()[0]
+    );
+  }
+
+  function getActiveCountry(state = {}) {
+    return findCountryByValue(state.calendarBranchFilter || $("#branch-filter")?.value || "Groupe");
+  }
+
+  function countryOptionsHtml(selectedValue) {
+    const selectedCountry = findCountryByValue(selectedValue);
+    const selected = countryFilterValue(selectedCountry);
+    return getCountryOptions()
+      .map((country) => {
+        const value = countryFilterValue(country);
+        return `<option value="${escapeHtml(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(country.name)}</option>`;
+      })
+      .join("");
+  }
+
+  function countryStatusClass(country = {}) {
+    if (country.className) return country.className;
+    if (country.score >= 80) return "green";
+    if (country.score >= 70) return "amber";
+    return "red";
+  }
+
+  function matchesCountryScope(value, country = {}) {
+    if (isGroupCountry(country)) return true;
+    const normalizedValue = normalizeLookup(value);
+    if (!normalizedValue) return false;
+    return [country.id, country.code, country.name].some((item) => {
+      const normalizedCountry = normalizeLookup(item);
+      return normalizedValue === normalizedCountry || normalizedValue.includes(normalizedCountry) || normalizedCountry.includes(normalizedValue);
+    });
+  }
+
+  function getCountryScopedPoles(state = {}, poles = []) {
+    const country = getActiveCountry(state);
+    const sourcePoles = poles.length ? poles : PMS_DATA.reporting.poles;
+    if (isGroupCountry(country) || !Array.isArray(country.poleIds) || !country.poleIds.length) {
+      return sourcePoles;
+    }
+    const countryPoleIds = new Set(country.poleIds);
+    return sourcePoles.filter((pole) => countryPoleIds.has(pole.id));
+  }
+
+  function filterRowsByCountry(rows = [], country = {}) {
+    if (isGroupCountry(country)) return rows;
+    return rows.filter((row) => matchesCountryScope(row.branch || row.country || row.filiale || row.pays, country));
+  }
+
   function getObjectiveCatalogProfile(kpi, pole = {}) {
     const template = PMS_DATA.objectiveKoboTemplate || {};
     const profiles = template.catalogProfiles || [];
@@ -104,7 +190,8 @@
   }
 
   function renderBranches() {
-    $("#branch-bars").innerHTML = PMS_DATA.branchScores
+    const branches = getCountryOptions().filter((country) => !isGroupCountry(country));
+    $("#branch-bars").innerHTML = branches
       .map(
         (branch) => `
           <div class="branch-bar-row">
@@ -115,6 +202,76 @@
         `
       )
       .join("");
+  }
+
+  function renderCountryDashboard(state = {}) {
+    const cards = $("#country-summary-cards");
+    const table = $("#country-performance-table");
+    const scope = $("#country-active-scope");
+    if (!cards && !table && !scope) return;
+
+    const activeCountry = getActiveCountry(state);
+    const isGroup = isGroupCountry(activeCountry);
+    const countries = getCountryOptions().filter((country) => !isGroupCountry(country));
+    const visibleCountries = isGroup ? countries : countries.filter((country) => country.name === activeCountry.name);
+    const safeCountries = visibleCountries.length ? visibleCountries : countries;
+    const average = (field) =>
+      Math.round(safeCountries.reduce((sum, country) => sum + Number(country[field] || 0), 0) / Math.max(safeCountries.length, 1));
+    const totalKpis = safeCountries.reduce((sum, country) => sum + Number(country.kpiCount || 0), 0);
+    const totalLate = safeCountries.reduce((sum, country) => sum + Number(country.lateSubmissions || 0), 0);
+    const scopeClass = isGroup ? "green" : countryStatusClass(activeCountry);
+
+    if (scope) {
+      scope.className = `status-pill ${scopeClass}`;
+      scope.textContent = isGroup ? "Groupe consolide" : activeCountry.name;
+    }
+
+    if (cards) {
+      const summaryCards = [
+        { label: isGroup ? "Pays suivis" : "Pays actif", value: isGroup ? safeCountries.length : activeCountry.code, hint: isGroup ? "perimetre consolide" : activeCountry.name },
+        { label: "Score moyen", value: average("score"), hint: "performance pays" },
+        { label: "KPI attendus", value: totalKpis, hint: isGroup ? "tous pays" : "perimetre actif" },
+        { label: "Retards Kobo", value: totalLate, hint: totalLate ? "a traiter" : "aucun retard" },
+      ];
+      cards.innerHTML = summaryCards
+        .map(
+          (card) => `
+            <article class="country-score-card">
+              <span>${escapeHtml(card.label)}</span>
+              <strong>${escapeHtml(card.value)}</strong>
+              <small>${escapeHtml(card.hint)}</small>
+            </article>
+          `
+        )
+        .join("");
+    }
+
+    if (table) {
+      table.innerHTML = safeCountries
+        .map((country) => {
+          const isSelected = country.name === activeCountry.name && !isGroup;
+          const statusClass = countryStatusClass(country);
+          return `
+            <tr>
+              <td>
+                <strong>${escapeHtml(country.name)}</strong>
+                <small class="country-code">${escapeHtml(country.code)}</small>
+              </td>
+              <td><strong>${escapeHtml(country.score)}</strong></td>
+              <td>${escapeHtml(country.kpiCount)}</td>
+              <td>${escapeHtml(country.quality)}%</td>
+              <td>${statusPill(country.status, statusClass)}</td>
+              <td>${escapeHtml(country.lateSubmissions)}</td>
+              <td>
+                <button class="ghost-action" type="button" data-country-filter="${escapeHtml(countryFilterValue(country))}" ${isSelected ? "disabled" : ""}>
+                  ${isSelected ? "Selectionne" : "Choisir"}
+                </button>
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
   }
 
   function renderExecutiveAlerts() {
@@ -268,8 +425,19 @@
       poleFilter.value = state.calendarPoleFilter || state.currentPoleMonitor || "Tous";
     }
 
+    const activeCountry = getActiveCountry(state);
+    const activeCountryValue = countryFilterValue(activeCountry);
+    const countrySelectOptions = countryOptionsHtml(activeCountryValue);
+    const topbarBranchFilter = $("#branch-filter");
+
+    if (topbarBranchFilter) {
+      topbarBranchFilter.innerHTML = countrySelectOptions;
+      topbarBranchFilter.value = activeCountryValue;
+    }
+
     if (branchFilter) {
-      branchFilter.value = state.calendarBranchFilter || $("#branch-filter")?.value || "Groupe";
+      branchFilter.innerHTML = countrySelectOptions;
+      branchFilter.value = activeCountryValue;
     }
 
     if (cycleFilter) {
@@ -352,12 +520,18 @@
     const target = $(selector);
     if (!target) return;
     const accessContext = getPoleAccessContext(state);
+    const activeCountry = getActiveCountry(state);
+    const visiblePoles = getCountryScopedPoles(state, accessContext.poles);
     const dashboardCount = selector === "#dashboard-pole-summary-table" ? $("#dashboard-pole-count") : null;
     if (dashboardCount) {
       dashboardCount.className = `status-pill ${accessContext.isRestricted ? "green" : "amber"}`;
-      dashboardCount.textContent = `${accessContext.poles.length} pole${accessContext.poles.length > 1 ? "s" : ""} suivi${accessContext.poles.length > 1 ? "s" : ""}`;
+      dashboardCount.textContent = `${visiblePoles.length} pole${visiblePoles.length > 1 ? "s" : ""} suivi${visiblePoles.length > 1 ? "s" : ""} - ${activeCountry.name}`;
     }
-    target.innerHTML = accessContext.poles
+    if (!visiblePoles.length) {
+      target.innerHTML = `<tr><td colspan="8">Aucun pole autorise pour ${escapeHtml(activeCountry.name)} avec ce profil.</td></tr>`;
+      return;
+    }
+    target.innerHTML = visiblePoles
       .map((pole) => {
         const { greenCount, amberCount, redCount } = getPoleKpiStatus(pole.id);
         return `
@@ -473,13 +647,16 @@
     `;
   }
 
-  function renderKoboTable(filter = "", submissions = PMS_DATA.koboSubmissions) {
+  function renderKoboTable(filter = "", submissions = PMS_DATA.koboSubmissions, countryFilter = "Groupe") {
     const table = $("#kobo-table");
     if (!table) return;
-    const rows = filterRows(submissions, filter, ["form", "branch", "kpi", "collector", "status"]);
-    table.innerHTML = rows
-      .map(
-        (item) => `
+    const activeCountry = findCountryByValue(countryFilter);
+    const scopedSubmissions = filterRowsByCountry(submissions, activeCountry);
+    const rows = filterRows(scopedSubmissions, filter, ["form", "branch", "kpi", "collector", "status"]);
+    table.innerHTML = rows.length
+      ? rows
+          .map(
+            (item) => `
           <tr>
             <td><strong>${escapeHtml(item.form)}</strong></td>
             <td>${escapeHtml(item.branch)}</td>
@@ -489,8 +666,9 @@
             <td><button class="ghost-action">Verifier</button></td>
           </tr>
         `
-      )
-      .join("");
+          )
+          .join("")
+      : `<tr><td colspan="6">Aucune soumission Kobo visible pour ${escapeHtml(activeCountry.name)}.</td></tr>`;
   }
 
   function renderCollectionForms() {
@@ -736,7 +914,22 @@
     if (!poleSelect) return;
 
     const accessContext = getPoleAccessContext(state);
-    const authorizedPoles = accessContext.poles.length ? accessContext.poles : reporting.poles;
+    const activeCountry = getActiveCountry(state);
+    const authorizedPoles = getCountryScopedPoles(state, accessContext.poles.length ? accessContext.poles : reporting.poles);
+    if (!authorizedPoles.length) {
+      poleSelect.innerHTML = `<option>Aucun pole autorise</option>`;
+      poleSelect.disabled = true;
+      const accessScope = $("#pole-access-scope");
+      if (accessScope) {
+        accessScope.textContent = `Acces: aucun pole autorise pour ${activeCountry.name}`;
+      }
+      if (cycleSelect) {
+        cycleSelect.innerHTML = reporting.cycles
+          .map((cycle) => `<option value="${escapeHtml(cycle.value)}" ${cycle.value === state.currentPoleCycle ? "selected" : ""}>${escapeHtml(cycle.value)}</option>`)
+          .join("");
+      }
+      return;
+    }
     if (!authorizedPoles.some((pole) => pole.id === state.currentPoleMonitor)) {
       state.currentPoleMonitor = authorizedPoles[0]?.id || reporting.defaultPole;
     }
@@ -755,8 +948,8 @@
     const accessScope = $("#pole-access-scope");
     if (accessScope) {
       accessScope.textContent = accessContext.isRestricted
-        ? `Acces: ${accessContext.activeRule?.responsible || "Utilisateur"} - ${authorizedPoles.map((pole) => pole.name).join(", ")}`
-        : "Acces: tous les poles";
+        ? `Acces: ${accessContext.activeRule?.responsible || "Utilisateur"} - ${authorizedPoles.map((pole) => pole.name).join(", ")} - ${activeCountry.name}`
+        : `Acces: tous les poles - ${activeCountry.name}`;
     }
 
     if (!cycleSelect) return;
@@ -784,12 +977,14 @@
     if (!panel) return;
     const quality = state.kpiCalculationQuality || {};
     const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const activeCountry = getActiveCountry(state);
+    const countryResults = filterRowsByCountry(results, activeCountry);
     const status = $("#kpi-engine-status");
     const summary = $("#kpi-engine-summary");
     const proposals = $("#kpi-engine-proposals");
-    const selectedPoleResults = results.filter((item) => item.poleId === state.currentPoleMonitor);
+    const selectedPoleResults = countryResults.filter((item) => item.poleId === state.currentPoleMonitor);
     const configured = Boolean(quality.configured);
-    const calculated = quality.calculatedCount || results.length || 0;
+    const calculated = isGroupCountry(activeCountry) ? quality.calculatedCount || results.length || 0 : countryResults.length;
     const calculationGroups = quality.calculationGroups || 0;
     const matchRate = quality.matchRate || 0;
 
@@ -800,7 +995,7 @@
 
     if (summary) {
       const cards = [
-        { label: "KPI calcules", value: calculated, hint: "tous poles" },
+        { label: "KPI calcules", value: calculated, hint: activeCountry.name },
         { label: "KPI du pole", value: selectedPoleResults.length, hint: "filtre actif" },
         { label: "Rapprochement", value: `${matchRate}%`, hint: `${quality.matchedCalculationGroups || 0}/${calculationGroups} groupes` },
         { label: "Ecarts", value: quality.unmatchedCalculationCount || 0, hint: "pole, KPI ou periode" },
@@ -840,7 +1035,18 @@
     renderCalculationEnginePanel(state);
 
     const accessContext = getPoleAccessContext(state);
-    const authorizedPoles = accessContext.poles.length ? accessContext.poles : reporting.poles;
+    const activeCountry = getActiveCountry(state);
+    const authorizedPoles = getCountryScopedPoles(state, accessContext.poles.length ? accessContext.poles : reporting.poles);
+    if (!authorizedPoles.length) {
+      if (poleSelect) {
+        poleSelect.innerHTML = `<option>Aucun pole autorise</option>`;
+        poleSelect.disabled = true;
+      }
+      if (title) title.textContent = `Aucun KPI disponible - ${activeCountry.name}`;
+      if (total) total.textContent = "0 KPI";
+      directory.innerHTML = `<div class="empty-kpi-state">Aucun pole n'est autorise pour ${escapeHtml(activeCountry.name)} avec ce profil.</div>`;
+      return;
+    }
     if (!authorizedPoles.some((pole) => pole.id === state.currentPoleMonitor)) {
       state.currentPoleMonitor = authorizedPoles[0]?.id || reporting.defaultPole;
     }
@@ -848,7 +1054,7 @@
       authorizedPoles.find((item) => item.id === state.currentPoleMonitor) || authorizedPoles[0] || reporting.poles[0];
     const selectedKpis = reporting.kpisByPole[selectedPole.id] || [];
     if (poleSelect) poleSelect.value = selectedPole.id;
-    if (title) title.textContent = `KPI - ${selectedPole.name}`;
+    if (title) title.textContent = `KPI - ${selectedPole.name} - ${activeCountry.name}`;
     if (total) total.textContent = `${selectedKpis.length} KPI`;
 
     directory.innerHTML = [selectedPole]
@@ -869,6 +1075,7 @@
               </div>
               <div class="pole-kpi-counts">
                 <span class="status-pill ${poleStatus}">${kpis.length} KPI</span>
+                <span class="status-pill ${countryStatusClass(activeCountry)}">Pays: ${escapeHtml(activeCountry.name)}</span>
                 <span><i class="green"></i>${greenCount} vert(s)</span>
                 <span><i class="amber"></i>${amberCount} orange(s)</span>
                 <span><i class="red"></i>${redCount} rouge(s)</span>
@@ -1781,11 +1988,12 @@
     renderSparkline();
     renderCatalogStats();
     renderCalendarSlicer(state);
+    renderCountryDashboard(state);
     renderPoleSummaryTables(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
     renderReportCalendar();
-    renderKoboTable("", state.koboSubmissions);
+    renderKoboTable("", state.koboSubmissions, state.calendarBranchFilter);
     renderCollectionForms();
     renderMethodologyControls();
     renderKoboPipeline();
@@ -1810,9 +2018,11 @@
     $,
     renderAll,
     renderPoleControls,
+    renderPoleSummaryTables,
     renderKoboTable,
     renderKpiTable,
     renderCalendarSlicer,
+    renderCountryDashboard,
     renderPoleMonitor,
     renderValidationQueue,
     renderReportControls,

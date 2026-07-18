@@ -7,6 +7,8 @@
     renderKoboTable,
     renderKpiTable,
     renderCalendarSlicer,
+    renderCountryDashboard,
+    renderPoleSummaryTables,
     renderPoleControls,
     renderPoleMonitor,
     renderValidationQueue,
@@ -1080,6 +1082,17 @@
     if (toastMessage) showToast(toastMessage);
   }
 
+  function applyCountryScope(countryValue, toastMessage) {
+    state.calendarBranchFilter = countryValue || "Groupe";
+    renderCalendarSlicer(state);
+    renderCountryDashboard(state);
+    renderPoleSummaryTables(state);
+    renderPoleControls(state);
+    renderPoleMonitor(state);
+    renderKoboTable("", state.koboSubmissions, state.calendarBranchFilter);
+    if (toastMessage) showToast(toastMessage);
+  }
+
   function setCalendarView(offset) {
     const current = state.calendar || buildCalendarSelection("month", new Date());
     const nextView = new Date(current.viewYear, current.viewMonth + offset, 1);
@@ -1159,10 +1172,7 @@
     });
 
     branchFilter?.addEventListener("change", () => {
-      state.calendarBranchFilter = branchFilter.value;
-      const topbarBranch = $("#branch-filter");
-      if (topbarBranch) topbarBranch.value = branchFilter.value;
-      showToast(`Filiale active: ${branchFilter.value}.`);
+      applyCountryScope(branchFilter.value, `Pays / filiale actif: ${branchFilter.value}.`);
     });
 
     cycleFilter?.addEventListener("change", () => {
@@ -1183,6 +1193,12 @@
           ? "Tous les statuts sont visibles."
           : `Statut ${statusFilter.value.toLowerCase()} selectionne.`
       );
+    });
+
+    document.addEventListener("click", (event) => {
+      const countryButton = event.target.closest("[data-country-filter]");
+      if (!countryButton || countryButton.disabled) return;
+      applyCountryScope(countryButton.dataset.countryFilter, `Pays / filiale actif: ${countryButton.dataset.countryFilter}.`);
     });
 
     slicer.addEventListener("click", (event) => {
@@ -1251,7 +1267,7 @@
     });
 
     $("#branch-filter").addEventListener("change", (event) => {
-      showToast(`Perimetre actif: ${event.target.value}. Pret pour branchement API Kobo/PMS.`);
+      applyCountryScope(event.target.value, `Pays / filiale actif: ${event.target.value}.`);
     });
   }
 

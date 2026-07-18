@@ -765,6 +765,57 @@ textarea {
   margin-bottom: 16px;
 }
 
+.country-performance-panel {
+  margin-bottom: 16px;
+}
+
+.country-score-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.country-score-card {
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff, #f7f9fc);
+  padding: 14px;
+}
+
+.country-score-card span,
+.country-score-card small,
+.country-code {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.country-score-card strong {
+  display: block;
+  color: var(--palladium-blue);
+  font-size: 26px;
+  margin: 7px 0 4px;
+}
+
+.country-table-wrap {
+  margin-bottom: 0;
+}
+
+.country-performance-table {
+  min-width: 920px;
+}
+
+.country-performance-table td {
+  vertical-align: middle;
+}
+
+.country-performance-table .ghost-action:disabled {
+  cursor: default;
+  opacity: 0.66;
+}
+
 #dashboard > .hero-panel,
 #dashboard > .metric-grid,
 #dashboard > .dashboard-grid {
@@ -2834,6 +2885,7 @@ td small {
 
   .metric-grid,
   .dashboard-grid,
+  .country-score-grid,
   .pole-dashboard-grid,
   .alert-board,
   .action-grid,
@@ -2911,6 +2963,7 @@ td small {
 
   .metric-grid,
   .dashboard-grid,
+  .country-score-grid,
   .pole-dashboard-grid,
   .alert-board,
   .action-grid,

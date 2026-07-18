@@ -34,19 +34,17 @@ def main() -> None:
     ensure_database(db_path)
 
     os.environ["PMS_DB_PATH"] = str(db_path)
-    os.execv(
+    command = [
         sys.executable,
-        [
-            sys.executable,
-            str(ROOT_DIR / "server.py"),
-            "--host",
-            str(args.host),
-            "--port",
-            str(args.port),
-            "--db",
-            str(db_path),
-        ],
-    )
+        str(ROOT_DIR / "server.py"),
+        "--host",
+        str(args.host),
+        "--port",
+        str(args.port),
+        "--db",
+        str(db_path),
+    ]
+    raise SystemExit(subprocess.call(command, cwd=ROOT_DIR))
 
 
 if __name__ == "__main__":

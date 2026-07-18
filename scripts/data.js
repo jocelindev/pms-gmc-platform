@@ -330,6 +330,17 @@
       ],
     },
 
+    countries: [
+      { id: "Groupe", code: "GROUPE", name: "Groupe", score: 82, quality: 88, readiness: 74, kpiCount: 74, activePoles: 15, lateSubmissions: 0, status: "Consolide", className: "green" },
+      { id: "CI", code: "CI", name: "Cote d'Ivoire", score: 88, quality: 92, readiness: 84, kpiCount: 74, activePoles: 15, lateSubmissions: 0, status: "Valide", className: "green" },
+      { id: "BJ", code: "BJ", name: "Benin", score: 84, quality: 89, readiness: 80, kpiCount: 44, activePoles: 15, lateSubmissions: 0, status: "Valide", className: "green" },
+      { id: "CM", code: "CM", name: "Cameroun", score: 79, quality: 86, readiness: 76, kpiCount: 44, activePoles: 15, lateSubmissions: 1, status: "A surveiller", className: "amber" },
+      { id: "CG", code: "CG", name: "Congo", score: 73, quality: 81, readiness: 69, kpiCount: 44, activePoles: 15, lateSubmissions: 2, status: "A surveiller", className: "amber" },
+      { id: "GN", code: "GN", name: "Guinee Conakry", score: 69, quality: 78, readiness: 64, kpiCount: 44, activePoles: 15, lateSubmissions: 2, status: "Plan requis", className: "red" },
+      { id: "GW", code: "GW", name: "Guinee-Bissau", score: 62, quality: 74, readiness: 58, kpiCount: 44, activePoles: 15, lateSubmissions: 3, status: "Plan requis", className: "red" },
+      { id: "NIG", code: "NIG", name: "Niger", score: 71, quality: 79, readiness: 66, kpiCount: 4, activePoles: 1, lateSubmissions: 1, status: "A surveiller", className: "amber", poleIds: ["BRD"] },
+    ],
+
     branchScores: [
       { name: "Cote d'Ivoire", score: 88 },
       { name: "Benin", score: 84 },
@@ -337,6 +348,7 @@
       { name: "Congo", score: 73 },
       { name: "Guinee Conakry", score: 69 },
       { name: "Guinee-Bissau", score: 62 },
+      { name: "Niger", score: 71 },
     ],
 
     groups: [
@@ -444,6 +456,7 @@
       { form: "KBO-FIN-MENS-01", branch: "Benin", kpi: "Ratio MS/CA", collector: "S. Houngue", status: "Erreur mapping", className: "red" },
       { form: "KBO-RH-HEBD-01", branch: "Guinee Conakry", kpi: "Taux d'absenteisme", collector: "I. Diallo", status: "A valider", className: "amber" },
       { form: "KBO-QUAL-MENS-01", branch: "Cameroun", kpi: "Quality Score", collector: "L. Mbarga", status: "Valide", className: "green" },
+      { form: "KBO-BRD-MENS-02", branch: "Niger", kpi: "Performance MRE", collector: "Equipe Hoope Niger", status: "A valider", className: "amber" },
     ],
 
     koboPipeline: [

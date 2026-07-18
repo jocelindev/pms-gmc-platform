@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=powerbi-ribbon-2026" />
+    <link rel="stylesheet" href="styles.css?v=country-axis-2026" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -116,7 +116,7 @@
               </select>
             </label>
             <label>
-              Filiale
+              Pays / Filiale
               <select id="branch-filter">
                 <option value="Groupe">Groupe</option>
                 <option value="Cote d'Ivoire">Cote d'Ivoire</option>
@@ -125,6 +125,7 @@
                 <option value="Congo">Congo</option>
                 <option value="Guinee-Bissau">Guinee-Bissau</option>
                 <option value="Guinee Conakry">Guinee Conakry</option>
+                <option value="Niger">Niger</option>
               </select>
             </label>
           </div>
@@ -163,7 +164,7 @@
               <select id="calendar-pole-filter"></select>
             </label>
             <label class="powerbi-filter-box">
-              <span>Filiale</span>
+              <span>Pays / Filiale</span>
               <select id="calendar-branch-filter">
                 <option value="Groupe">Groupe</option>
                 <option value="Cote d'Ivoire">Cote d'Ivoire</option>
@@ -172,6 +173,7 @@
                 <option value="Congo">Congo</option>
                 <option value="Guinee-Bissau">Guinee-Bissau</option>
                 <option value="Guinee Conakry">Guinee Conakry</option>
+                <option value="Niger">Niger</option>
               </select>
             </label>
             <label class="powerbi-filter-box">
@@ -239,6 +241,33 @@
             </article>
           </div>
 
+          <section class="panel country-performance-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Pays / Filiale</p>
+                <h3>Synthese de performance par pays</h3>
+              </div>
+              <span class="status-pill green" id="country-active-scope">Groupe</span>
+            </div>
+            <div class="country-score-grid" id="country-summary-cards"></div>
+            <div class="table-wrap country-table-wrap">
+              <table class="country-performance-table">
+                <thead>
+                  <tr>
+                    <th>Pays</th>
+                    <th>Score</th>
+                    <th>KPI attendus</th>
+                    <th>Qualite Kobo</th>
+                    <th>Rapport</th>
+                    <th>Retards</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="country-performance-table"></tbody>
+              </table>
+            </div>
+          </section>
+
           <section class="panel dashboard-poles-panel">
             <div class="panel-header">
               <div>
@@ -270,8 +299,8 @@
             <section class="panel span-2">
               <div class="panel-header">
                 <div>
-                  <p class="eyebrow">Benchmark inter-filiales</p>
-                  <h3>Indice de performance filiale</h3>
+                  <p class="eyebrow">Benchmark pays</p>
+                  <h3>Indice de performance pays / filiale</h3>
                 </div>
                 <button class="ghost-action">Exporter</button>
               </div>
@@ -1239,9 +1268,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=powerbi-ribbon-2026"></script>
-    <script src="scripts/renderers.js?v=powerbi-ribbon-2026"></script>
-    <script src="scripts/api.js?v=powerbi-ribbon-2026"></script>
-    <script src="app.js?v=powerbi-ribbon-2026"></script>
+    <script src="scripts/data.js?v=country-axis-2026"></script>
+    <script src="scripts/renderers.js?v=country-axis-2026"></script>
+    <script src="scripts/api.js?v=country-axis-2026"></script>
+    <script src="app.js?v=country-axis-2026"></script>
   </body>
 </html>
