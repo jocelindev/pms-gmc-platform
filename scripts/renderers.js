@@ -1556,55 +1556,6 @@
     `;
   }
 
-  function renderDashboardKpiCards(context) {
-    const target = $("#dashboard-pole-kpi-cards");
-    const badge = $("#dashboard-kpi-card-count");
-    if (!target) return;
-    const rows = context.kpiRows || [];
-    if (badge) {
-      badge.className = `status-pill ${rows.length ? "green" : "gray"}`;
-      badge.textContent = `${rows.length} KPI`;
-    }
-    if (!context.selectedPole) {
-      target.innerHTML = `<div class="empty-kpi-state">Aucun pole autorise sur ce perimetre.</div>`;
-      return;
-    }
-    if (!rows.length) {
-      target.innerHTML = `<div class="empty-kpi-state">Aucun KPI disponible pour ${escapeHtml(context.selectedPole.name)}.</div>`;
-      return;
-    }
-    target.innerHTML = rows
-      .map((row) => {
-        const targetMetric = metricFromTarget(row.kpi);
-        const status = row.kpi.status || "gray";
-        return `
-          <article class="dashboard-kpi-card status-${escapeHtml(status)}">
-            <div class="dashboard-kpi-card-head">
-              <span class="code-chip">${escapeHtml(row.kpi.id || row.pole.id)}</span>
-              ${statusPill(ragLabel(status), status)}
-            </div>
-            <h4>${escapeHtml(row.kpi.name)}</h4>
-            <div class="dashboard-kpi-value-row">
-              <div>
-                <span>Valeur du jour</span>
-                <strong>${escapeHtml(dayValueLabel(row.kpi))}</strong>
-              </div>
-              <div>
-                <span>Cumul mois a date</span>
-                <strong>${escapeHtml(monthToDateValueLabel(row.kpi))}</strong>
-              </div>
-            </div>
-            ${renderTrendStrip(row.kpi, row.pole)}
-            <div class="dashboard-kpi-card-footer">
-              <span>Objectif: ${escapeHtml(row.kpi.target || "A completer")}</span>
-              <strong class="${escapeHtml(targetMetric.className)}">${escapeHtml(targetMetric.display)}</strong>
-            </div>
-          </article>
-        `;
-      })
-      .join("");
-  }
-
   function renderDashboardKpiTable(context) {
     const table = $("#dashboard-kpi-detail-table");
     const count = $("#dashboard-kpi-table-count");
@@ -1644,7 +1595,6 @@
     const context = getDashboardPoleContext(state);
     renderDashboardControlCards(context);
     renderDashboardAlerts(context, state);
-    renderDashboardKpiCards(context);
     renderDashboardKpiTable(context);
   }
 
