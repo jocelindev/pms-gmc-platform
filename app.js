@@ -312,8 +312,28 @@
     };
   }
 
+  function buildMonthToDateSelection(anchorDate = new Date()) {
+    const anchor = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
+    const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    const anchorLabel = anchor.toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+
+    return {
+      preset: "monthToDate",
+      start: toIsoDate(start),
+      end: toIsoDate(anchor),
+      selectedDate: toIsoDate(anchor),
+      label: start.getTime() === anchor.getTime() ? `Jour du ${anchorLabel}` : `Cumul du 01 au ${anchorLabel}`,
+      viewYear: anchor.getFullYear(),
+      viewMonth: anchor.getMonth(),
+    };
+  }
+
   function cycleFromCalendarPreset(preset) {
-    if (preset === "today") return "Journalier";
+    if (preset === "today" || preset === "monthToDate") return "Journalier";
     if (preset === "week") return "Hebdomadaire";
     if (preset === "quarter") return "Trimestriel";
     if (preset === "year") return "Annuel";
@@ -432,7 +452,7 @@
     kpiCalculationResults: [],
     kpiCalculationQuality: null,
     kpiObjectives: [],
-    calendar: buildCalendarSelection("today", new Date()),
+    calendar: buildMonthToDateSelection(new Date()),
     actorScope: "responsable",
     calendarPoleFilter: PMS_DATA.reporting.defaultPole,
     calendarBranchFilter: "Groupe",
@@ -1286,7 +1306,7 @@
             ? new Date()
             : new Date(state.calendar.viewYear, state.calendar.viewMonth, 1);
         applyCalendarSelection(
-          buildCalendarSelection(preset, anchor),
+          preset === "today" ? buildMonthToDateSelection(anchor) : buildCalendarSelection(preset, anchor),
           `Periode ${button.textContent.trim().toLowerCase()} appliquee au reporting.`
         );
       });
@@ -1315,10 +1335,9 @@
         renderCalendarSlicer(state);
         return;
       }
-      const preset = presetFromCycle(state.currentReportCycle);
       applyCalendarSelection(
-        buildCalendarSelection(preset, selectedDate),
-        "Date appliquee au reporting."
+        buildMonthToDateSelection(selectedDate),
+        "Cumul mensuel applique jusqu'a la date selectionnee."
       );
     });
 
@@ -1346,7 +1365,9 @@
       state.currentReportCycle = cycleFilter.value;
       const anchor = fromIsoDate(state.calendar.start) || new Date();
       applyCalendarSelection(
-        buildCalendarSelection(presetFromCycle(cycleFilter.value), anchor),
+        cycleFilter.value === "Journalier"
+          ? buildMonthToDateSelection(anchor)
+          : buildCalendarSelection(presetFromCycle(cycleFilter.value), anchor),
         `Cycle ${cycleFilter.value.toLowerCase()} applique.`
       );
     });
@@ -1372,33 +1393,11 @@
       if (!dayButton) return;
       const clickedDate = fromIsoDate(dayButton.dataset.calendarDate);
       if (!clickedDate) return;
-      const currentStart = fromIsoDate(state.calendar.start);
-      const currentEnd = fromIsoDate(state.calendar.end);
-      const clickedIso = toIsoDate(clickedDate);
-      let start = clickedIso;
-      let end = clickedIso;
-
-      if (currentStart && currentEnd && state.calendar.start === state.calendar.end) {
-        if (clickedDate >= currentStart) {
-          start = state.calendar.start;
-          end = clickedIso;
-        } else {
-          start = clickedIso;
-          end = state.calendar.start;
-        }
-      }
-
       applyCalendarSelection(
-        {
-          ...state.calendar,
-          preset: "custom",
-          start,
-          end,
-          label: start === end ? "Jour selectionne" : "Periode personnalisee",
-          viewYear: clickedDate.getFullYear(),
-          viewMonth: clickedDate.getMonth(),
-        },
-        "Periode personnalisee appliquee."
+        buildMonthToDateSelection(clickedDate),
+        clickedDate.getDate() === 1
+          ? "Donnee du premier jour du mois appliquee."
+          : "Cumul mensuel applique jusqu'au jour selectionne."
       );
     });
 
