@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import datetime as dt
 import hashlib
 import hmac
 import json
@@ -1497,6 +1498,77 @@ def text_or_empty(value) -> str:
     return str(value).strip()
 
 
+PERIOD_MONTH_INDEX = {
+    "janvier": 1,
+    "janv": 1,
+    "fevrier": 2,
+    "fevr": 2,
+    "mars": 3,
+    "avril": 4,
+    "avr": 4,
+    "mai": 5,
+    "juin": 6,
+    "juillet": 7,
+    "juil": 7,
+    "aout": 8,
+    "septembre": 9,
+    "sept": 9,
+    "octobre": 10,
+    "oct": 10,
+    "novembre": 11,
+    "nov": 11,
+    "decembre": 12,
+    "dec": 12,
+}
+
+
+def safe_date(year: int, month: int, day: int) -> dt.date | None:
+    try:
+        return dt.date(year, month, day)
+    except ValueError:
+        return None
+
+
+def parse_daily_period_date(value) -> dt.date | None:
+    raw_value = text_or_empty(value)
+    if not raw_value:
+        return None
+
+    compact_date = re.search(r"\b(20\d{2})(\d{2})(\d{2})\b", raw_value)
+    if compact_date:
+        return safe_date(int(compact_date.group(1)), int(compact_date.group(2)), int(compact_date.group(3)))
+
+    iso_date = re.search(r"\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b", raw_value)
+    if iso_date:
+        return safe_date(int(iso_date.group(1)), int(iso_date.group(2)), int(iso_date.group(3)))
+
+    dmy_date = re.search(r"\b(\d{1,2})[-/](\d{1,2})[-/](20\d{2})\b", raw_value)
+    if dmy_date:
+        return safe_date(int(dmy_date.group(3)), int(dmy_date.group(2)), int(dmy_date.group(1)))
+
+    normalized = normalize_match_key(raw_value)
+    named_date = re.search(r"\b(\d{1,2})\s+([a-z]+)\s+(20\d{2})\b", normalized)
+    if named_date:
+        month_key = named_date.group(2)
+        month = PERIOD_MONTH_INDEX.get(month_key)
+        if not month:
+            month = next(
+                (month_number for name, month_number in PERIOD_MONTH_INDEX.items() if month_key.startswith(name) or name.startswith(month_key)),
+                None,
+            )
+        if month:
+            return safe_date(int(named_date.group(3)), month, int(named_date.group(1)))
+
+    return None
+
+
+def month_to_date_label(target_date: dt.date) -> str:
+    start_date = target_date.replace(day=1)
+    if start_date == target_date:
+        return f"Jour du {target_date.isoformat()}"
+    return f"Cumul du {start_date.isoformat()} au {target_date.isoformat()}"
+
+
 def parse_number(value) -> float | None:
     if value in (None, ""):
         return None
@@ -1880,6 +1952,36 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 reference_by_kpi[key] = None
 
     groups: dict[tuple[str, str, str], dict] = {}
+    calculation_entries: list[dict] = []
+
+    def add_calculation_group(
+        pole_id: str,
+        kpi_key: str,
+        kpi_raw: str,
+        period_label: str,
+        element: dict,
+        *,
+        group_period_key: str | None = None,
+        period_start: str = "",
+        period_end: str = "",
+        period_type: str = "period",
+    ) -> None:
+        group_key = (pole_id, kpi_key, normalize_match_key(group_period_key or period_label))
+        group = groups.setdefault(
+            group_key,
+            {
+                "poleId": pole_id,
+                "kpiKey": kpi_key,
+                "kpiRaw": kpi_raw,
+                "period": period_label,
+                "periodStart": period_start,
+                "periodEnd": period_end,
+                "periodType": period_type,
+                "elements": [],
+            },
+        )
+        group["elements"].append(element)
+
     for row in calculation_rows:
         payload = parse_raw_payload(row)
         pole_raw = mapped_submission_value(
@@ -1927,27 +2029,72 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             quality["warnings"].append("Ligne de donnees ignoree: pole ou KPI non reconnu.")
             continue
 
-        group_key = (pole_id, kpi_key, normalize_match_key(period_label))
-        group = groups.setdefault(
-            group_key,
+        period_date = parse_daily_period_date(period_label)
+        kpi_raw_text = text_or_empty(kpi_raw or row["kpi_name"])
+        element = {
+            "label": text_or_empty(element_raw or "valeur"),
+            "value": value_raw if value_raw not in (None, "") else row["value"],
+            "branch": text_or_empty(branch_raw or row["branch"]),
+            "validation": text_or_empty(validation_raw or row["validation_status"]),
+        }
+        calculation_entries.append(
             {
                 "poleId": pole_id,
                 "kpiKey": kpi_key,
-                "kpiRaw": text_or_empty(kpi_raw or row["kpi_name"]),
-                "period": period_label,
-                "elements": [],
-            },
-        )
-        group["elements"].append(
-            {
-                "label": text_or_empty(element_raw or "valeur"),
-                "value": value_raw if value_raw not in (None, "") else row["value"],
-                "branch": text_or_empty(branch_raw or row["branch"]),
-                "validation": text_or_empty(validation_raw or row["validation_status"]),
+                "kpiRaw": kpi_raw_text,
+                "periodDate": period_date,
+                "element": element,
             }
+        )
+        add_calculation_group(
+            pole_id,
+            kpi_key,
+            kpi_raw_text,
+            period_label,
+            element,
+            period_start=period_date.isoformat() if period_date else "",
+            period_end=period_date.isoformat() if period_date else "",
+            period_type="day" if period_date else "period",
         )
 
     quality["calculationGroups"] = len(groups)
+
+    dated_entries = [entry for entry in calculation_entries if entry["periodDate"]]
+    scope_dates: dict[tuple[str, str], set[dt.date]] = {}
+    for entry in dated_entries:
+        scope_dates.setdefault((entry["poleId"], entry["kpiKey"]), set()).add(entry["periodDate"])
+
+    for (pole_id, kpi_key), target_dates in scope_dates.items():
+        scoped_entries = [
+            entry
+            for entry in dated_entries
+            if entry["poleId"] == pole_id and entry["kpiKey"] == kpi_key
+        ]
+        for target_date in sorted(target_dates):
+            start_date = target_date.replace(day=1)
+            month_elements = [
+                entry
+                for entry in scoped_entries
+                if entry["periodDate"].year == target_date.year
+                and entry["periodDate"].month == target_date.month
+                and start_date <= entry["periodDate"] <= target_date
+            ]
+            if not month_elements:
+                continue
+            sample = month_elements[0]
+            for entry in month_elements:
+                add_calculation_group(
+                    pole_id,
+                    kpi_key,
+                    sample["kpiRaw"],
+                    month_to_date_label(target_date),
+                    entry["element"],
+                    group_period_key=f"month-to-date-{target_date.isoformat()}",
+                    period_start=start_date.isoformat(),
+                    period_end=target_date.isoformat(),
+                    period_type="monthToDate",
+                )
+
     results: list[dict] = []
     pole_names = {row["id"]: row["name"] for row in conn.execute("SELECT id, name FROM poles").fetchall()}
     quality["referenceKpis"] = sorted(
@@ -1976,16 +2123,20 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     )
 
     for group in groups.values():
+        is_month_to_date = group.get("periodType") == "monthToDate"
         reference = reference_lookup.get((group["poleId"], group["kpiKey"])) or reference_by_kpi.get(group["kpiKey"])
         if not reference:
-            quality["unmatchedCalculationCount"] += 1
+            if not is_month_to_date:
+                quality["unmatchedCalculationCount"] += 1
             continue
 
-        quality["matchedCalculationGroups"] += 1
+        if not is_month_to_date:
+            quality["matchedCalculationGroups"] += 1
         value, method, formula_warnings = evaluate_kpi_formula(reference["formula"], group["elements"])
         if value is None:
-            quality["uncalculatedCount"] += 1
-            quality["warnings"].extend(formula_warnings[:1])
+            if not is_month_to_date:
+                quality["uncalculatedCount"] += 1
+                quality["warnings"].extend(formula_warnings[:1])
             continue
 
         status = rag_status(value, reference["target"], reference["kpiName"], reference["formula"])
@@ -1996,6 +2147,9 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "kpiId": reference["kpiId"],
             "kpiName": reference["kpiName"],
             "period": group["period"],
+            "periodStart": group.get("periodStart") or "",
+            "periodEnd": group.get("periodEnd") or "",
+            "periodType": group.get("periodType") or "period",
             "value": round(value, 4),
             "valueLabel": format_calculated_value(value, reference["unit"]),
             "target": reference["target"] or "A completer",
@@ -2011,12 +2165,14 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         }
         results.append(result)
 
+    exact_results = [result for result in results if result.get("periodType") != "monthToDate"]
+    quality["calculatedCount"] = len(exact_results)
+    quality["monthToDateCount"] = len(results) - len(exact_results)
     if quality["calculationGroups"]:
         quality["matchRate"] = round((quality["matchedCalculationGroups"] / quality["calculationGroups"]) * 100)
         quality["calculationRate"] = round((quality["calculatedCount"] / quality["calculationGroups"]) * 100)
-    quality["calculatedCount"] = len(results)
     if quality["calculationGroups"]:
-        quality["calculationRate"] = round((len(results) / quality["calculationGroups"]) * 100)
+        quality["calculationRate"] = round((quality["calculatedCount"] / quality["calculationGroups"]) * 100)
 
     if quality["unmatchedCalculationCount"]:
         quality["proposals"].append(

@@ -179,8 +179,8 @@
 
   function latestPeriod(results) {
     const latest = [...results]
-      .filter((item) => item.period)
-      .sort((left, right) => periodSortValue(left.period) - periodSortValue(right.period))
+      .filter((item) => item.period || item.periodEnd)
+      .sort((left, right) => periodSortValue(left.periodEnd || left.period) - periodSortValue(right.periodEnd || right.period))
       .pop();
     return latest?.period || "";
   }
@@ -239,6 +239,54 @@
       .map((part) => Number(part));
     if (!year || !month || !day) return null;
     return new Date(year, month - 1, day);
+  }
+
+  function periodDateFromText(period) {
+    const value = String(period || "").trim();
+    const compactDate = value.match(/\b(20\d{2})(\d{2})(\d{2})\b/);
+    if (compactDate) return new Date(Number(compactDate[1]), Number(compactDate[2]) - 1, Number(compactDate[3]));
+    const isoDate = value.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/);
+    if (isoDate) return new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]));
+    const dmyDate = value.match(/\b(\d{1,2})[-/](\d{1,2})[-/](20\d{2})\b/);
+    if (dmyDate) return new Date(Number(dmyDate[3]), Number(dmyDate[2]) - 1, Number(dmyDate[1]));
+    return null;
+  }
+
+  function resultMatchesCalendar(result = {}, calendar = {}) {
+    const calendarStart = fromIsoDate(calendar.start);
+    const calendarEnd = fromIsoDate(calendar.end);
+    if (!calendarStart || !calendarEnd) return true;
+
+    const startIso = toIsoDate(calendarStart);
+    const endIso = toIsoDate(calendarEnd);
+    const resultStart = fromIsoDate(result.periodStart);
+    const resultEnd = fromIsoDate(result.periodEnd);
+
+    if (resultStart && resultEnd) {
+      return toIsoDate(resultStart) === startIso && toIsoDate(resultEnd) === endIso;
+    }
+
+    const periodText = String(result.period || "");
+    if (periodText.includes(startIso) && periodText.includes(endIso)) return true;
+    if (normalizeLookup(periodText) === normalizeLookup(calendar.label)) return true;
+
+    const periodDate = periodDateFromText(result.period);
+    if (!periodDate) return false;
+    const periodIso = toIsoDate(periodDate);
+    if (calendar.preset === "monthToDate") {
+      return startIso === endIso && periodIso === startIso;
+    }
+    return periodIso >= startIso && periodIso <= endIso;
+  }
+
+  function calendarScopedResults(results = [], calendar = {}) {
+    if (!calendar?.start || !calendar?.end) return results;
+    const matches = results.filter((result) => resultMatchesCalendar(result, calendar));
+    if (calendar.preset === "monthToDate") {
+      const cumulativeMatches = matches.filter((result) => result.periodType === "monthToDate");
+      return cumulativeMatches.length ? cumulativeMatches : matches;
+    }
+    return matches;
   }
 
   function addCalendarDays(date, days) {
@@ -367,14 +415,17 @@
       : [];
     if (!results.length && !referenceKpis.length) return;
 
-    const sortedResults = [...results].sort((left, right) => periodSortValue(left.period) - periodSortValue(right.period));
+    const sortedResults = [...results].sort(
+      (left, right) => periodSortValue(left.periodEnd || left.periodStart || left.period) - periodSortValue(right.periodEnd || right.periodStart || right.period)
+    );
+    const scopedResults = calendarScopedResults(sortedResults, state.calendar);
     const historyByKpi = new Map();
     sortedResults.forEach((result) => {
       const key = kpiHistoryKey(result);
       if (!key || key === ":") return;
       const history = historyByKpi.get(key) || [];
       history.push({
-        period: result.period,
+        period: result.periodEnd || result.period,
         value: result.value,
         valueLabel: result.valueLabel,
         target: result.target,
@@ -386,7 +437,7 @@
     const byPole = new Map(
       PMS_DATA.reporting.poles.map((pole) => [pole.id, [...(PMS_DATA.reporting.kpisByPole[pole.id] || [])]])
     );
-    const calculatedKeys = new Set(sortedResults.map((result) => `${result.poleId}:${result.kpiId}`));
+    const calculatedKeys = new Set(scopedResults.map((result) => `${result.poleId}:${result.kpiId}`));
     referenceKpis
       .filter((kpi) => !calculatedKeys.has(`${kpi.poleId}:${kpi.kpiId}`))
       .forEach((kpi) => {
@@ -410,8 +461,13 @@
         });
       });
 
-    sortedResults.forEach((result) => {
+    scopedResults.forEach((result) => {
       if (!result.poleId) return;
+      const selectedEnd = fromIsoDate(state.calendar?.end);
+      const scopedHistory = (historyByKpi.get(kpiHistoryKey(result)) || []).filter((point) => {
+        const pointDate = periodDateFromText(point.period);
+        return !selectedEnd || !pointDate || pointDate <= selectedEnd;
+      });
       upsertKpiItem(byPole, result.poleId, {
         id: result.kpiId,
         name: result.kpiName,
@@ -423,11 +479,11 @@
         collectionFrequency: result.collectionFrequency || PMS_DATA.collectionCadenceByPole?.[result.poleId]?.cadence || "A preciser",
         reportingFrequency: result.reportingFrequency || PMS_DATA.collectionCadenceByPole?.[result.poleId]?.primary || "A preciser",
         calculated: true,
-        period: result.period,
+        period: state.calendar?.label || result.period,
         formula: result.formula,
         method: result.method,
         elementsCount: result.elementsCount,
-        trendHistory: historyByKpi.get(kpiHistoryKey(result)) || [],
+        trendHistory: scopedHistory,
       });
     });
 
@@ -438,7 +494,7 @@
       refreshPoleMetrics(poleId, kpis, {
         quality: Number.isFinite(matchRate) ? matchRate : undefined,
         readiness: Number.isFinite(calculationRate) ? calculationRate : undefined,
-        lastReport: latestPeriod(sortedResults.filter((item) => item.poleId === poleId)) || "Reference Kobo",
+        lastReport: latestPeriod(scopedResults.filter((item) => item.poleId === poleId)) || state.calendar?.label || "Reference Kobo",
         lateSubmissions: state.kpiCalculationQuality?.unmatchedCalculationCount || 0,
       });
     });
@@ -1256,6 +1312,7 @@
     state.currentPoleCycle = reportingCycle;
     state.currentReportCycle = reportingCycle;
     syncPeriodFilterFromCalendar();
+    applyCalculatedKpisToReporting();
     renderCalendarSlicer(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
