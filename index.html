@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=trend-signals-2026" />
+    <link rel="stylesheet" href="styles.css?v=dashboard-suite-2026" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -214,8 +214,8 @@
             </div>
             <div class="hero-score">
               <span>IPG</span>
-              <strong>82</strong>
-              <small>Performance groupe</small>
+              <strong id="dashboard-ipg-score">82</strong>
+              <small id="dashboard-ipg-label">Performance groupe</small>
             </div>
           </div>
 
@@ -240,6 +240,117 @@
               <strong id="catalog-stat-forms">--</strong>
               <span class="trend positive">Fiches Kobo</span>
             </article>
+          </div>
+
+          <section class="dashboard-command-zone">
+            <div class="dashboard-control-grid" id="dashboard-control-cards"></div>
+            <section class="panel dashboard-command-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Mode direction</p>
+                  <h3>Lecture executive des priorites</h3>
+                </div>
+                <span class="status-pill amber" id="dashboard-director-badge">Synthese</span>
+              </div>
+              <div class="dashboard-command-grid">
+                <div class="director-brief" id="dashboard-director-mode"></div>
+                <div class="dashboard-alerts-list" id="dashboard-alerts-list"></div>
+              </div>
+            </section>
+          </section>
+
+          <div class="dashboard-insights-grid">
+            <section class="panel span-2">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Heatmap</p>
+                  <h3>Performance Pole x Pays</h3>
+                </div>
+                <span class="status-pill gray">RAG</span>
+              </div>
+              <div class="dashboard-heatmap-wrap" id="dashboard-heatmap"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Classement</p>
+                  <h3>Meilleurs poles et poles en risque</h3>
+                </div>
+              </div>
+              <div class="dashboard-ranking-list" id="dashboard-pole-ranking"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Qualite Kobo</p>
+                  <h3>Collecte et completude</h3>
+                </div>
+              </div>
+              <div class="dashboard-quality-list" id="dashboard-quality-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Objectifs</p>
+                  <h3>Atteinte des cibles</h3>
+                </div>
+              </div>
+              <div class="dashboard-objective-list" id="dashboard-objective-summary"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Cadence</p>
+                  <h3>Vue par rythme de collecte</h3>
+                </div>
+              </div>
+              <div class="dashboard-cadence-list" id="dashboard-cadence-view"></div>
+            </section>
+
+            <section class="panel span-2">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Plan d'action</p>
+                  <h3>Actions liees aux KPI rouges</h3>
+                </div>
+              </div>
+              <div class="dashboard-actions-grid" id="dashboard-actions-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Prevision</p>
+                  <h3>Risques anticipes</h3>
+                </div>
+              </div>
+              <div class="dashboard-forecast-list" id="dashboard-forecast-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Audit</p>
+                  <h3>Journal de validation</h3>
+                </div>
+              </div>
+              <div class="dashboard-audit-list" id="dashboard-validation-log"></div>
+            </section>
+
+            <section class="panel span-2">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Detail KPI</p>
+                  <h3>KPI selectionne</h3>
+                </div>
+                <span class="status-pill gray" id="dashboard-kpi-detail-badge">Selection</span>
+              </div>
+              <div class="dashboard-kpi-detail" id="dashboard-detail-preview"></div>
+            </section>
           </div>
 
           <section class="panel country-performance-panel">
@@ -1283,9 +1394,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=trend-signals-2026"></script>
-    <script src="scripts/renderers.js?v=trend-signals-2026"></script>
-    <script src="scripts/api.js?v=trend-signals-2026"></script>
-    <script src="app.js?v=trend-signals-2026"></script>
+    <script src="scripts/data.js?v=dashboard-suite-2026"></script>
+    <script src="scripts/renderers.js?v=dashboard-suite-2026"></script>
+    <script src="scripts/api.js?v=dashboard-suite-2026"></script>
+    <script src="app.js?v=dashboard-suite-2026"></script>
   </body>
 </html>

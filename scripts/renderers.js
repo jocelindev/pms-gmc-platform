@@ -872,6 +872,482 @@
     };
   }
 
+  function averageNumber(values = []) {
+    const validValues = values.map(Number).filter((value) => Number.isFinite(value));
+    if (!validValues.length) return 0;
+    return Math.round(validValues.reduce((sum, value) => sum + value, 0) / validValues.length);
+  }
+
+  function scoreClass(score) {
+    if (score >= 80) return "green";
+    if (score >= 70) return "amber";
+    return "red";
+  }
+
+  function dashboardKpiKey(pole = {}, kpi = {}, index = 0) {
+    return `${pole.id || "POLE"}:${normalizeLookup(kpi.id || kpi.name)}:${index}`;
+  }
+
+  function statusWeight(status) {
+    if (status === "red") return 4;
+    if (status === "amber") return 3;
+    if (status === "gray") return 2;
+    return 1;
+  }
+
+  function getDashboardContext(state = {}) {
+    const activeCountry = getActiveCountry(state);
+    const isGroup = isGroupCountry(activeCountry);
+    const accessContext = getPoleAccessContext(state);
+    const visiblePoles = getCountryScopedPoles(state, accessContext.poles);
+    const authorizedCountries = getAuthorizedCountryOptions(state).filter((country) => !isGroupCountry(country));
+    const visibleCountries = isGroup
+      ? authorizedCountries
+      : authorizedCountries.filter((country) => country.name === activeCountry.name);
+    const safeCountries = visibleCountries.length ? visibleCountries : authorizedCountries;
+    const kpiRows = visiblePoles.flatMap((pole) =>
+      (PMS_DATA.reporting.kpisByPole[pole.id] || []).map((kpi, index) => ({
+        key: dashboardKpiKey(pole, kpi, index),
+        pole,
+        kpi,
+        index,
+      }))
+    );
+    return {
+      activeCountry,
+      isGroup,
+      accessContext,
+      visiblePoles,
+      visibleCountries: safeCountries,
+      kpiRows,
+    };
+  }
+
+  function kpiRiskScore(row) {
+    const trends = kpiTrendMetrics(row.kpi, row.pole);
+    const negativeTrends = trends.filter((metric) => metric.className === "negative").length;
+    const targetMetric = metricFromTarget(row.kpi);
+    return statusWeight(row.kpi.status) * 20 + negativeTrends * 9 + (targetMetric.className === "negative" ? 15 : 0);
+  }
+
+  function targetKnown(row) {
+    return metricFromTarget(row.kpi).className !== "empty";
+  }
+
+  function targetReached(row) {
+    const metric = metricFromTarget(row.kpi);
+    return metric.className === "positive" || metric.className === "neutral";
+  }
+
+  function dashboardCellScore(pole = {}, country = {}) {
+    if (Array.isArray(country.poleIds) && country.poleIds.length && !country.poleIds.includes(pole.id)) {
+      return null;
+    }
+    const seed = String(`${pole.id}${country.code || country.id}`)
+      .split("")
+      .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    const variation = (seed % 9) - 4;
+    return Math.max(0, Math.min(100, Math.round(pole.score * 0.56 + country.score * 0.34 + pole.quality * 0.1 + variation)));
+  }
+
+  function renderDashboardControlCards(context) {
+    const target = $("#dashboard-control-cards");
+    if (!target) return;
+    const totalKpis = context.kpiRows.length;
+    const redCount = context.kpiRows.filter((row) => row.kpi.status === "red").length;
+    const amberCount = context.kpiRows.filter((row) => row.kpi.status === "amber").length;
+    const knownTargets = context.kpiRows.filter(targetKnown);
+    const reachedTargets = knownTargets.filter(targetReached).length;
+    const objectiveRate = knownTargets.length ? Math.round((reachedTargets / knownTargets.length) * 100) : 0;
+    const score = averageNumber(context.visiblePoles.map((pole) => pole.score));
+    const quality = averageNumber(context.visiblePoles.map((pole) => pole.quality));
+    const lateSubmissions = context.visiblePoles.reduce((sum, pole) => sum + Number(pole.lateSubmissions || 0), 0);
+    const cards = [
+      { label: "Score global", value: score, hint: `${context.visiblePoles.length} pole(s)`, className: scoreClass(score) },
+      { label: "KPI critiques", value: redCount, hint: `${amberCount} KPI orange`, className: redCount ? "red" : amberCount ? "amber" : "green" },
+      { label: "Objectifs atteints", value: `${objectiveRate}%`, hint: `${reachedTargets}/${knownTargets.length || 0} cibles`, className: objectiveRate >= 80 ? "green" : objectiveRate >= 65 ? "amber" : "red" },
+      { label: "Qualite Kobo", value: `${quality}%`, hint: lateSubmissions ? `${lateSubmissions} retard(s)` : "collecte a jour", className: lateSubmissions ? "amber" : scoreClass(quality) },
+    ];
+    const ipgScore = $("#dashboard-ipg-score");
+    const ipgLabel = $("#dashboard-ipg-label");
+    if (ipgScore) ipgScore.textContent = score || "--";
+    if (ipgLabel) ipgLabel.textContent = `${context.activeCountry.name} - ${totalKpis} KPI visibles`;
+    target.innerHTML = cards
+      .map(
+        (card) => `
+          <article class="dashboard-control-card status-${escapeHtml(card.className)}">
+            <span>${escapeHtml(card.label)}</span>
+            <strong>${escapeHtml(card.value)}</strong>
+            <small>${escapeHtml(card.hint)}</small>
+          </article>
+        `
+      )
+      .join("");
+  }
+
+  function dashboardCriticalRows(context, limit = 6) {
+    return [...context.kpiRows]
+      .map((row) => ({ ...row, riskScore: kpiRiskScore(row) }))
+      .filter((row) => row.riskScore >= 60)
+      .sort((left, right) => right.riskScore - left.riskScore)
+      .slice(0, limit);
+  }
+
+  function renderDashboardDirectorMode(context, state = {}) {
+    const brief = $("#dashboard-director-mode");
+    const badge = $("#dashboard-director-badge");
+    if (!brief && !badge) return;
+    const criticalRows = dashboardCriticalRows(context, 4);
+    const score = averageNumber(context.visiblePoles.map((pole) => pole.score));
+    const lateSubmissions = context.visiblePoles.reduce((sum, pole) => sum + Number(pole.lateSubmissions || 0), 0);
+    const actionCount = context.visiblePoles.reduce((sum, pole) => sum + Number(pole.actionCount || 0), 0);
+    const mode = state.actorScope === "direction" ? "Direction" : "Responsable";
+    if (badge) {
+      badge.className = `status-pill ${criticalRows.length ? "amber" : "green"}`;
+      badge.textContent = mode;
+    }
+    if (!brief) return;
+    const topRisk = criticalRows[0];
+    brief.innerHTML = `
+      <div class="director-score status-${escapeHtml(scoreClass(score))}">
+        <span>Score pilotage</span>
+        <strong>${escapeHtml(score || "--")}</strong>
+        <small>${escapeHtml(context.activeCountry.name)}</small>
+      </div>
+      <div class="director-decisions">
+        <strong>${mode === "Direction" ? "Decisions a prendre" : "Priorites du responsable"}</strong>
+        <p>${criticalRows.length ? `${criticalRows.length} KPI a suivre en priorite, dont ${escapeHtml(topRisk.kpi.name)} sur ${escapeHtml(topRisk.pole.name)}.` : "Aucune alerte critique sur le perimetre actif."}</p>
+        <p>${lateSubmissions ? `${lateSubmissions} collecte(s) Kobo en retard a relancer.` : "Collectes Kobo sous controle sur le perimetre actif."}</p>
+        <p>${actionCount} action(s) ouverte(s) a suivre avant la prochaine validation.</p>
+      </div>
+    `;
+  }
+
+  function renderDashboardAlerts(context, state = {}) {
+    const target = $("#dashboard-alerts-list");
+    if (!target) return;
+    const rows = dashboardCriticalRows(context, 5);
+    if (!rows.length) {
+      target.innerHTML = `<div class="empty-kpi-state">Aucune alerte KPI critique sur le perimetre actif.</div>`;
+      return;
+    }
+    target.innerHTML = rows
+      .map((row) => {
+        const trends = kpiTrendMetrics(row.kpi, row.pole).filter((metric) => metric.className === "negative");
+        const reason = trends.length
+          ? `${trends.map((metric) => metric.label).join(", ")} defavorable`
+          : row.kpi.status === "red"
+            ? "Sous seuil critique"
+            : "A surveiller";
+        return `
+          <article class="dashboard-alert-row status-${escapeHtml(row.kpi.status)}">
+            <div>
+              <strong>${escapeHtml(row.kpi.name)}</strong>
+              <span>${escapeHtml(row.pole.name)} - ${escapeHtml(reason)}</span>
+            </div>
+            <button class="ghost-action" type="button" data-dashboard-kpi-detail="${escapeHtml(row.key)}">Detail</button>
+          </article>
+        `;
+      })
+      .join("");
+    if (!state.currentDashboardKpiKey || !context.kpiRows.some((row) => row.key === state.currentDashboardKpiKey)) {
+      state.currentDashboardKpiKey = rows[0]?.key || context.kpiRows[0]?.key || "";
+    }
+  }
+
+  function renderDashboardHeatmap(context) {
+    const target = $("#dashboard-heatmap");
+    if (!target) return;
+    const countries = context.visibleCountries.slice(0, 8);
+    if (!countries.length || !context.visiblePoles.length) {
+      target.innerHTML = `<div class="empty-kpi-state">Aucune donnee pays / pole disponible.</div>`;
+      return;
+    }
+    target.innerHTML = `
+      <table class="dashboard-heatmap-table">
+        <thead>
+          <tr>
+            <th>Pole</th>
+            ${countries.map((country) => `<th>${escapeHtml(country.code || country.name)}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${context.visiblePoles
+            .map(
+              (pole) => `
+                <tr>
+                  <td><strong>${escapeHtml(pole.id)}</strong><small>${escapeHtml(pole.name)}</small></td>
+                  ${countries
+                    .map((country) => {
+                      const score = dashboardCellScore(pole, country);
+                      return score === null
+                        ? `<td class="heat-cell empty">--</td>`
+                        : `<td class="heat-cell ${escapeHtml(scoreClass(score))}" title="${escapeHtml(pole.name)} - ${escapeHtml(country.name)}">${score}</td>`;
+                    })
+                    .join("")}
+                </tr>
+              `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function renderDashboardRanking(context) {
+    const target = $("#dashboard-pole-ranking");
+    if (!target) return;
+    const best = [...context.visiblePoles].sort((left, right) => right.score - left.score).slice(0, 3);
+    const risk = [...context.visiblePoles].sort((left, right) => left.score - right.score).slice(0, 3);
+    const rows = [
+      ...best.map((pole) => ({ pole, label: "Top", className: "green" })),
+      ...risk.map((pole) => ({ pole, label: "Risque", className: scoreClass(pole.score) })),
+    ];
+    target.innerHTML = rows.length
+      ? rows
+          .map(
+            ({ pole, label, className }) => `
+              <div class="dashboard-ranking-row">
+                <span class="status-pill ${escapeHtml(className)}">${escapeHtml(label)}</span>
+                <div>
+                  <strong>${escapeHtml(pole.name)}</strong>
+                  <small>${escapeHtml(pole.owner)}</small>
+                </div>
+                <b>${escapeHtml(pole.score)}</b>
+              </div>
+            `
+          )
+          .join("")
+      : `<div class="empty-kpi-state">Aucun pole autorise.</div>`;
+  }
+
+  function renderDashboardQuality(context, state = {}) {
+    const target = $("#dashboard-quality-list");
+    if (!target) return;
+    const activeCountry = context.activeCountry;
+    const submissions = filterRowsByCountry(state.koboSubmissions || PMS_DATA.koboSubmissions, activeCountry);
+    const rows = [...context.visiblePoles]
+      .sort((left, right) => Number(right.lateSubmissions || 0) - Number(left.lateSubmissions || 0) || left.quality - right.quality)
+      .slice(0, 5);
+    target.innerHTML = `
+      <div class="quality-summary-line">
+        <strong>${escapeHtml(submissions.length)}</strong>
+        <span>soumission(s) Kobo visibles - ${escapeHtml(activeCountry.name)}</span>
+      </div>
+      ${rows
+        .map(
+          (pole) => `
+            <div class="quality-row">
+              <div>
+                <strong>${escapeHtml(pole.id)}</strong>
+                <small>${escapeHtml(pole.lateSubmissions || 0)} retard(s)</small>
+              </div>
+              <div class="bar-track"><div class="bar-fill ${escapeHtml(scoreClass(pole.quality))}" style="width:${Math.max(0, Math.min(100, pole.quality))}%"></div></div>
+              <b>${escapeHtml(pole.quality)}%</b>
+            </div>
+          `
+        )
+        .join("")}
+    `;
+  }
+
+  function renderDashboardObjectives(context) {
+    const target = $("#dashboard-objective-summary");
+    if (!target) return;
+    const knownRows = context.kpiRows.filter(targetKnown);
+    const reached = knownRows.filter(targetReached);
+    const missing = context.kpiRows.length - knownRows.length;
+    const rate = knownRows.length ? Math.round((reached.length / knownRows.length) * 100) : 0;
+    const redObjectives = knownRows.filter((row) => metricFromTarget(row.kpi).className === "negative").slice(0, 3);
+    target.innerHTML = `
+      <div class="objective-rate-card status-${escapeHtml(scoreClass(rate))}">
+        <span>Taux d'atteinte</span>
+        <strong>${escapeHtml(rate)}%</strong>
+        <small>${escapeHtml(reached.length)}/${escapeHtml(knownRows.length)} cibles atteintes</small>
+      </div>
+      <div class="bar-track objective-track"><div class="bar-fill ${escapeHtml(scoreClass(rate))}" style="width:${rate}%"></div></div>
+      <div class="objective-mini-list">
+        ${redObjectives
+          .map((row) => `<span>${escapeHtml(row.pole.id)} - ${escapeHtml(row.kpi.name)}</span>`)
+          .join("") || "<span>Aucune cible critique detectee.</span>"}
+        ${missing ? `<span>${missing} KPI sans cible numerique exploitable.</span>` : ""}
+      </div>
+    `;
+  }
+
+  function renderDashboardCadence(context) {
+    const target = $("#dashboard-cadence-view");
+    if (!target) return;
+    const groups = ["Horaire", "Journalier", "Hebdomadaire", "Mensuel"].map((cadence) => {
+      const rows = context.kpiRows.filter((row) => matchesCadenceFilter(kpiCollectionFrequency(row.kpi, row.pole), cadence));
+      return {
+        cadence,
+        total: rows.length,
+        red: rows.filter((row) => row.kpi.status === "red").length,
+        amber: rows.filter((row) => row.kpi.status === "amber").length,
+      };
+    });
+    target.innerHTML = groups
+      .map(
+        (group) => `
+          <div class="cadence-card status-${escapeHtml(group.red ? "red" : group.amber ? "amber" : "green")}">
+            <span>${escapeHtml(group.cadence)}</span>
+            <strong>${escapeHtml(group.total)}</strong>
+            <small>${escapeHtml(group.red)} rouge(s), ${escapeHtml(group.amber)} orange(s)</small>
+          </div>
+        `
+      )
+      .join("");
+  }
+
+  function renderDashboardActions(context) {
+    const target = $("#dashboard-actions-list");
+    if (!target) return;
+    const criticalRows = dashboardCriticalRows(context, 4);
+    const plans = criticalRows.length
+      ? criticalRows.map((row, index) => ({
+          title: `Redresser ${row.kpi.name}`,
+          owner: row.pole.owner,
+          due: cadenceProfileForPole(row.pole).expectedDelay || "Prochaine validation",
+          progress: PMS_DATA.actionPlans[index % PMS_DATA.actionPlans.length]?.progress || 35,
+          detail: `${row.pole.name} - valeur ${row.kpi.value}, cible ${row.kpi.target}.`,
+          key: row.key,
+        }))
+      : PMS_DATA.actionPlans.slice(0, 3);
+    target.innerHTML = plans
+      .map(
+        (plan) => `
+          <article class="dashboard-action-card">
+            <div>
+              <strong>${escapeHtml(plan.title)}</strong>
+              <p>${escapeHtml(plan.detail)}</p>
+            </div>
+            <div class="dashboard-action-meta">
+              <span>${escapeHtml(plan.owner)}</span>
+              <span>${escapeHtml(plan.due)}</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill ${plan.progress >= 70 ? "green" : plan.progress >= 45 ? "amber" : "red"}" style="width:${Math.max(0, Math.min(100, plan.progress))}%"></div></div>
+          </article>
+        `
+      )
+      .join("");
+  }
+
+  function renderDashboardForecast(context) {
+    const target = $("#dashboard-forecast-list");
+    if (!target) return;
+    const rows = context.kpiRows
+      .filter((row) => row.kpi.status !== "red" && kpiTrendMetrics(row.kpi, row.pole).some((metric) => metric.className === "negative"))
+      .sort((left, right) => kpiRiskScore(right) - kpiRiskScore(left))
+      .slice(0, 4);
+    target.innerHTML = rows.length
+      ? rows
+          .map(
+            (row) => `
+              <div class="forecast-row">
+                <span class="status-pill ${escapeHtml(row.kpi.status || "amber")}">Alerte</span>
+                <div>
+                  <strong>${escapeHtml(row.kpi.name)}</strong>
+                  <small>${escapeHtml(row.pole.name)} - tendance defavorable avant cloture.</small>
+                </div>
+              </div>
+            `
+          )
+          .join("")
+      : `<div class="empty-kpi-state">Aucun risque anticipe sur les tendances visibles.</div>`;
+  }
+
+  function renderDashboardValidationLog(context, state = {}) {
+    const target = $("#dashboard-validation-log");
+    if (!target) return;
+    const queue = (state.validationQueue || PMS_DATA.validationQueue || [])
+      .filter((item) => context.visiblePoles.some((pole) => pole.id === item.pole))
+      .slice(0, 4);
+    const audit = (PMS_DATA.auditTrail || []).slice(0, Math.max(0, 4 - queue.length));
+    target.innerHTML = [
+      ...queue.map(
+        (item) => `
+          <div class="audit-row">
+            <span class="status-pill ${escapeHtml(item.className || "amber")}">${escapeHtml(item.status)}</span>
+            <div>
+              <strong>${escapeHtml(item.form)}</strong>
+              <small>${escapeHtml(item.issue)} - ${escapeHtml(item.owner)}</small>
+            </div>
+          </div>
+        `
+      ),
+      ...audit.map(
+        (item) => `
+          <div class="audit-row">
+            <span class="status-pill gray">Trace</span>
+            <div><small>${escapeHtml(item)}</small></div>
+          </div>
+        `
+      ),
+    ].join("");
+  }
+
+  function renderDashboardKpiDetail(context, state = {}) {
+    const target = $("#dashboard-detail-preview");
+    const badge = $("#dashboard-kpi-detail-badge");
+    if (!target) return;
+    const selected =
+      context.kpiRows.find((row) => row.key === state.currentDashboardKpiKey) ||
+      dashboardCriticalRows(context, 1)[0] ||
+      context.kpiRows[0];
+    if (!selected) {
+      target.innerHTML = `<div class="empty-kpi-state">Aucun KPI disponible.</div>`;
+      return;
+    }
+    state.currentDashboardKpiKey = selected.key;
+    if (badge) {
+      badge.className = `status-pill ${escapeHtml(selected.kpi.status || "gray")}`;
+      badge.textContent = ragLabel(selected.kpi.status || "gray");
+    }
+    const profile = getObjectiveCatalogProfile(selected.kpi, selected.pole);
+    target.innerHTML = `
+      <div class="dashboard-kpi-detail-head">
+        <div>
+          <span class="code-chip">${escapeHtml(selected.pole.id)}</span>
+          <h4>${escapeHtml(selected.kpi.name)}</h4>
+          <p>${escapeHtml(selected.pole.name)} - ${escapeHtml(selected.pole.owner)}</p>
+        </div>
+        <div class="kpi-detail-value">
+          <span>Valeur</span>
+          <strong>${escapeHtml(selected.kpi.value)}</strong>
+        </div>
+      </div>
+      ${renderTrendStrip(selected.kpi, selected.pole)}
+      <div class="kpi-detail-grid">
+        <div><span>Objectif</span><strong>${escapeHtml(selected.kpi.target)}</strong></div>
+        <div><span>Source Kobo</span><strong>${escapeHtml(selected.kpi.source)}</strong></div>
+        <div><span>Collecte</span><strong>${escapeHtml(kpiCollectionFrequency(selected.kpi, selected.pole))}</strong></div>
+        <div><span>Validation</span><strong>${escapeHtml(profile.hierarchicalValidation || "Sous reserve")}</strong></div>
+      </div>
+      <div class="kpi-detail-formula">
+        <strong>Formule</strong>
+        <p>${escapeHtml(selected.kpi.formula || profile.formula || "A completer")}</p>
+      </div>
+      <button class="primary-action" type="button" data-open-pole="${escapeHtml(selected.pole.id)}">Ouvrir le suivi du pole</button>
+    `;
+  }
+
+  function renderAdvancedDashboard(state = {}) {
+    const context = getDashboardContext(state);
+    renderDashboardControlCards(context);
+    renderDashboardDirectorMode(context, state);
+    renderDashboardAlerts(context, state);
+    renderDashboardHeatmap(context);
+    renderDashboardRanking(context);
+    renderDashboardQuality(context, state);
+    renderDashboardObjectives(context);
+    renderDashboardCadence(context);
+    renderDashboardActions(context);
+    renderDashboardForecast(context);
+    renderDashboardValidationLog(context, state);
+    renderDashboardKpiDetail(context, state);
+  }
+
   function renderPoleSummaryRows(selector, state) {
     const target = $(selector);
     if (!target) return;
@@ -2425,6 +2901,7 @@
     renderCatalogStats();
     renderCalendarSlicer(state);
     renderCountryDashboard(state);
+    renderAdvancedDashboard(state);
     renderPoleSummaryTables(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
@@ -2459,6 +2936,7 @@
     renderKpiTable,
     renderCalendarSlicer,
     renderCountryDashboard,
+    renderAdvancedDashboard,
     renderPoleMonitor,
     renderValidationQueue,
     renderReportControls,

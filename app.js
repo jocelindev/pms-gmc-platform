@@ -8,6 +8,7 @@
     renderKpiTable,
     renderCalendarSlicer,
     renderCountryDashboard,
+    renderAdvancedDashboard,
     renderPoleSummaryTables,
     renderPoleControls,
     renderPoleMonitor,
@@ -499,6 +500,7 @@
     currentPoleMonitor: PMS_DATA.reporting.defaultPole,
     currentPoleCycle: PMS_DATA.reporting.defaultCycle,
     currentPoleFrequency: "Tous",
+    currentDashboardKpiKey: "",
     currentReportPole: PMS_DATA.reporting.defaultPole,
     currentReportCycle: PMS_DATA.reporting.defaultCycle,
     currentAdminPole: PMS_DATA.reporting.defaultPole,
@@ -922,6 +924,17 @@
     });
   }
 
+  function bindDashboardActions() {
+    document.addEventListener("click", (event) => {
+      const detailButton = event.target.closest("[data-dashboard-kpi-detail]");
+      if (!detailButton) return;
+      state.currentDashboardKpiKey = detailButton.dataset.dashboardKpiDetail;
+      renderAdvancedDashboard(state);
+      document.getElementById("dashboard-detail-preview")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      showToast("Detail KPI charge dans le tableau de bord.");
+    });
+  }
+
   function bindKoboActions() {
     const serverInput = $("#kobo-server-url");
     const uidInput = $("#kobo-form-uid");
@@ -1235,6 +1248,7 @@
     state.calendarBranchFilter = ensureAllowedCountry(countryValue || "Groupe");
     renderCalendarSlicer(state);
     renderCountryDashboard(state);
+    renderAdvancedDashboard(state);
     renderPoleSummaryTables(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
@@ -1285,6 +1299,7 @@
       button.addEventListener("click", () => {
         state.actorScope = button.dataset.actorScope || "responsable";
         renderCalendarSlicer(state);
+        renderAdvancedDashboard(state);
         showToast(
           state.actorScope === "direction"
             ? "Vue acteur: Direction."
@@ -2213,6 +2228,7 @@
     renderAll(state);
     document.body.classList.add("dashboard-mode");
     bindNavigation();
+    bindDashboardActions();
     bindAuthActions();
     bindKoboActions();
     renderKoboActiveForm();
