@@ -717,6 +717,35 @@
     return start === end ? start : `${start} - ${end}`;
   }
 
+  function compactDateValue(date) {
+    return dateToIso(date).replaceAll("-", "");
+  }
+
+  function renderDateDropdownOptions(calendar = {}) {
+    const selectedDate = parseIsoDate(calendar.selectedDate || calendar.end || calendar.start) || new Date();
+    const selectedIso = dateToIso(selectedDate);
+    const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+    const dayCount = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate();
+
+    return Array.from({ length: dayCount }, (_, index) => {
+      const date = addDays(monthStart, dayCount - index - 1);
+      const iso = dateToIso(date);
+      const selected = iso === selectedIso;
+      return `
+        <button
+          class="date-picker-option${selected ? " selected" : ""}"
+          type="button"
+          data-calendar-date="${iso}"
+          role="option"
+          aria-selected="${selected ? "true" : "false"}"
+        >
+          <span class="date-picker-radio" aria-hidden="true"></span>
+          <strong>${compactDateValue(date)}</strong>
+        </button>
+      `;
+    }).join("");
+  }
+
   function renderCalendarSlicer(state = {}) {
     const panel = $("#calendar-slicer");
     if (!panel) return;
@@ -730,6 +759,8 @@
     const startInput = $("#calendar-start");
     const endInput = $("#calendar-end");
     const dateInput = $("#calendar-date-input");
+    const dateToggle = $("#calendar-date-toggle");
+    const dateMenu = $("#calendar-date-menu");
     const summary = $("#calendar-summary");
     const activePeriod = $("#calendar-active-period");
     const grid = $("#calendar-grid");
@@ -746,7 +777,17 @@
     }
     if (startInput) startInput.value = calendar.start || "";
     if (endInput) endInput.value = calendar.end || "";
-    if (dateInput) dateInput.value = String(calendar.selectedDate || calendar.start || "").replaceAll("-", "");
+    if (dateInput) {
+      dateInput.value = String(calendar.selectedDate || calendar.start || "").replaceAll("-", "");
+      dateInput.setAttribute("aria-expanded", state.calendarDateDropdownOpen ? "true" : "false");
+    }
+    if (dateToggle) {
+      dateToggle.setAttribute("aria-expanded", state.calendarDateDropdownOpen ? "true" : "false");
+    }
+    if (dateMenu) {
+      dateMenu.hidden = !state.calendarDateDropdownOpen;
+      dateMenu.innerHTML = renderDateDropdownOptions(calendar);
+    }
     if (summary) {
       summary.textContent = calendarPeriodLabel(calendar);
     }

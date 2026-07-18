@@ -509,6 +509,7 @@
     kpiCalculationQuality: null,
     kpiObjectives: [],
     calendar: buildMonthToDateSelection(new Date()),
+    calendarDateDropdownOpen: false,
     actorScope: "responsable",
     calendarPoleFilter: PMS_DATA.reporting.defaultPole,
     calendarBranchFilter: "Groupe",
@@ -1350,10 +1351,46 @@
     const slicer = $("#calendar-slicer");
     if (!slicer) return;
     const dateInput = $("#calendar-date-input");
+    const dateToggle = $("#calendar-date-toggle");
     const poleFilter = $("#calendar-pole-filter");
     const branchFilter = $("#calendar-branch-filter");
     const cycleFilter = $("#calendar-cycle-filter");
     const statusFilter = $("#calendar-status-filter");
+
+    function scrollActiveDateIntoView() {
+      const menu = $("#calendar-date-menu");
+      const selectedOption = menu?.querySelector(".date-picker-option.selected");
+      if (!menu || !selectedOption || menu.hidden) return;
+      menu.scrollTop = Math.max(0, selectedOption.offsetTop - menu.clientHeight / 2 + selectedOption.clientHeight / 2);
+    }
+
+    function setDateDropdown(open) {
+      state.calendarDateDropdownOpen = open;
+      renderCalendarSlicer(state);
+      if (open) scrollActiveDateIntoView();
+    }
+
+    dateToggle?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setDateDropdown(!state.calendarDateDropdownOpen);
+    });
+
+    dateInput?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setDateDropdown(true);
+    });
+
+    dateInput?.addEventListener("focus", () => {
+      setDateDropdown(true);
+    });
+
+    dateInput?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        setDateDropdown(false);
+        dateInput.blur();
+      }
+    });
 
     document.querySelectorAll("[data-calendar-preset]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1392,6 +1429,7 @@
         renderCalendarSlicer(state);
         return;
       }
+      state.calendarDateDropdownOpen = false;
       applyCalendarSelection(
         buildMonthToDateSelection(selectedDate),
         "Cumul mensuel applique jusqu'a la date selectionnee."
@@ -1450,12 +1488,19 @@
       if (!dayButton) return;
       const clickedDate = fromIsoDate(dayButton.dataset.calendarDate);
       if (!clickedDate) return;
+      state.calendarDateDropdownOpen = false;
       applyCalendarSelection(
         buildMonthToDateSelection(clickedDate),
         clickedDate.getDate() === 1
           ? "Donnee du premier jour du mois appliquee."
           : "Cumul mensuel applique jusqu'au jour selectionne."
       );
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!state.calendarDateDropdownOpen) return;
+      if (event.target.closest(".powerbi-date-card")) return;
+      setDateDropdown(false);
     });
 
     $("#calendar-apply")?.addEventListener("click", () => {
