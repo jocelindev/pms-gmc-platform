@@ -1285,6 +1285,64 @@ textarea {
   font-weight: 900;
 }
 
+.kpi-trend-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px dashed rgba(31, 56, 100, 0.2);
+  border-bottom: 1px dashed rgba(31, 56, 100, 0.2);
+  background: rgba(31, 56, 100, 0.035);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.kpi-trend-cell {
+  min-width: 0;
+  padding: 8px 7px;
+  text-align: center;
+  border-right: 1px solid rgba(31, 56, 100, 0.1);
+}
+
+.kpi-trend-cell:last-child {
+  border-right: 0;
+}
+
+.kpi-trend-cell span,
+.kpi-trend-cell strong {
+  display: block;
+}
+
+.kpi-trend-cell span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.kpi-trend-cell strong {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.kpi-trend-cell.positive strong {
+  color: var(--green-text);
+}
+
+.kpi-trend-cell.negative strong {
+  color: var(--red-text);
+}
+
+.kpi-trend-cell.neutral strong {
+  color: var(--palladium-blue);
+}
+
+.kpi-trend-cell.empty strong {
+  color: #94a3b8;
+}
+
 .pole-kpi-item dl {
   display: grid;
   gap: 7px;

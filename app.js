@@ -177,8 +177,52 @@
   }
 
   function latestPeriod(results) {
-    const periods = results.map((item) => item.period).filter(Boolean);
-    return periods[0] || "";
+    const latest = [...results]
+      .filter((item) => item.period)
+      .sort((left, right) => periodSortValue(left.period) - periodSortValue(right.period))
+      .pop();
+    return latest?.period || "";
+  }
+
+  function periodSortValue(period) {
+    const value = String(period || "").trim();
+    const compactDate = value.match(/\b(20\d{2})(\d{2})(\d{2})\b/);
+    if (compactDate) {
+      return new Date(Number(compactDate[1]), Number(compactDate[2]) - 1, Number(compactDate[3])).getTime();
+    }
+    const isoDate = value.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/);
+    if (isoDate) {
+      return new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3])).getTime();
+    }
+    const week = normalizeLookup(value).match(/\b(?:s|w|semaine)\s*(\d{1,2})\s*(20\d{2})\b/);
+    if (week) {
+      return new Date(Number(week[2]), 0, 1 + (Number(week[1]) - 1) * 7).getTime();
+    }
+    const monthIndex = {
+      janvier: 0,
+      fevrier: 1,
+      mars: 2,
+      avril: 3,
+      mai: 4,
+      juin: 5,
+      juillet: 6,
+      aout: 7,
+      septembre: 8,
+      octobre: 9,
+      novembre: 10,
+      decembre: 11,
+    };
+    const normalized = normalizeLookup(value);
+    const monthName = Object.keys(monthIndex).find((month) => normalized.includes(month));
+    const year = normalized.match(/\b(20\d{2})\b/);
+    if (monthName && year) {
+      return new Date(Number(year[1]), monthIndex[monthName], 1).getTime();
+    }
+    return 0;
+  }
+
+  function kpiHistoryKey(item = {}) {
+    return `${item.poleId || ""}:${normalizeLookup(item.kpiId || item.kpiName || item.name)}`;
   }
 
   function toIsoDate(date) {
@@ -302,10 +346,26 @@
       : [];
     if (!results.length && !referenceKpis.length) return;
 
+    const sortedResults = [...results].sort((left, right) => periodSortValue(left.period) - periodSortValue(right.period));
+    const historyByKpi = new Map();
+    sortedResults.forEach((result) => {
+      const key = kpiHistoryKey(result);
+      if (!key || key === ":") return;
+      const history = historyByKpi.get(key) || [];
+      history.push({
+        period: result.period,
+        value: result.value,
+        valueLabel: result.valueLabel,
+        target: result.target,
+        status: result.status,
+      });
+      historyByKpi.set(key, history);
+    });
+
     const byPole = new Map(
       PMS_DATA.reporting.poles.map((pole) => [pole.id, [...(PMS_DATA.reporting.kpisByPole[pole.id] || [])]])
     );
-    const calculatedKeys = new Set(results.map((result) => `${result.poleId}:${result.kpiId}`));
+    const calculatedKeys = new Set(sortedResults.map((result) => `${result.poleId}:${result.kpiId}`));
     referenceKpis
       .filter((kpi) => !calculatedKeys.has(`${kpi.poleId}:${kpi.kpiId}`))
       .forEach((kpi) => {
@@ -325,10 +385,11 @@
           period: "A calculer",
           formula: kpi.formula,
           method: kpi.method || "Donnees de calcul attendues",
+          trendHistory: historyByKpi.get(kpiHistoryKey(kpi)) || [],
         });
       });
 
-    results.forEach((result) => {
+    sortedResults.forEach((result) => {
       if (!result.poleId) return;
       upsertKpiItem(byPole, result.poleId, {
         id: result.kpiId,
@@ -345,6 +406,7 @@
         formula: result.formula,
         method: result.method,
         elementsCount: result.elementsCount,
+        trendHistory: historyByKpi.get(kpiHistoryKey(result)) || [],
       });
     });
 
@@ -355,7 +417,7 @@
       refreshPoleMetrics(poleId, kpis, {
         quality: Number.isFinite(matchRate) ? matchRate : undefined,
         readiness: Number.isFinite(calculationRate) ? calculationRate : undefined,
-        lastReport: latestPeriod(results.filter((item) => item.poleId === poleId)) || "Reference Kobo",
+        lastReport: latestPeriod(sortedResults.filter((item) => item.poleId === poleId)) || "Reference Kobo",
         lateSubmissions: state.kpiCalculationQuality?.unmatchedCalculationCount || 0,
       });
     });

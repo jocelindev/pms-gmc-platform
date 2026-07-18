@@ -234,6 +234,243 @@
       .join("");
   }
 
+  const LOWER_BETTER_TERMS = [
+    "abandon",
+    "absence",
+    "absenteisme",
+    "anomalie",
+    "creance",
+    "cout",
+    "delai",
+    "dmt",
+    "duree",
+    "erreur",
+    "incident",
+    "indisponibilite",
+    "malus",
+    "mttr",
+    "perte",
+    "retard",
+    "risque",
+    "rupture",
+    "turnover",
+  ];
+
+  function parseMetricNumber(value) {
+    const text = String(value ?? "").trim().toLowerCase().replace(",", ".");
+    const hourMatch = text.match(/(-?\d+(?:\.\d+)?)\s*h(?:\s*(\d{1,2}))?/);
+    if (hourMatch) {
+      return Number(hourMatch[1]) * 60 + Number(hourMatch[2] || 0);
+    }
+    const numberMatch = text.replace(/\s+/g, "").match(/-?\d+(?:\.\d+)?/);
+    return numberMatch ? Number(numberMatch[0]) : null;
+  }
+
+  function extractTargetNumbers(value) {
+    return (String(value ?? "").match(/-?\d[\d\s]*(?:[,.]\d+)?/g) || [])
+      .map((item) => Number(item.replace(/\s+/g, "").replace(",", ".")))
+      .filter((item) => Number.isFinite(item));
+  }
+
+  function isLowerBetterKpi(kpi = {}) {
+    const target = String(kpi.target || "");
+    const normalized = normalizeLookup(`${kpi.name || ""} ${kpi.category || ""} ${kpi.formula || ""} ${target}`);
+    return target.includes("<") || LOWER_BETTER_TERMS.some((term) => normalized.includes(term));
+  }
+
+  function targetValueForKpi(kpi = {}) {
+    if (/\d+(?:[,.]\d+)?\s*h/i.test(String(kpi.target || ""))) {
+      return parseMetricNumber(kpi.target);
+    }
+    const numbers = extractTargetNumbers(kpi.target);
+    if (!numbers.length) return null;
+    if (String(kpi.target || "").includes(">") && numbers.length >= 2) return Math.min(...numbers);
+    if (String(kpi.target || "").includes("<") && numbers.length >= 2) return Math.max(...numbers);
+    if (numbers.length >= 2 && !isLowerBetterKpi(kpi)) return Math.min(...numbers);
+    return numbers[0];
+  }
+
+  function formatDeltaPercent(value) {
+    if (!Number.isFinite(value)) return "--";
+    const absolute = Math.abs(value).toLocaleString("fr-FR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    if (Math.abs(value) < 0.005) return "0,00%";
+    return `${value > 0 ? "+" : "-"}${absolute}%`;
+  }
+
+  function formatSignedNumber(value) {
+    if (!Number.isFinite(value)) return "--";
+    const absolute = Math.abs(value).toLocaleString("fr-FR", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+    if (Math.abs(value) < 0.005) return "0";
+    return `${value > 0 ? "+" : "-"}${absolute}`;
+  }
+
+  function trendMetricClass(rawChange, lowerBetter) {
+    if (!Number.isFinite(rawChange) || Math.abs(rawChange) < 0.005) return "neutral";
+    const improved = lowerBetter ? rawChange < 0 : rawChange > 0;
+    return improved ? "positive" : "negative";
+  }
+
+  function trendPeriodDate(period) {
+    const value = String(period || "").trim();
+    const compactDate = value.match(/\b(20\d{2})(\d{2})(\d{2})\b/);
+    if (compactDate) return new Date(Number(compactDate[1]), Number(compactDate[2]) - 1, Number(compactDate[3]));
+    const isoDate = value.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/);
+    if (isoDate) return new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]));
+    const week = normalizeLookup(value).match(/\b(?:s|w|semaine)\s*(\d{1,2})\s*(20\d{2})\b/);
+    if (week) return new Date(Number(week[2]), 0, 1 + (Number(week[1]) - 1) * 7);
+    const monthIndex = {
+      janvier: 0,
+      fevrier: 1,
+      mars: 2,
+      avril: 3,
+      mai: 4,
+      juin: 5,
+      juillet: 6,
+      aout: 7,
+      septembre: 8,
+      octobre: 9,
+      novembre: 10,
+      decembre: 11,
+    };
+    const normalized = normalizeLookup(value);
+    const monthName = Object.keys(monthIndex).find((month) => normalized.includes(month));
+    const year = normalized.match(/\b(20\d{2})\b/);
+    return monthName && year ? new Date(Number(year[1]), monthIndex[monthName], 1) : null;
+  }
+
+  function trendPointRank(point, index) {
+    const date = trendPeriodDate(point.period);
+    return date ? date.getTime() : index;
+  }
+
+  function normalizeTrendHistory(kpi = {}) {
+    return (Array.isArray(kpi.trendHistory) ? kpi.trendHistory : [])
+      .map((point, index) => ({
+        period: point.period,
+        value: Number.isFinite(Number(point.value)) ? Number(point.value) : parseMetricNumber(point.valueLabel),
+        rank: trendPointRank(point, index),
+      }))
+      .filter((point) => Number.isFinite(point.value))
+      .sort((left, right) => left.rank - right.rank);
+  }
+
+  function metricFromPoints(label, latest, previous, lowerBetter) {
+    if (!latest || !previous || !Number.isFinite(latest.value) || !Number.isFinite(previous.value) || previous.value === 0) {
+      return { label, display: "--", className: "empty" };
+    }
+    const rawChange = ((latest.value - previous.value) / Math.abs(previous.value)) * 100;
+    return {
+      label,
+      display: formatDeltaPercent(rawChange),
+      className: trendMetricClass(rawChange, lowerBetter),
+    };
+  }
+
+  function priorPointByDays(points, latest, days) {
+    const latestDate = trendPeriodDate(latest?.period);
+    if (!latestDate) return null;
+    const targetTime = latestDate.getTime() - days * 24 * 60 * 60 * 1000;
+    return [...points]
+      .reverse()
+      .find((point) => {
+        const date = trendPeriodDate(point.period);
+        return date && date.getTime() <= targetTime;
+      });
+  }
+
+  function currentMetricValue(kpi = {}) {
+    const history = normalizeTrendHistory(kpi);
+    if (history.length) return history[history.length - 1].value;
+    if (Number.isFinite(Number(kpi.value))) return Number(kpi.value);
+    return parseMetricNumber(kpi.value);
+  }
+
+  function metricFromTarget(kpi = {}) {
+    const current = currentMetricValue(kpi);
+    const target = targetValueForKpi(kpi);
+    if (!Number.isFinite(current) || !Number.isFinite(target)) {
+      return { label: "Vs Target", display: "--", className: "empty" };
+    }
+    const lowerBetter = isLowerBetterKpi(kpi);
+    const performanceGap = lowerBetter ? target - current : current - target;
+    const displayValue = target === 0 ? formatSignedNumber(performanceGap) : formatDeltaPercent((performanceGap / Math.abs(target)) * 100);
+    return {
+      label: "Vs Target",
+      display: displayValue,
+      className: performanceGap >= 0 ? "positive" : "negative",
+    };
+  }
+
+  function fallbackTrendMetric(kpi = {}, pole = {}, label) {
+    const trend = String(kpi.trend || "").trim();
+    if (!trend || ["calcul kobo", "reference kobo", "a synchroniser", "stable"].includes(normalizeLookup(trend))) {
+      return { label, display: "--", className: trend && normalizeLookup(trend) === "stable" ? "neutral" : "empty" };
+    }
+    const cadence = normalizeLookup(`${kpiCollectionFrequency(kpi, pole)} ${kpi.source || ""}`);
+    const matchesLabel =
+      (label === "DoD" && (cadence.includes("jour") || cadence.includes("horaire"))) ||
+      (label === "WoW" && (cadence.includes("hebd") || cadence.includes("semaine"))) ||
+      (label === "MoM" && cadence.includes("mens"));
+    if (!matchesLabel) return { label, display: "--", className: "empty" };
+    const rawChange = parseMetricNumber(trend);
+    return {
+      label,
+      display: trend,
+      className: trendMetricClass(rawChange, isLowerBetterKpi(kpi)),
+    };
+  }
+
+  function kpiTrendMetrics(kpi = {}, pole = {}) {
+    const history = normalizeTrendHistory(kpi);
+    const lowerBetter = isLowerBetterKpi(kpi);
+    const latest = history[history.length - 1];
+    const previous = history[history.length - 2];
+    const cadence = normalizeLookup(kpiCollectionFrequency(kpi, pole));
+    const dod = cadence.includes("jour") || cadence.includes("horaire")
+      ? metricFromPoints("DoD", latest, previous, lowerBetter)
+      : { label: "DoD", display: "--", className: "empty" };
+    const wowReference =
+      cadence.includes("jour") || cadence.includes("horaire")
+        ? priorPointByDays(history, latest, 7)
+        : previous;
+    const momReference =
+      cadence.includes("jour") || cadence.includes("horaire")
+        ? priorPointByDays(history, latest, 30)
+        : cadence.includes("hebd") || cadence.includes("semaine")
+          ? history[Math.max(0, history.length - 5)]
+          : previous;
+    const wow = cadence.includes("mens")
+      ? { label: "WoW", display: "--", className: "empty" }
+      : metricFromPoints("WoW", latest, wowReference, lowerBetter);
+    const mom = metricFromPoints("MoM", latest, momReference, lowerBetter);
+    return [dod, wow, mom, metricFromTarget(kpi)].map((metric) =>
+      metric.display === "--" && metric.label !== "Vs Target" ? fallbackTrendMetric(kpi, pole, metric.label) : metric
+    );
+  }
+
+  function renderTrendStrip(kpi = {}, pole = {}) {
+    return `
+      <div class="kpi-trend-strip" aria-label="Tendances KPI">
+        ${kpiTrendMetrics(kpi, pole)
+          .map(
+            (metric) => `
+              <div class="kpi-trend-cell ${escapeHtml(metric.className)}">
+                <span>${escapeHtml(metric.label)}</span>
+                <strong>${escapeHtml(metric.display)}</strong>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
   function getObjectiveCatalogProfile(kpi, pole = {}) {
     const template = PMS_DATA.objectiveKoboTemplate || {};
     const profiles = template.catalogProfiles || [];
@@ -1241,6 +1478,7 @@
                               ${statusPill(kpiStatusText(kpi.status), kpi.status)}
                             </div>
                             <div class="pole-kpi-value">${escapeHtml(kpi.value)}</div>
+                            ${renderTrendStrip(kpi, pole)}
                             <dl>
                               <div><dt>Categorie</dt><dd>${escapeHtml(kpi.category || "Non classe")}</dd></div>
                               <div><dt>Objectif</dt><dd>${escapeHtml(kpi.target)}</dd></div>
@@ -1320,6 +1558,7 @@
                   <span>Valeur</span>
                   <strong>${escapeHtml(kpi.value)}</strong>
                 </div>
+                ${renderTrendStrip(kpi, pole)}
                 <div class="selected-kpi-meta">
                   <span>Objectif: ${escapeHtml(kpi.target)}</span>
                   <span>Tendance: ${escapeHtml(kpi.trend)}</span>
