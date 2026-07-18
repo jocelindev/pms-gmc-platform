@@ -169,6 +169,29 @@ CREATE TABLE IF NOT EXISTS kobo_submissions (
   FOREIGN KEY (pole_id) REFERENCES poles(id)
 );
 
+CREATE TABLE IF NOT EXISTS kpi_daily_data (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  data_date TEXT NOT NULL,
+  pole_id TEXT NOT NULL,
+  branch TEXT NOT NULL DEFAULT '',
+  kpi_key TEXT NOT NULL,
+  kpi_raw TEXT,
+  element_key TEXT NOT NULL,
+  element_label TEXT,
+  raw_value TEXT,
+  numeric_value REAL,
+  validation_status TEXT,
+  source_form_uid TEXT NOT NULL,
+  source_submission_uid TEXT NOT NULL,
+  submitted_at TEXT,
+  collector TEXT,
+  raw_payload_json TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (data_date, pole_id, branch, kpi_key, element_key, source_form_uid, source_submission_uid),
+  FOREIGN KEY (pole_id) REFERENCES poles(id)
+);
+
 CREATE TABLE IF NOT EXISTS validation_queue (
   id TEXT PRIMARY KEY,
   form_uid TEXT,
@@ -224,6 +247,9 @@ CREATE INDEX IF NOT EXISTS idx_kpis_pole ON kpis(pole_id);
 CREATE INDEX IF NOT EXISTS idx_objectives_period ON kpi_objectives(period);
 CREATE INDEX IF NOT EXISTS idx_kobo_submissions_form ON kobo_submissions(form_uid);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_kobo_submissions_uid ON kobo_submissions(form_uid, submission_uid);
+CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_date ON kpi_daily_data(data_date);
+CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_scope ON kpi_daily_data(pole_id, kpi_key, data_date);
+CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_source ON kpi_daily_data(source_form_uid, source_submission_uid);
 CREATE INDEX IF NOT EXISTS idx_reports_pole_period ON reports(pole_id, period);
 
 CREATE VIEW IF NOT EXISTS v_user_access_details AS

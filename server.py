@@ -310,10 +310,44 @@ def ensure_user_access_schema(conn: sqlite3.Connection) -> bool:
     return True
 
 
+def ensure_kpi_daily_data_schema(conn: sqlite3.Connection) -> bool:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS kpi_daily_data (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          data_date TEXT NOT NULL,
+          pole_id TEXT NOT NULL,
+          branch TEXT NOT NULL DEFAULT '',
+          kpi_key TEXT NOT NULL,
+          kpi_raw TEXT,
+          element_key TEXT NOT NULL,
+          element_label TEXT,
+          raw_value TEXT,
+          numeric_value REAL,
+          validation_status TEXT,
+          source_form_uid TEXT NOT NULL,
+          source_submission_uid TEXT NOT NULL,
+          submitted_at TEXT,
+          collector TEXT,
+          raw_payload_json TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (data_date, pole_id, branch, kpi_key, element_key, source_form_uid, source_submission_uid),
+          FOREIGN KEY (pole_id) REFERENCES poles(id)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_date ON kpi_daily_data(data_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_scope ON kpi_daily_data(pole_id, kpi_key, data_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_source ON kpi_daily_data(source_form_uid, source_submission_uid)")
+    return True
+
+
 def migrate_database(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
     changed = False
     changed = ensure_user_access_schema(conn) or changed
+    ensure_kpi_daily_data_schema(conn)
     if "password_hash" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
         changed = True
@@ -1791,6 +1825,79 @@ def status_class_from_validation(status: str) -> str:
     return "gray"
 
 
+def upsert_kpi_daily_data(
+    conn: sqlite3.Connection,
+    *,
+    data_date: dt.date,
+    pole_id: str,
+    branch: str,
+    kpi_key: str,
+    kpi_raw: str,
+    element_label: str,
+    raw_value,
+    validation_status: str,
+    source_form_uid: str,
+    source_submission_uid: str,
+    submitted_at: str,
+    collector: str,
+    raw_payload_json: str,
+) -> None:
+    element_key = normalize_submission_key(element_label or "valeur")
+    if not element_key:
+        element_key = "valeur"
+    conn.execute(
+        """
+        INSERT INTO kpi_daily_data (
+          data_date,
+          pole_id,
+          branch,
+          kpi_key,
+          kpi_raw,
+          element_key,
+          element_label,
+          raw_value,
+          numeric_value,
+          validation_status,
+          source_form_uid,
+          source_submission_uid,
+          submitted_at,
+          collector,
+          raw_payload_json,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(data_date, pole_id, branch, kpi_key, element_key, source_form_uid, source_submission_uid)
+        DO UPDATE SET
+          kpi_raw = excluded.kpi_raw,
+          element_label = excluded.element_label,
+          raw_value = excluded.raw_value,
+          numeric_value = excluded.numeric_value,
+          validation_status = excluded.validation_status,
+          submitted_at = excluded.submitted_at,
+          collector = excluded.collector,
+          raw_payload_json = excluded.raw_payload_json,
+          updated_at = CURRENT_TIMESTAMP
+        """,
+        (
+            data_date.isoformat(),
+            pole_id,
+            text_or_empty(branch),
+            kpi_key,
+            text_or_empty(kpi_raw),
+            element_key,
+            text_or_empty(element_label or "valeur"),
+            None if raw_value is None else str(raw_value),
+            parse_number(raw_value),
+            text_or_empty(validation_status or "A valider"),
+            source_form_uid,
+            source_submission_uid,
+            submitted_at,
+            collector,
+            raw_payload_json,
+        ),
+    )
+
+
 def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         """
@@ -1843,6 +1950,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         "calculationFormConfigured": bool(calculation_source),
         "referenceCount": 0,
         "calculationRecords": 0,
+        "dailyDataRows": 0,
         "calculationGroups": 0,
         "matchedCalculationGroups": 0,
         "calculatedCount": 0,
@@ -2046,6 +2154,23 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "element": element,
             }
         )
+        if period_date:
+            upsert_kpi_daily_data(
+                conn,
+                data_date=period_date,
+                pole_id=pole_id,
+                branch=text_or_empty(branch_raw or row["branch"]),
+                kpi_key=kpi_key,
+                kpi_raw=kpi_raw_text,
+                element_label=element["label"],
+                raw_value=element["value"],
+                validation_status=element["validation"],
+                source_form_uid=calculation_source["formId"],
+                source_submission_uid=text_or_empty(row["submission_uid"] or str(row["id"])),
+                submitted_at=text_or_empty(row["submitted_at"]),
+                collector=text_or_empty(row["collector"]),
+                raw_payload_json=text_or_empty(row["raw_payload_json"]),
+            )
         add_calculation_group(
             pole_id,
             kpi_key,
@@ -2168,6 +2293,12 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     exact_results = [result for result in results if result.get("periodType") != "monthToDate"]
     quality["calculatedCount"] = len(exact_results)
     quality["monthToDateCount"] = len(results) - len(exact_results)
+    if calculation_source:
+        row = conn.execute(
+            "SELECT COUNT(*) AS daily_count FROM kpi_daily_data WHERE source_form_uid = ?",
+            (calculation_source["formId"],),
+        ).fetchone()
+        quality["dailyDataRows"] = int(row["daily_count"] if row else 0)
     if quality["calculationGroups"]:
         quality["matchRate"] = round((quality["matchedCalculationGroups"] / quality["calculationGroups"]) * 100)
         quality["calculationRate"] = round((quality["calculatedCount"] / quality["calculationGroups"]) * 100)

@@ -534,6 +534,7 @@ def count_tables(conn: sqlite3.Connection) -> dict[str, int]:
         "kobo_forms",
         "kobo_form_fields",
         "kobo_submissions",
+        "kpi_daily_data",
         "validation_queue",
         "reports",
         "notifications",
