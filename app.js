@@ -432,7 +432,7 @@
     kpiCalculationResults: [],
     kpiCalculationQuality: null,
     kpiObjectives: [],
-    calendar: buildCalendarSelection("month", new Date()),
+    calendar: buildCalendarSelection("today", new Date()),
     actorScope: "responsable",
     calendarPoleFilter: PMS_DATA.reporting.defaultPole,
     calendarBranchFilter: "Groupe",

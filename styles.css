@@ -559,7 +559,7 @@ button {
   align-items: end;
   display: grid;
   gap: 9px;
-  grid-template-columns: repeat(4, minmax(160px, 1fr)) minmax(250px, 1.2fr) minmax(250px, 1.2fr);
+  grid-template-columns: repeat(2, minmax(220px, 0.9fr)) minmax(250px, 1.1fr) minmax(250px, 1.1fr);
 }
 
 .powerbi-filter-box {

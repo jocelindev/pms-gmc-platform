@@ -583,7 +583,7 @@
 
     reporting: {
       defaultPole: "BPO",
-      defaultCycle: "Hebdomadaire",
+      defaultCycle: "Journalier",
       cycles: [
         { value: "Journalier", deadline: "J+1 avant 10h00", scope: "Controle des collectes journalieres, anomalies et points bloquants" },
         { value: "Hebdomadaire", deadline: "Lundi 08h00", scope: "Suivi operationnel, alertes et actions court terme" },
