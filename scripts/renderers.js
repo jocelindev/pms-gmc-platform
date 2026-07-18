@@ -721,14 +721,69 @@
     return dateToIso(date).replaceAll("-", "");
   }
 
-  function renderDateDropdownOptions(calendar = {}) {
+  function parseCalendarDateFromText(value) {
+    const text = String(value || "").trim();
+    const compactDate = text.match(/\b(20\d{2})(\d{2})(\d{2})\b/);
+    if (compactDate) return new Date(Number(compactDate[1]), Number(compactDate[2]) - 1, Number(compactDate[3]));
+    const isoDate = text.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/);
+    if (isoDate) return new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]));
+    const dmyDate = text.match(/\b(\d{1,2})[-/](\d{1,2})[-/](20\d{2})\b/);
+    if (dmyDate) return new Date(Number(dmyDate[3]), Number(dmyDate[2]) - 1, Number(dmyDate[1]));
+    return null;
+  }
+
+  function resultCalendarDate(result = {}) {
+    return (
+      parseIsoDate(result.periodEnd) ||
+      parseIsoDate(result.periodStart) ||
+      parseCalendarDateFromText(result.period)
+    );
+  }
+
+  function getCalendarDateScopePoleIds(state = {}) {
+    const activeCountry = getActiveCountry(state);
+    const scopedPoles = getCountryScopedPoles(state, PMS_DATA.reporting.poles || []);
+    let poleIds = scopedPoles.map((pole) => pole.id);
+    const selectedPole = state.calendarPoleFilter || state.currentPoleMonitor;
+    if (selectedPole && selectedPole !== "Tous") {
+      poleIds = poleIds.filter((poleId) => poleId === selectedPole);
+    }
+    return new Set(isGroupCountry(activeCountry) && (!selectedPole || selectedPole === "Tous") ? poleIds : poleIds);
+  }
+
+  function availableKoboDatesForCalendar(state = {}, calendar = {}) {
+    const selectedDate = parseIsoDate(calendar.selectedDate || calendar.end || calendar.start) || new Date();
+    const selectedMonth = selectedDate.getMonth();
+    const selectedYear = selectedDate.getFullYear();
+    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const allowedPoleIds = getCalendarDateScopePoleIds(state);
+    const dates = new Map();
+
+    results.forEach((result) => {
+      if (allowedPoleIds.size && result.poleId && !allowedPoleIds.has(result.poleId)) return;
+      const date = resultCalendarDate(result);
+      if (!date || date.getMonth() !== selectedMonth || date.getFullYear() !== selectedYear) return;
+      const iso = dateToIso(date);
+      dates.set(iso, date);
+    });
+
+    return [...dates.values()].sort((left, right) => right.getTime() - left.getTime());
+  }
+
+  function renderDateDropdownOptions(state = {}, calendar = {}) {
     const selectedDate = parseIsoDate(calendar.selectedDate || calendar.end || calendar.start) || new Date();
     const selectedIso = dateToIso(selectedDate);
-    const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-    const dayCount = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate();
+    const availableDates = availableKoboDatesForCalendar(state, calendar);
 
-    return Array.from({ length: dayCount }, (_, index) => {
-      const date = addDays(monthStart, dayCount - index - 1);
+    if (!availableDates.length) {
+      return `
+        <div class="date-picker-empty">
+          Aucune donnee Kobo montee pour ce mois.
+        </div>
+      `;
+    }
+
+    return availableDates.map((date) => {
       const iso = dateToIso(date);
       const selected = iso === selectedIso;
       return `
@@ -778,7 +833,13 @@
     if (startInput) startInput.value = calendar.start || "";
     if (endInput) endInput.value = calendar.end || "";
     if (dateInput) {
-      dateInput.value = String(calendar.selectedDate || calendar.start || "").replaceAll("-", "");
+      const availableDates = availableKoboDatesForCalendar(state, calendar);
+      const selectedDate = parseIsoDate(calendar.selectedDate || calendar.end || calendar.start);
+      const selectedIso = selectedDate ? dateToIso(selectedDate) : "";
+      dateInput.value = availableDates.some((date) => dateToIso(date) === selectedIso)
+        ? selectedIso.replaceAll("-", "")
+        : "";
+      dateInput.placeholder = availableDates.length ? "Date Kobo disponible" : "Aucune date Kobo";
       dateInput.setAttribute("aria-expanded", state.calendarDateDropdownOpen ? "true" : "false");
     }
     if (dateToggle) {
@@ -786,7 +847,7 @@
     }
     if (dateMenu) {
       dateMenu.hidden = !state.calendarDateDropdownOpen;
-      dateMenu.innerHTML = renderDateDropdownOptions(calendar);
+      dateMenu.innerHTML = renderDateDropdownOptions(state, calendar);
     }
     if (summary) {
       summary.textContent = calendarPeriodLabel(calendar);

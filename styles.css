@@ -622,6 +622,14 @@ button {
   position: absolute;
 }
 
+.date-picker-empty {
+  color: #172554;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.35;
+  padding: 14px 12px;
+}
+
 .powerbi-signature {
   align-content: center;
   color: #0b1c8a;

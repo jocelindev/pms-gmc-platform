@@ -252,6 +252,84 @@
     return null;
   }
 
+  function resultCalendarDateIso(result = {}) {
+    const date =
+      fromIsoDate(result.periodEnd) ||
+      fromIsoDate(result.periodStart) ||
+      periodDateFromText(result.period);
+    return date ? toIsoDate(date) : "";
+  }
+
+  function selectedCountryPoleIds(countryValue = state.calendarBranchFilter) {
+    const country = countryOptions().find(
+      (item) => normalizeLookup(item.name || item.id || item.code) === normalizeLookup(ensureAllowedCountry(countryValue))
+    );
+    if (!country || isGroupCountryValue(country.name) || !Array.isArray(country.poleIds) || !country.poleIds.length) {
+      return PMS_DATA.reporting.poles.map((pole) => pole.id);
+    }
+    return country.poleIds;
+  }
+
+  function calendarDateScopePoleIds() {
+    const authorizedPoleIds = new Set(getAuthorizedPoleIds(state.calendarBranchFilter));
+    const countryPoleIds = new Set(selectedCountryPoleIds(state.calendarBranchFilter));
+    let poleIds = PMS_DATA.reporting.poles
+      .map((pole) => pole.id)
+      .filter((poleId) => (!authorizedPoleIds.size || authorizedPoleIds.has(poleId)) && countryPoleIds.has(poleId));
+    const selectedPole = state.calendarPoleFilter || state.currentPoleMonitor;
+    if (selectedPole && selectedPole !== "Tous") {
+      poleIds = poleIds.filter((poleId) => poleId === selectedPole);
+    }
+    return new Set(poleIds);
+  }
+
+  function availableCalendarDateIsos({ anchorDate = null, sameMonth = false } = {}) {
+    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const allowedPoleIds = calendarDateScopePoleIds();
+    const dates = new Map();
+
+    results.forEach((result) => {
+      if (allowedPoleIds.size && result.poleId && !allowedPoleIds.has(result.poleId)) return;
+      const iso = resultCalendarDateIso(result);
+      if (!iso) return;
+      const date = fromIsoDate(iso);
+      if (!date) return;
+      if (sameMonth && anchorDate && (date.getFullYear() !== anchorDate.getFullYear() || date.getMonth() !== anchorDate.getMonth())) {
+        return;
+      }
+      dates.set(iso, date.getTime());
+    });
+
+    return [...dates.entries()]
+      .sort((left, right) => right[1] - left[1])
+      .map(([iso]) => iso);
+  }
+
+  function hasAvailableCalendarDate(date) {
+    if (!date) return false;
+    return availableCalendarDateIsos().includes(toIsoDate(date));
+  }
+
+  function ensureCalendarDateFromAvailableData() {
+    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    if (!results.length) {
+      state.calendarDateDropdownOpen = false;
+      return false;
+    }
+    const currentDate = fromIsoDate(state.calendar?.selectedDate || state.calendar?.end || state.calendar?.start);
+    const currentIso = currentDate ? toIsoDate(currentDate) : "";
+    const monthDates = availableCalendarDateIsos({ anchorDate: currentDate || new Date(), sameMonth: true });
+    if (currentIso && monthDates.includes(currentIso)) return true;
+
+    const fallbackIso = monthDates[0] || availableCalendarDateIsos()[0];
+    if (!fallbackIso) {
+      state.calendarDateDropdownOpen = false;
+      return false;
+    }
+    state.calendar = buildMonthToDateSelection(fromIsoDate(fallbackIso));
+    return true;
+  }
+
   function resultMatchesCalendar(result = {}, calendar = {}) {
     const calendarStart = fromIsoDate(calendar.start);
     const calendarEnd = fromIsoDate(calendar.end);
@@ -413,6 +491,7 @@
     const referenceKpis = Array.isArray(state.kpiCalculationQuality?.referenceKpis)
       ? state.kpiCalculationQuality.referenceKpis
       : [];
+    ensureCalendarDateFromAvailableData();
     if (!results.length && !referenceKpis.length) return;
 
     const sortedResults = [...results].sort(
@@ -670,6 +749,7 @@
         state.calculationKoboSource = calculationSource;
       }
     }
+    ensureCalendarDateFromAvailableData();
     applyCalculatedKpisToReporting();
     state.databaseConnected = true;
   }
@@ -1324,6 +1404,8 @@
 
   function applyCountryScope(countryValue, toastMessage) {
     state.calendarBranchFilter = ensureAllowedCountry(countryValue || "Groupe");
+    ensureCalendarDateFromAvailableData();
+    applyCalculatedKpisToReporting();
     renderCalendarSlicer(state);
     renderCountryDashboard(state);
     renderAdvancedDashboard(state);
@@ -1429,6 +1511,13 @@
         renderCalendarSlicer(state);
         return;
       }
+      if (!hasAvailableCalendarDate(selectedDate)) {
+        state.calendarDateDropdownOpen = false;
+        ensureCalendarDateFromAvailableData();
+        renderCalendarSlicer(state);
+        showToast("Aucune donnee Kobo n'a encore ete montee pour cette date.");
+        return;
+      }
       state.calendarDateDropdownOpen = false;
       applyCalendarSelection(
         buildMonthToDateSelection(selectedDate),
@@ -1443,6 +1532,8 @@
         state.currentPoleMonitor = allowedPole;
         state.currentReportPole = allowedPole;
       }
+      ensureCalendarDateFromAvailableData();
+      applyCalculatedKpisToReporting();
       renderCalendarSlicer(state);
       renderPoleControls(state);
       renderPoleMonitor(state);
