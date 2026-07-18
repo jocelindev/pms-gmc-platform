@@ -540,8 +540,10 @@
   }
 
   function renderBranches() {
+    const target = $("#branch-bars");
+    if (!target) return;
     const branches = getCountryOptions().filter((country) => !isGroupCountry(country));
-    $("#branch-bars").innerHTML = branches
+    target.innerHTML = branches
       .map(
         (branch) => `
           <div class="branch-bar-row">
@@ -627,7 +629,9 @@
   }
 
   function renderExecutiveAlerts() {
-    $("#executive-alerts").innerHTML = PMS_DATA.alerts
+    const target = $("#executive-alerts");
+    if (!target) return;
+    target.innerHTML = PMS_DATA.alerts
       .slice(0, 3)
       .map(
         (alert) => `
@@ -644,40 +648,53 @@
   }
 
   function renderSparkline() {
+    const target = $("#ipg-sparkline");
+    if (!target) return;
     const values = [72, 75, 78, 77, 80, 82];
-    $("#ipg-sparkline").innerHTML = values
+    target.innerHTML = values
       .map((value) => `<div class="spark-bar" data-value="${value}" style="height:${value}%"></div>`)
       .join("");
   }
 
   function renderCatalogStats() {
     const summary = PMS_DATA.catalogSummary;
-    $("#catalog-stat-kpis").textContent = summary.kpiCount;
-    $("#catalog-stat-formulas").textContent = summary.formulaCount;
-    $("#catalog-stat-groups").textContent = summary.groupCount;
-    $("#catalog-stat-forms").textContent = summary.collectionDomains;
+    const kpiCount = $("#catalog-stat-kpis");
+    const formulaCount = $("#catalog-stat-formulas");
+    const groupCount = $("#catalog-stat-groups");
+    const formCount = $("#catalog-stat-forms");
+    const categories = $("#category-breakdown");
+    const frequencies = $("#frequency-breakdown");
 
-    $("#category-breakdown").innerHTML = summary.categories
-      .map(
-        (item) => `
-          <div class="breakdown-row">
-            <span>${escapeHtml(item.name)}</span>
-            <strong>${item.count}</strong>
-          </div>
-        `
-      )
-      .join("");
+    if (kpiCount) kpiCount.textContent = summary.kpiCount;
+    if (formulaCount) formulaCount.textContent = summary.formulaCount;
+    if (groupCount) groupCount.textContent = summary.groupCount;
+    if (formCount) formCount.textContent = summary.collectionDomains;
 
-    $("#frequency-breakdown").innerHTML = summary.frequencies
-      .map(
-        (item) => `
-          <div class="loss-row">
-            <strong>${escapeHtml(item.name)} - ${item.count}</strong>
-            <div><span style="width:${Math.min(item.count * 2, 100)}%"></span></div>
-          </div>
-        `
-      )
-      .join("");
+    if (categories) {
+      categories.innerHTML = summary.categories
+        .map(
+          (item) => `
+            <div class="breakdown-row">
+              <span>${escapeHtml(item.name)}</span>
+              <strong>${item.count}</strong>
+            </div>
+          `
+        )
+        .join("");
+    }
+
+    if (frequencies) {
+      frequencies.innerHTML = summary.frequencies
+        .map(
+          (item) => `
+            <div class="loss-row">
+              <strong>${escapeHtml(item.name)} - ${item.count}</strong>
+              <div><span style="width:${Math.min(item.count * 2, 100)}%"></span></div>
+            </div>
+          `
+        )
+        .join("");
+    }
   }
 
   function parseIsoDate(value) {
@@ -885,17 +902,25 @@
     if (poleFilter) {
       const accessContext = getPoleAccessContext(state);
       const authorizedPoles = accessContext.isRestricted ? accessContext.poles : PMS_DATA.reporting.poles;
+      const selectedPoleId =
+        authorizedPoles.find((pole) => pole.id === state.calendarPoleFilter)?.id ||
+        authorizedPoles.find((pole) => pole.id === state.currentPoleMonitor)?.id ||
+        authorizedPoles[0]?.id ||
+        "";
+      if (selectedPoleId) {
+        state.calendarPoleFilter = selectedPoleId;
+        state.currentPoleMonitor = selectedPoleId;
+      }
       poleFilter.innerHTML = authorizedPoles.length
-        ? [
-            `<option value="Tous">Tous</option>`,
-            ...authorizedPoles.map(
-              (pole) => `<option value="${escapeHtml(pole.id)}" ${pole.id === state.currentPoleMonitor ? "selected" : ""}>${escapeHtml(pole.name)}</option>`
-            ),
-          ].join("")
+        ? authorizedPoles
+            .map(
+              (pole) => `<option value="${escapeHtml(pole.id)}" ${pole.id === selectedPoleId ? "selected" : ""}>${escapeHtml(pole.name)}</option>`
+            )
+            .join("")
         : `<option>Aucun pole autorise</option>`;
       poleFilter.disabled = accessContext.isRestricted && !authorizedPoles.length;
       if (authorizedPoles.length) {
-        poleFilter.value = state.calendarPoleFilter || state.currentPoleMonitor || "Tous";
+        poleFilter.value = selectedPoleId;
       }
     }
 
@@ -1040,6 +1065,59 @@
     };
   }
 
+  function getDashboardPoleContext(state = {}) {
+    const context = getDashboardContext(state);
+    const requestedPole =
+      state.calendarPoleFilter && state.calendarPoleFilter !== "Tous"
+        ? state.calendarPoleFilter
+        : state.currentPoleMonitor;
+    const selectedPole =
+      context.visiblePoles.find((pole) => pole.id === requestedPole) ||
+      context.visiblePoles[0] ||
+      null;
+    const kpiRows = selectedPole
+      ? (PMS_DATA.reporting.kpisByPole[selectedPole.id] || []).map((kpi, index) => ({
+          key: dashboardKpiKey(selectedPole, kpi, index),
+          pole: selectedPole,
+          kpi,
+          index,
+        }))
+      : [];
+    return {
+      ...context,
+      selectedPole,
+      visiblePoles: selectedPole ? [selectedPole] : [],
+      kpiRows,
+    };
+  }
+
+  function latestTrendPoint(kpi = {}) {
+    const history = Array.isArray(kpi.trendHistory) ? kpi.trendHistory : [];
+    return history
+      .map((point, index) => ({ ...point, rank: trendPointRank(point, index) }))
+      .filter((point) => point.period || point.valueLabel || point.value)
+      .sort((left, right) => left.rank - right.rank)
+      .pop();
+  }
+
+  function dayValueLabel(kpi = {}) {
+    const latest = latestTrendPoint(kpi);
+    if (latest?.valueLabel) return latest.valueLabel;
+    if (Number.isFinite(Number(latest?.value))) return String(latest.value);
+    return kpi.calculated ? kpi.value || "Calcule" : "En attente Kobo";
+  }
+
+  function monthToDateValueLabel(kpi = {}) {
+    return kpi.value || dayValueLabel(kpi);
+  }
+
+  function trendSummaryLabel(kpi = {}, pole = {}) {
+    const visibleMetrics = kpiTrendMetrics(kpi, pole).filter((metric) => metric.display !== "--");
+    return visibleMetrics.length
+      ? visibleMetrics.map((metric) => `${metric.label} ${metric.display}`).join(" | ")
+      : "Tendance a calculer";
+  }
+
   function kpiRiskScore(row) {
     const trends = kpiTrendMetrics(row.kpi, row.pole);
     const negativeTrends = trends.filter((metric) => metric.className === "negative").length;
@@ -1070,19 +1148,33 @@
   function renderDashboardControlCards(context) {
     const target = $("#dashboard-control-cards");
     if (!target) return;
+    const selectedPole = context.selectedPole;
+    const title = $("#dashboard-focus-title");
+    const status = $("#dashboard-pole-status");
+    if (title) {
+      title.textContent = selectedPole
+        ? `Resume performance - ${selectedPole.name}`
+        : "Resume du pole selectionne";
+    }
+    if (status) {
+      status.className = `status-pill ${escapeHtml(selectedPole?.rag || "gray")}`;
+      status.textContent = selectedPole ? ragLabel(selectedPole.rag) : "Aucun pole";
+    }
     const totalKpis = context.kpiRows.length;
     const redCount = context.kpiRows.filter((row) => row.kpi.status === "red").length;
     const amberCount = context.kpiRows.filter((row) => row.kpi.status === "amber").length;
+    const pendingCount = context.kpiRows.filter((row) => row.kpi.pendingCalculation || row.kpi.status === "gray").length;
     const knownTargets = context.kpiRows.filter(targetKnown);
     const reachedTargets = knownTargets.filter(targetReached).length;
     const objectiveRate = knownTargets.length ? Math.round((reachedTargets / knownTargets.length) * 100) : 0;
-    const score = averageNumber(context.visiblePoles.map((pole) => pole.score));
-    const quality = averageNumber(context.visiblePoles.map((pole) => pole.quality));
-    const lateSubmissions = context.visiblePoles.reduce((sum, pole) => sum + Number(pole.lateSubmissions || 0), 0);
+    const score = selectedPole ? Number(selectedPole.score || 0) : 0;
+    const quality = selectedPole ? Number(selectedPole.quality || 0) : 0;
+    const lateSubmissions = selectedPole ? Number(selectedPole.lateSubmissions || 0) : 0;
     const cards = [
-      { label: "Score global", value: score, hint: `${context.visiblePoles.length} pole(s)`, className: scoreClass(score) },
+      { label: "Score du pole", value: score || "--", hint: selectedPole?.owner || "Responsable a definir", className: scoreClass(score) },
+      { label: "KPI suivis", value: totalKpis, hint: `${pendingCount} en attente Kobo`, className: pendingCount ? "amber" : "green" },
       { label: "KPI critiques", value: redCount, hint: `${amberCount} KPI orange`, className: redCount ? "red" : amberCount ? "amber" : "green" },
-      { label: "Objectifs atteints", value: `${objectiveRate}%`, hint: `${reachedTargets}/${knownTargets.length || 0} cibles`, className: objectiveRate >= 80 ? "green" : objectiveRate >= 65 ? "amber" : "red" },
+      { label: "Vs objectifs", value: `${objectiveRate}%`, hint: `${reachedTargets}/${knownTargets.length || 0} cibles atteintes`, className: objectiveRate >= 80 ? "green" : objectiveRate >= 65 ? "amber" : "red" },
       { label: "Qualite Kobo", value: `${quality}%`, hint: lateSubmissions ? `${lateSubmissions} retard(s)` : "collecte a jour", className: lateSubmissions ? "amber" : scoreClass(quality) },
     ];
     const ipgScore = $("#dashboard-ipg-score");
@@ -1144,8 +1236,23 @@
     const target = $("#dashboard-alerts-list");
     if (!target) return;
     const rows = dashboardCriticalRows(context, 5);
+    const pendingRows = context.kpiRows.filter((row) => row.kpi.pendingCalculation || row.kpi.status === "gray").slice(0, 2);
     if (!rows.length) {
-      target.innerHTML = `<div class="empty-kpi-state">Aucune alerte KPI critique sur le perimetre actif.</div>`;
+      target.innerHTML = pendingRows.length
+        ? pendingRows
+            .map(
+              (row) => `
+                <article class="dashboard-alert-row status-gray">
+                  <div>
+                    <strong>${escapeHtml(row.kpi.name)}</strong>
+                    <span>${escapeHtml(row.pole.name)} - donnees Kobo attendues pour calculer le KPI.</span>
+                  </div>
+                  ${statusPill("A alimenter", "gray")}
+                </article>
+              `
+            )
+            .join("")
+        : `<div class="empty-kpi-state">Aucune alerte KPI critique sur le pole selectionne.</div>`;
       return;
     }
     target.innerHTML = rows
@@ -1162,7 +1269,7 @@
               <strong>${escapeHtml(row.kpi.name)}</strong>
               <span>${escapeHtml(row.pole.name)} - ${escapeHtml(reason)}</span>
             </div>
-            <button class="ghost-action" type="button" data-dashboard-kpi-detail="${escapeHtml(row.key)}">Detail</button>
+            ${statusPill("A traiter", row.kpi.status || "amber")}
           </article>
         `;
       })
@@ -1449,20 +1556,96 @@
     `;
   }
 
+  function renderDashboardKpiCards(context) {
+    const target = $("#dashboard-pole-kpi-cards");
+    const badge = $("#dashboard-kpi-card-count");
+    if (!target) return;
+    const rows = context.kpiRows || [];
+    if (badge) {
+      badge.className = `status-pill ${rows.length ? "green" : "gray"}`;
+      badge.textContent = `${rows.length} KPI`;
+    }
+    if (!context.selectedPole) {
+      target.innerHTML = `<div class="empty-kpi-state">Aucun pole autorise sur ce perimetre.</div>`;
+      return;
+    }
+    if (!rows.length) {
+      target.innerHTML = `<div class="empty-kpi-state">Aucun KPI disponible pour ${escapeHtml(context.selectedPole.name)}.</div>`;
+      return;
+    }
+    target.innerHTML = rows
+      .map((row) => {
+        const targetMetric = metricFromTarget(row.kpi);
+        const status = row.kpi.status || "gray";
+        return `
+          <article class="dashboard-kpi-card status-${escapeHtml(status)}">
+            <div class="dashboard-kpi-card-head">
+              <span class="code-chip">${escapeHtml(row.kpi.id || row.pole.id)}</span>
+              ${statusPill(ragLabel(status), status)}
+            </div>
+            <h4>${escapeHtml(row.kpi.name)}</h4>
+            <div class="dashboard-kpi-value-row">
+              <div>
+                <span>Valeur du jour</span>
+                <strong>${escapeHtml(dayValueLabel(row.kpi))}</strong>
+              </div>
+              <div>
+                <span>Cumul mois a date</span>
+                <strong>${escapeHtml(monthToDateValueLabel(row.kpi))}</strong>
+              </div>
+            </div>
+            ${renderTrendStrip(row.kpi, row.pole)}
+            <div class="dashboard-kpi-card-footer">
+              <span>Objectif: ${escapeHtml(row.kpi.target || "A completer")}</span>
+              <strong class="${escapeHtml(targetMetric.className)}">${escapeHtml(targetMetric.display)}</strong>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderDashboardKpiTable(context) {
+    const table = $("#dashboard-kpi-detail-table");
+    const count = $("#dashboard-kpi-table-count");
+    if (!table) return;
+    const rows = context.kpiRows || [];
+    if (count) {
+      count.className = `status-pill ${rows.length ? "green" : "gray"}`;
+      count.textContent = `${rows.length} ligne${rows.length > 1 ? "s" : ""}`;
+    }
+    if (!rows.length) {
+      table.innerHTML = `<tr><td colspan="8">Aucun KPI disponible pour le pole selectionne.</td></tr>`;
+      return;
+    }
+    table.innerHTML = rows
+      .map((row) => {
+        const targetMetric = metricFromTarget(row.kpi);
+        return `
+          <tr>
+            <td>
+              <strong>${escapeHtml(row.kpi.name)}</strong>
+              <br><small>${escapeHtml(row.kpi.id || row.pole.id)}</small>
+            </td>
+            <td>${escapeHtml(dayValueLabel(row.kpi))}</td>
+            <td><strong>${escapeHtml(monthToDateValueLabel(row.kpi))}</strong></td>
+            <td>${escapeHtml(row.kpi.target || "A completer")}</td>
+            <td><strong class="${escapeHtml(targetMetric.className)}">${escapeHtml(targetMetric.display)}</strong></td>
+            <td>${escapeHtml(trendSummaryLabel(row.kpi, row.pole))}</td>
+            <td>${escapeHtml(row.kpi.source || "KoboCollect")}</td>
+            <td>${statusPill(ragLabel(row.kpi.status || "gray"), row.kpi.status || "gray")}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
   function renderAdvancedDashboard(state = {}) {
-    const context = getDashboardContext(state);
+    const context = getDashboardPoleContext(state);
     renderDashboardControlCards(context);
-    renderDashboardDirectorMode(context, state);
     renderDashboardAlerts(context, state);
-    renderDashboardHeatmap(context);
-    renderDashboardRanking(context);
-    renderDashboardQuality(context, state);
-    renderDashboardObjectives(context);
-    renderDashboardCadence(context);
-    renderDashboardActions(context);
-    renderDashboardForecast(context);
-    renderDashboardValidationLog(context, state);
-    renderDashboardKpiDetail(context, state);
+    renderDashboardKpiCards(context);
+    renderDashboardKpiTable(context);
   }
 
   function renderPoleSummaryRows(selector, state) {
@@ -1515,10 +1698,12 @@
   }
 
   function renderDashboardPoleKpis() {
+    const target = $("#dashboard-pole-kpis");
+    if (!target) return;
     const reporting = PMS_DATA.reporting;
     const categories = [...new Set(reporting.poles.map((pole) => pole.category || "Non classe"))];
 
-    $("#dashboard-pole-kpis").innerHTML = categories
+    target.innerHTML = categories
       .map((category) => {
         const poles = reporting.poles.filter((pole) => (pole.category || "Non classe") === category);
         return `

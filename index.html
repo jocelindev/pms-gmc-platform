@@ -200,281 +200,55 @@
         </section>
 
         <section class="view active" id="dashboard" aria-labelledby="view-title">
-          <div class="hero-panel">
-            <div>
-              <p class="eyebrow">Vision COMEX</p>
-              <h2>Performance consolidee GMC Group</h2>
-              <p>
-                Suivi centralise des KPIs, alertes critiques, dynamique d'amelioration
-                et couverture des soumissions KoboCollect.
-              </p>
-            </div>
-            <div class="hero-score">
-              <span>IPG</span>
-              <strong id="dashboard-ipg-score">82</strong>
-              <small id="dashboard-ipg-label">Performance groupe</small>
-            </div>
-          </div>
-
-          <div class="metric-grid">
-            <article class="metric-card">
-              <span class="metric-label">KPIs catalogues</span>
-              <strong id="catalog-stat-kpis">--</strong>
-              <span class="trend positive">Catalogue Palladium</span>
-            </article>
-            <article class="metric-card">
-              <span class="metric-label">Formules de calcul</span>
-              <strong id="catalog-stat-formulas">--</strong>
-              <span class="trend positive">Dictionnaire FORMULE</span>
-            </article>
-            <article class="metric-card">
-              <span class="metric-label">Groupes KPI</span>
-              <strong id="catalog-stat-groups">--</strong>
-              <span class="trend positive">Rattachements</span>
-            </article>
-            <article class="metric-card">
-              <span class="metric-label">Domaines collecte</span>
-              <strong id="catalog-stat-forms">--</strong>
-              <span class="trend positive">Fiches Kobo</span>
-            </article>
-          </div>
-
-          <section class="dashboard-command-zone">
-            <div class="dashboard-control-grid" id="dashboard-control-cards"></div>
-            <section class="panel dashboard-command-panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Mode direction</p>
-                  <h3>Lecture executive des priorites</h3>
-                </div>
-                <span class="status-pill amber" id="dashboard-director-badge">Synthese</span>
-              </div>
-              <div class="dashboard-command-grid">
-                <div class="director-brief" id="dashboard-director-mode"></div>
-                <div class="dashboard-alerts-list" id="dashboard-alerts-list"></div>
-              </div>
-            </section>
-          </section>
-
-          <div class="dashboard-insights-grid">
-            <section class="panel span-2">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Heatmap</p>
-                  <h3>Performance Pole x Pays</h3>
-                </div>
-                <span class="status-pill gray">RAG</span>
-              </div>
-              <div class="dashboard-heatmap-wrap" id="dashboard-heatmap"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Classement</p>
-                  <h3>Meilleurs poles et poles en risque</h3>
-                </div>
-              </div>
-              <div class="dashboard-ranking-list" id="dashboard-pole-ranking"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Qualite Kobo</p>
-                  <h3>Collecte et completude</h3>
-                </div>
-              </div>
-              <div class="dashboard-quality-list" id="dashboard-quality-list"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Objectifs</p>
-                  <h3>Atteinte des cibles</h3>
-                </div>
-              </div>
-              <div class="dashboard-objective-list" id="dashboard-objective-summary"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Cadence</p>
-                  <h3>Vue par rythme de collecte</h3>
-                </div>
-              </div>
-              <div class="dashboard-cadence-list" id="dashboard-cadence-view"></div>
-            </section>
-
-            <section class="panel span-2">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Plan d'action</p>
-                  <h3>Actions liees aux KPI rouges</h3>
-                </div>
-              </div>
-              <div class="dashboard-actions-grid" id="dashboard-actions-list"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Prevision</p>
-                  <h3>Risques anticipes</h3>
-                </div>
-              </div>
-              <div class="dashboard-forecast-list" id="dashboard-forecast-list"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Audit</p>
-                  <h3>Journal de validation</h3>
-                </div>
-              </div>
-              <div class="dashboard-audit-list" id="dashboard-validation-log"></div>
-            </section>
-
-            <section class="panel span-2">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Detail KPI</p>
-                  <h3>KPI selectionne</h3>
-                </div>
-                <span class="status-pill gray" id="dashboard-kpi-detail-badge">Selection</span>
-              </div>
-              <div class="dashboard-kpi-detail" id="dashboard-detail-preview"></div>
-            </section>
-          </div>
-
-          <section class="panel country-performance-panel">
+          <section class="panel dashboard-focus-panel">
             <div class="panel-header">
               <div>
-                <p class="eyebrow">Pays / Filiale</p>
-                <h3>Synthese de performance par pays</h3>
+                <p class="eyebrow">Pilotage performance</p>
+                <h3 id="dashboard-focus-title">Resume du pole selectionne</h3>
               </div>
-              <span class="status-pill green" id="country-active-scope">Groupe</span>
+              <span class="status-pill gray" id="dashboard-pole-status">Selection</span>
             </div>
-            <div class="country-score-grid" id="country-summary-cards"></div>
-            <div class="table-wrap country-table-wrap">
-              <table class="country-performance-table">
+            <div class="dashboard-control-grid dashboard-focus-summary" id="dashboard-control-cards"></div>
+            <div class="dashboard-alerts-list dashboard-alerts-strip" id="dashboard-alerts-list"></div>
+          </section>
+
+          <section class="panel dashboard-kpi-cards-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Cartes KPI</p>
+                <h3>KPI du pole selectionne</h3>
+              </div>
+              <span class="status-pill green" id="dashboard-kpi-card-count">0 KPI</span>
+            </div>
+            <div class="dashboard-kpi-card-grid" id="dashboard-pole-kpi-cards"></div>
+          </section>
+
+          <section class="panel dashboard-kpi-table-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Table detaillee</p>
+                <h3>Lecture complete des KPI</h3>
+              </div>
+              <span class="status-pill gray" id="dashboard-kpi-table-count">0 ligne</span>
+            </div>
+            <div class="table-wrap dashboard-performance-table-wrap">
+              <table class="dashboard-performance-table">
                 <thead>
                   <tr>
-                    <th>Pays</th>
-                    <th>Score</th>
-                    <th>KPI attendus</th>
-                    <th>Qualite Kobo</th>
-                    <th>Rapport</th>
-                    <th>Retards</th>
-                    <th>Action</th>
+                    <th>KPI</th>
+                    <th>Valeur du jour</th>
+                    <th>Cumul mensuel a date</th>
+                    <th>Objectif</th>
+                    <th>Vs target</th>
+                    <th>Tendance</th>
+                    <th>Source</th>
+                    <th>Statut</th>
                   </tr>
                 </thead>
-                <tbody id="country-performance-table"></tbody>
+                <tbody id="dashboard-kpi-detail-table"></tbody>
               </table>
             </div>
           </section>
-
-          <section class="panel dashboard-poles-panel">
-            <div class="panel-header">
-              <div>
-                <p class="eyebrow">Dashboard KPI par pole</p>
-                <h3>Table synthese des KPI par pole</h3>
-              </div>
-              <span class="status-pill amber" id="dashboard-pole-count">15 poles suivis</span>
-            </div>
-            <div class="table-wrap pole-summary-wrap">
-              <table class="pole-summary-table">
-                <thead>
-                  <tr>
-                    <th>Categorie</th>
-                    <th>Pole</th>
-                    <th>Collecte</th>
-                    <th>Responsable</th>
-                    <th>Score</th>
-                    <th>RAG KPI</th>
-                    <th>Qualite Kobo</th>
-                    <th>Rapport</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody id="dashboard-pole-summary-table"></tbody>
-              </table>
-            </div>
-          </section>
-
-          <div class="dashboard-grid">
-            <section class="panel span-2">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Benchmark pays</p>
-                  <h3>Indice de performance pays / filiale</h3>
-                </div>
-                <button class="ghost-action">Exporter</button>
-              </div>
-              <div class="branch-bars" id="branch-bars"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">RAG</p>
-                  <h3>Statut portefeuille KPI</h3>
-                </div>
-              </div>
-              <div class="rag-donut" aria-label="Repartition RAG">
-                <div class="donut"></div>
-                <div class="legend">
-                  <span><i class="green"></i> Vert 64%</span>
-                  <span><i class="amber"></i> Orange 23%</span>
-                  <span><i class="red"></i> Rouge 13%</span>
-                </div>
-              </div>
-            </section>
-
-            <section class="panel span-2">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Priorites</p>
-                  <h3>Alertes executives</h3>
-                </div>
-                <span class="status-pill red">6 critiques</span>
-              </div>
-              <div class="alert-list" id="executive-alerts"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Tendance</p>
-                  <h3>IPG sur 6 periodes</h3>
-                </div>
-              </div>
-              <div class="sparkline" id="ipg-sparkline" aria-label="Tendance IPG"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Catalogue</p>
-                  <h3>Repartition par categorie</h3>
-                </div>
-              </div>
-              <div class="breakdown-list" id="category-breakdown"></div>
-            </section>
-
-            <section class="panel span-2">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Frequences</p>
-                  <h3>Cadences de collecte KPI</h3>
-                </div>
-              </div>
-              <div class="loss-stack" id="frequency-breakdown"></div>
-            </section>
-          </div>
         </section>
 
         <section class="view" id="poles">
@@ -1441,9 +1215,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=admin-no-dashboard-filters-2026"></script>
-    <script src="scripts/renderers.js?v=admin-no-dashboard-filters-2026"></script>
-    <script src="scripts/api.js?v=admin-no-dashboard-filters-2026"></script>
-    <script src="app.js?v=admin-no-dashboard-filters-2026"></script>
+    <script src="scripts/data.js?v=performance-dashboard-v1-2026"></script>
+    <script src="scripts/renderers.js?v=performance-dashboard-v1-2026"></script>
+    <script src="scripts/api.js?v=performance-dashboard-v1-2026"></script>
+    <script src="app.js?v=performance-dashboard-v1-2026"></script>
   </body>
 </html>

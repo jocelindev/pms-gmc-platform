@@ -1497,6 +1497,7 @@
     syncPeriodFilterFromCalendar();
     applyCalculatedKpisToReporting();
     renderCalendarSlicer(state);
+    renderAdvancedDashboard(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
     renderReportControls(state);
@@ -1629,19 +1630,19 @@
 
     poleFilter?.addEventListener("change", () => {
       state.calendarPoleFilter = poleFilter.value;
-      if (poleFilter.value !== "Tous") {
-        const allowedPole = getAllowedPoleFromScope(poleFilter.value);
-        state.currentPoleMonitor = allowedPole;
-        state.currentReportPole = allowedPole;
-      }
+      const allowedPole = getAllowedPoleFromScope(poleFilter.value);
+      state.currentPoleMonitor = allowedPole;
+      state.currentReportPole = allowedPole;
       ensureCalendarDateFromAvailableData();
       applyCalculatedKpisToReporting();
       renderCalendarSlicer(state);
+      renderAdvancedDashboard(state);
+      renderPoleSummaryTables(state);
       renderPoleControls(state);
       renderPoleMonitor(state);
       renderReportControls(state);
       renderReportWorkspace(state);
-      showToast(poleFilter.value === "Tous" ? "Tous les poles sont visibles." : "Filtre pole applique.");
+      showToast("Filtre pole applique.");
     });
 
     branchFilter?.addEventListener("change", () => {
