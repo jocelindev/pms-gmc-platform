@@ -2237,6 +2237,29 @@ textarea {
   line-height: 1.4;
 }
 
+.kobo-template-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.kobo-template-actions .ghost-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  text-align: center;
+  text-decoration: none;
+}
+
+.kobo-template-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .admin-kobo-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3691,6 +3714,7 @@ td small {
   .admin-kobo-form,
   .admin-kobo-actions,
   .kobo-logic-grid,
+  .kobo-template-actions,
   .objective-profile-main,
   .collection-sheet-grid,
   .objective-field-section-grid,
@@ -3776,6 +3800,7 @@ td small {
   .admin-summary-grid,
   .admin-kobo-form,
   .kobo-logic-grid,
+  .kobo-template-actions,
   .objective-profile-main,
   .collection-sheet-grid,
   .objective-field-section-grid,

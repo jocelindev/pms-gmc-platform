@@ -66,6 +66,10 @@ C:\Users\dquin\Documents\developpement Web\pms-gmc-platform\index.html
 
 La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'est l'espace de parametrage des formulaires qui alimentent la plateforme.
 
+- Deux modeles XLSForm sont disponibles dans `kobo_forms/` :
+  - `PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026.xlsx` pour le referentiel KPI, les objectifs et les formules.
+  - `PMS_GMC_Formulaire_2_Donnees_Calcul_Journalieres_2026.xlsx` pour les donnees brutes journalieres de calcul.
+- Depuis l'interface, ces modeles sont telechargeables dans **Administration > KoboCollecte**, avant les zones UID/token.
 - Le serveur lit les metadonnees du formulaire Kobo et enregistre les champs detectes dans SQLite.
 - Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.
 - Le jeton API sert uniquement a la synchronisation courante : il n'est pas renvoye a l'interface ni affiche comme formulaire actif.
