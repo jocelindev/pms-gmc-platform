@@ -122,11 +122,16 @@
   function refreshPoleMetrics(poleId, kpis, options = {}) {
     const pole = PMS_DATA.reporting.poles.find((item) => item.id === poleId);
     if (!pole || !kpis.length) return;
+    const cadenceProfile = PMS_DATA.collectionCadenceByPole?.[poleId] || {};
     const redCount = kpis.filter((item) => item.status === "red").length;
     const amberCount = kpis.filter((item) => item.status === "amber").length;
     const grayCount = kpis.filter((item) => item.status === "gray").length;
     const score = scoreFromKpis(kpis);
     pole.kpiCount = kpis.length;
+    pole.collectionCadence = options.collectionCadence || pole.collectionCadence || cadenceProfile.cadence || "Selon referentiel KPI";
+    pole.collectionPrimary = options.collectionPrimary || pole.collectionPrimary || cadenceProfile.primary || "A preciser";
+    pole.collectionSourceSheet = options.collectionSourceSheet || pole.collectionSourceSheet || cadenceProfile.sourceSheet || "";
+    pole.collectionExpectedDelay = options.collectionExpectedDelay || pole.collectionExpectedDelay || cadenceProfile.expectedDelay || "";
     pole.score = score;
     pole.rag = redCount ? "red" : amberCount ? "amber" : grayCount ? "gray" : "green";
     pole.status = statusLabel(pole.rag);
@@ -151,6 +156,8 @@
         trend: formula.frequency || "A synchroniser",
         status: "gray",
         source: formula.source || "GMC_FICHE_COLLECTE_V2.xlsx",
+        collectionFrequency: formula.frequency || PMS_DATA.collectionCadenceByPole?.[poleId]?.cadence || "A preciser",
+        reportingFrequency: PMS_DATA.collectionCadenceByPole?.[poleId]?.primary || formula.frequency || "A preciser",
         calculated: false,
         pendingCalculation: true,
         period: "A collecter",
@@ -261,13 +268,15 @@
   }
 
   function cycleFromCalendarPreset(preset) {
-    if (preset === "week" || preset === "today") return "Hebdomadaire";
+    if (preset === "today") return "Journalier";
+    if (preset === "week") return "Hebdomadaire";
     if (preset === "quarter") return "Trimestriel";
     if (preset === "year") return "Annuel";
     return "Mensuel";
   }
 
   function presetFromCycle(cycle) {
+    if (cycle === "Journalier") return "today";
     if (cycle === "Hebdomadaire") return "week";
     if (cycle === "Trimestriel") return "quarter";
     if (cycle === "Annuel") return "year";
@@ -309,6 +318,8 @@
           trend: "Reference Kobo",
           status: "gray",
           source: kpi.source || "KoboCollect",
+          collectionFrequency: kpi.collectionFrequency || PMS_DATA.collectionCadenceByPole?.[kpi.poleId]?.cadence || "A preciser",
+          reportingFrequency: kpi.reportingFrequency || PMS_DATA.collectionCadenceByPole?.[kpi.poleId]?.primary || "A preciser",
           calculated: false,
           pendingCalculation: true,
           period: "A calculer",
@@ -327,6 +338,8 @@
         trend: result.trend || "Calcul Kobo",
         status: result.status || "gray",
         source: result.source || "KoboCollect",
+        collectionFrequency: result.collectionFrequency || PMS_DATA.collectionCadenceByPole?.[result.poleId]?.cadence || "A preciser",
+        reportingFrequency: result.reportingFrequency || PMS_DATA.collectionCadenceByPole?.[result.poleId]?.primary || "A preciser",
         calculated: true,
         period: result.period,
         formula: result.formula,
@@ -423,6 +436,7 @@
     })),
     currentPoleMonitor: PMS_DATA.reporting.defaultPole,
     currentPoleCycle: PMS_DATA.reporting.defaultCycle,
+    currentPoleFrequency: "Tous",
     currentReportPole: PMS_DATA.reporting.defaultPole,
     currentReportCycle: PMS_DATA.reporting.defaultCycle,
     currentAdminPole: PMS_DATA.reporting.defaultPole,
@@ -1387,6 +1401,20 @@
         state.currentPoleCycle = event.target.value;
         renderPoleMonitor(state);
         showToast(`Cycle ${event.target.value.toLowerCase()} applique au suivi du pole.`);
+      });
+    }
+
+    const frequencySelect = $("#pole-frequency-filter");
+    if (frequencySelect) {
+      frequencySelect.addEventListener("change", (event) => {
+        state.currentPoleFrequency = event.target.value || "Tous";
+        renderPoleControls(state);
+        renderPoleMonitor(state);
+        showToast(
+          state.currentPoleFrequency === "Tous"
+            ? "Toutes les cadences de collecte sont visibles."
+            : `Cadence ${state.currentPoleFrequency.toLowerCase()} appliquee au suivi du pole.`
+        );
       });
     }
 

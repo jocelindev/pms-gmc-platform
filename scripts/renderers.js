@@ -161,6 +161,79 @@
     return rows.filter((row) => matchesCountryScope(row.branch || row.country || row.filiale || row.pays, country));
   }
 
+  function cadenceProfileForPole(pole = {}) {
+    return (
+      PMS_DATA.collectionCadenceByPole?.[pole.id] || {
+        cadence: pole.collectionCadence || "Selon referentiel KPI",
+        primary: pole.collectionPrimary || "A preciser",
+        sourceSheet: pole.collectionSourceSheet || "",
+        expectedDelay: pole.collectionExpectedDelay || "",
+        detail: "Cadence issue du referentiel KPI ou a confirmer dans KoboCollect.",
+      }
+    );
+  }
+
+  function normalizeCadence(value) {
+    const normalized = normalizeLookup(value);
+    if (normalized.includes("horaire")) return "Horaire";
+    if (normalized.includes("jour") || normalized.includes("quotid")) return "Journalier";
+    if (normalized.includes("hebdo") || normalized.includes("semaine")) return "Hebdomadaire";
+    if (normalized.includes("mens")) return "Mensuel";
+    if (normalized.includes("trimes")) return "Trimestriel";
+    if (normalized.includes("ann")) return "Annuel";
+    return value || "A preciser";
+  }
+
+  function cadenceClass(value) {
+    const cadence = normalizeCadence(value);
+    if (cadence === "Horaire" || cadence === "Journalier") return "green";
+    if (cadence === "Hebdomadaire") return "amber";
+    if (cadence === "Mensuel" || cadence === "Trimestriel") return "gray";
+    return "gray";
+  }
+
+  function kpiCollectionFrequency(kpi = {}, pole = {}) {
+    const cadence = kpi.collectionFrequency || kpi.frequency || "";
+    if (cadence) return cadence;
+    const source = normalizeLookup(kpi.source);
+    if (source.includes("horaire")) return "Horaire";
+    if (source.includes("jour")) return "Journalier";
+    if (source.includes("hebd")) return "Hebdomadaire";
+    if (source.includes("mens")) return "Mensuel";
+    return cadenceProfileForPole(pole).cadence || "A preciser";
+  }
+
+  function matchesCadenceFilter(value, filterValue) {
+    if (!filterValue || filterValue === "Tous") return true;
+    const normalizedValue = normalizeLookup(value);
+    const normalizedFilter = normalizeLookup(filterValue);
+    if (normalizedFilter === "journalier") {
+      return normalizedValue.includes("jour") || normalizedValue.includes("quotid") || normalizedValue.includes("horaire");
+    }
+    if (normalizedFilter === "hebdomadaire") {
+      return normalizedValue.includes("hebdo") || normalizedValue.includes("semaine");
+    }
+    if (normalizedFilter === "mensuel") {
+      return normalizedValue.includes("mens");
+    }
+    if (normalizedFilter === "horaire") {
+      return normalizedValue.includes("horaire");
+    }
+    return normalizedValue.includes(normalizedFilter);
+  }
+
+  function filteredKpisByCadence(kpis = [], pole = {}, filterValue = "Tous") {
+    return kpis.filter((kpi) => matchesCadenceFilter(kpiCollectionFrequency(kpi, pole), filterValue));
+  }
+
+  function cadenceOptionsHtml(selectedValue = "Tous") {
+    return ["Tous", "Horaire", "Journalier", "Hebdomadaire", "Mensuel"]
+      .map(
+        (option) => `<option value="${escapeHtml(option)}" ${option === selectedValue ? "selected" : ""}>${escapeHtml(option)}</option>`
+      )
+      .join("");
+  }
+
   function getObjectiveCatalogProfile(kpi, pole = {}) {
     const template = PMS_DATA.objectiveKoboTemplate || {};
     const profiles = template.catalogProfiles || [];
@@ -574,16 +647,22 @@
       dashboardCount.textContent = `${visiblePoles.length} pole${visiblePoles.length > 1 ? "s" : ""} suivi${visiblePoles.length > 1 ? "s" : ""} - ${activeCountry.name}`;
     }
     if (!visiblePoles.length) {
-      target.innerHTML = `<tr><td colspan="8">Aucun pole autorise pour ${escapeHtml(activeCountry.name)} avec ce profil.</td></tr>`;
+      target.innerHTML = `<tr><td colspan="9">Aucun pole autorise pour ${escapeHtml(activeCountry.name)} avec ce profil.</td></tr>`;
       return;
     }
     target.innerHTML = visiblePoles
       .map((pole) => {
         const { greenCount, amberCount, redCount } = getPoleKpiStatus(pole.id);
+        const cadenceProfile = cadenceProfileForPole(pole);
+        const primaryCadence = cadenceProfile.primary || normalizeCadence(cadenceProfile.cadence);
         return `
           <tr>
             <td>${escapeHtml(pole.category || "Non classe")}</td>
             <td><strong>${escapeHtml(pole.name)}</strong><br><small>${escapeHtml(pole.id)}</small></td>
+            <td>
+              ${statusPill(primaryCadence, cadenceClass(primaryCadence))}
+              <br><small>${escapeHtml(cadenceProfile.cadence)}</small>
+            </td>
             <td>${escapeHtml(pole.owner)}</td>
             <td><strong>${pole.score}</strong></td>
             <td>
@@ -957,6 +1036,7 @@
     const reporting = PMS_DATA.reporting;
     const poleSelect = $("#pole-monitor-select");
     const cycleSelect = $("#pole-cycle-select");
+    const frequencySelect = $("#pole-frequency-filter");
     if (!poleSelect) return;
 
     const accessContext = getPoleAccessContext(state);
@@ -965,6 +1045,11 @@
     if (!authorizedPoles.length) {
       poleSelect.innerHTML = `<option>Aucun pole autorise</option>`;
       poleSelect.disabled = true;
+      if (frequencySelect) {
+        frequencySelect.innerHTML = cadenceOptionsHtml("Tous");
+        frequencySelect.value = "Tous";
+        frequencySelect.disabled = true;
+      }
       const accessScope = $("#pole-access-scope");
       if (accessScope) {
         accessScope.textContent = `Acces: aucun pole autorise pour ${activeCountry.name}`;
@@ -990,6 +1075,12 @@
       )
       .join("");
     poleSelect.disabled = accessContext.isRestricted && authorizedPoles.length === 1;
+    if (frequencySelect) {
+      const selectedFrequency = state.currentPoleFrequency || "Tous";
+      frequencySelect.innerHTML = cadenceOptionsHtml(selectedFrequency);
+      frequencySelect.value = selectedFrequency;
+      frequencySelect.disabled = false;
+    }
 
     const accessScope = $("#pole-access-scope");
     if (accessScope) {
@@ -1029,6 +1120,8 @@
     const summary = $("#kpi-engine-summary");
     const proposals = $("#kpi-engine-proposals");
     const selectedPoleResults = countryResults.filter((item) => item.poleId === state.currentPoleMonitor);
+    const selectedPole = PMS_DATA.reporting.poles.find((pole) => pole.id === state.currentPoleMonitor) || {};
+    const cadenceProfile = cadenceProfileForPole(selectedPole);
     const configured = Boolean(quality.configured);
     const calculated = isGroupCountry(activeCountry) ? quality.calculatedCount || results.length || 0 : countryResults.length;
     const calculationGroups = quality.calculationGroups || 0;
@@ -1043,6 +1136,7 @@
       const cards = [
         { label: "KPI calcules", value: calculated, hint: activeCountry.name },
         { label: "KPI du pole", value: selectedPoleResults.length, hint: "filtre actif" },
+        { label: "Collecte attendue", value: cadenceProfile.primary || normalizeCadence(cadenceProfile.cadence), hint: cadenceProfile.expectedDelay || cadenceProfile.cadence },
         { label: "Rapprochement", value: `${matchRate}%`, hint: `${quality.matchedCalculationGroups || 0}/${calculationGroups} groupes` },
         { label: "Ecarts", value: quality.unmatchedCalculationCount || 0, hint: "pole, KPI ou periode" },
       ];
@@ -1098,18 +1192,25 @@
     }
     const selectedPole =
       authorizedPoles.find((item) => item.id === state.currentPoleMonitor) || authorizedPoles[0] || reporting.poles[0];
-    const selectedKpis = reporting.kpisByPole[selectedPole.id] || [];
+    const selectedFrequency = state.currentPoleFrequency || "Tous";
+    const rawSelectedKpis = reporting.kpisByPole[selectedPole.id] || [];
+    const selectedKpis = filteredKpisByCadence(rawSelectedKpis, selectedPole, selectedFrequency);
     if (poleSelect) poleSelect.value = selectedPole.id;
     if (title) title.textContent = `KPI - ${selectedPole.name} - ${activeCountry.name}`;
-    if (total) total.textContent = `${selectedKpis.length} KPI`;
+    if (total) total.textContent = selectedFrequency === "Tous" ? `${selectedKpis.length} KPI` : `${selectedKpis.length}/${rawSelectedKpis.length} KPI`;
 
     directory.innerHTML = [selectedPole]
       .map((pole) => {
-        const kpis = reporting.kpisByPole[pole.id] || [];
+        const rawKpis = reporting.kpisByPole[pole.id] || [];
+        const kpis = filteredKpisByCadence(rawKpis, pole, selectedFrequency);
         const greenCount = kpis.filter((item) => item.status === "green").length;
         const amberCount = kpis.filter((item) => item.status === "amber").length;
         const redCount = kpis.filter((item) => item.status === "red").length;
         const poleStatus = redCount ? "red" : amberCount ? "amber" : "green";
+        const cadenceProfile = cadenceProfileForPole(pole);
+        const cadenceLabel = selectedFrequency === "Tous"
+          ? cadenceProfile.primary || normalizeCadence(cadenceProfile.cadence)
+          : selectedFrequency;
 
         return `
           <article class="pole-kpi-block" id="pole-block-${escapeHtml(pole.id)}">
@@ -1121,6 +1222,7 @@
               </div>
               <div class="pole-kpi-counts">
                 <span class="status-pill ${poleStatus}">${kpis.length} KPI</span>
+                <span class="status-pill ${cadenceClass(cadenceLabel)}">Collecte: ${escapeHtml(cadenceLabel)}</span>
                 <span class="status-pill ${countryStatusClass(activeCountry)}">Pays: ${escapeHtml(activeCountry.name)}</span>
                 <span><i class="green"></i>${greenCount} vert(s)</span>
                 <span><i class="amber"></i>${amberCount} orange(s)</span>
@@ -1144,6 +1246,7 @@
                               <div><dt>Objectif</dt><dd>${escapeHtml(kpi.target)}</dd></div>
                               <div><dt>Tendance</dt><dd>${escapeHtml(kpi.trend)}</dd></div>
                               <div><dt>Source Kobo</dt><dd>${escapeHtml(kpi.source)}</dd></div>
+                              <div><dt>Frequence collecte</dt><dd>${escapeHtml(kpiCollectionFrequency(kpi, pole))}</dd></div>
                               <div><dt>Periode</dt><dd>${escapeHtml(kpi.period || "Kobo")}</dd></div>
                               <div><dt>Methode</dt><dd>${escapeHtml(kpi.method || (kpi.pendingCalculation ? "Donnees de calcul attendues" : "Calcul PMS"))}</dd></div>
                               <div><dt>Formule</dt><dd>${escapeHtml(kpi.formula || "A completer")}</dd></div>
@@ -1152,7 +1255,11 @@
                         `
                       )
                       .join("")
-                  : `<div class="empty-kpi-state">Aucun KPI n'est encore rattache a ce pole.</div>`
+                  : `<div class="empty-kpi-state">${
+                      rawKpis.length
+                        ? `Aucun KPI ${escapeHtml(selectedFrequency.toLowerCase())} pour ce pole. Changez le filtre de collecte pour voir les autres KPI.`
+                        : "Aucun KPI n'est encore rattache a ce pole."
+                    }</div>`
               }
             </div>
           </article>
@@ -1170,7 +1277,8 @@
     const reporting = PMS_DATA.reporting;
     const pole = reporting.poles.find((item) => item.id === state.currentPoleMonitor) || reporting.poles[0];
     const cycle = reporting.cycles.find((item) => item.value === state.currentPoleCycle) || reporting.cycles[0];
-    const kpis = reporting.kpisByPole[pole.id] || [];
+    const rawKpis = reporting.kpisByPole[pole.id] || [];
+    const kpis = filteredKpisByCadence(rawKpis, pole, state.currentPoleFrequency || "Tous");
     const redCount = kpis.filter((item) => item.status === "red").length;
     const amberCount = kpis.filter((item) => item.status === "amber").length;
     const greenCount = kpis.filter((item) => item.status === "green").length;
@@ -1216,6 +1324,7 @@
                   <span>Objectif: ${escapeHtml(kpi.target)}</span>
                   <span>Tendance: ${escapeHtml(kpi.trend)}</span>
                   <span>Source: ${escapeHtml(kpi.source)}</span>
+                  <span>Collecte: ${escapeHtml(kpiCollectionFrequency(kpi, pole))}</span>
                 </div>
               </article>
             `
@@ -1257,12 +1366,13 @@
                 <td>${escapeHtml(kpi.target)}</td>
                 <td>${escapeHtml(kpi.trend)}</td>
                 <td>${escapeHtml(kpi.source)}</td>
+                <td>${escapeHtml(kpiCollectionFrequency(kpi, pole))}</td>
                 <td>${statusPill(kpiStatusText(kpi.status), kpi.status)}</td>
               </tr>
             `
           )
           .join("")
-      : `<tr><td colspan="6">Aucun KPI n'est encore rattache a ce pole.</td></tr>`;
+      : `<tr><td colspan="7">Aucun KPI ne correspond au filtre de collecte selectionne.</td></tr>`;
 
     $("#pole-checklist").innerHTML = reporting.checklist
       .map((item, index) => {

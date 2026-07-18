@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=access-country-axis-2026" />
+    <link rel="stylesheet" href="styles.css?v=collection-cadence-2026" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -179,6 +179,7 @@
             <label class="powerbi-filter-box">
               <span>Cycle</span>
               <select id="calendar-cycle-filter">
+                <option>Journalier</option>
                 <option>Hebdomadaire</option>
                 <option selected>Mensuel</option>
                 <option>Trimestriel</option>
@@ -282,6 +283,7 @@
                   <tr>
                     <th>Categorie</th>
                     <th>Pole</th>
+                    <th>Collecte</th>
                     <th>Responsable</th>
                     <th>Score</th>
                     <th>RAG KPI</th>
@@ -379,6 +381,10 @@
               <label>
                 Pole
                 <select id="pole-monitor-select"></select>
+              </label>
+              <label>
+                Collecte
+                <select id="pole-frequency-filter"></select>
               </label>
             </div>
           </div>
@@ -1277,9 +1283,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=access-country-axis-2026"></script>
-    <script src="scripts/renderers.js?v=access-country-axis-2026"></script>
-    <script src="scripts/api.js?v=access-country-axis-2026"></script>
-    <script src="app.js?v=access-country-axis-2026"></script>
+    <script src="scripts/data.js?v=collection-cadence-2026"></script>
+    <script src="scripts/renderers.js?v=collection-cadence-2026"></script>
+    <script src="scripts/api.js?v=collection-cadence-2026"></script>
+    <script src="app.js?v=collection-cadence-2026"></script>
   </body>
 </html>

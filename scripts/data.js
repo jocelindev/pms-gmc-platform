@@ -450,6 +450,24 @@
       },
     ],
 
+    collectionCadenceByPole: {
+      BPO: { cadence: "Horaire / Journaliere", primary: "Journalier", sourceSheet: "BPO", formCode: "BPO", expectedDelay: "J+0 / J+1", detail: "Donnees operationnelles et production appelee par tranche horaire puis consolidation journaliere." },
+      PSMQ: { cadence: "Mensuelle / Trimestrielle", primary: "Mensuel", sourceSheet: "Catalogue KPI", formCode: "CATALOGUE", expectedDelay: "M+1", detail: "Indicateurs systeme qualite consolides depuis le referentiel KPI et controles documentaires." },
+      WFM: { cadence: "Horaire / Journaliere", primary: "Journalier", sourceSheet: "WFM", formCode: "WFM", expectedDelay: "J+0 / J+1", detail: "Planification, presence, adherence et occupation suivies au fil de l'eau." },
+      DRIVE: { cadence: "Hebdomadaire / Mensuelle", primary: "Hebdomadaire", sourceSheet: "Catalogue KPI", formCode: "PROJET", expectedDelay: "S+1", detail: "Avancement projet, jalons, risques et actions consolides chaque semaine." },
+      COM: { cadence: "Hebdomadaire / Mensuelle", primary: "Hebdomadaire", sourceSheet: "Catalogue KPI", formCode: "COM", expectedDelay: "S+1 / M+1", detail: "Pipeline, conversion et signatures suivis par semaine puis consolides mensuellement." },
+      DFC: { cadence: "Quotidienne / Mensuelle", primary: "Journalier", sourceSheet: "DFC", formCode: "DFC", expectedDelay: "J+1 / M+1", detail: "Suivi journalier du CA et consolidation mensuelle des indicateurs financiers." },
+      REC: { cadence: "Hebdomadaire / Mensuelle", primary: "Hebdomadaire", sourceSheet: "Catalogue KPI", formCode: "REC", expectedDelay: "S+1 / M+1", detail: "Relances et portefeuille de recouvrement suivis par semaine, taux consolides au mois." },
+      BRD: { cadence: "Journaliere / Mensuelle", primary: "Journalier", sourceSheet: "Catalogue KPI", formCode: "BRD", expectedDelay: "J+1 / M+1", detail: "Disponibilite reseau, ruptures et activite retail controlees au quotidien." },
+      BID: { cadence: "Mensuelle", primary: "Mensuel", sourceSheet: "Catalogue KPI", formCode: "BID", expectedDelay: "M+1", detail: "Portefeuille innovation et developpement consolide sur les cycles projet mensuels." },
+      DSI: { cadence: "Journaliere / Mensuelle", primary: "Journalier", sourceSheet: "DSI", formCode: "DSI", expectedDelay: "J+1", detail: "Disponibilite, incidents et tickets suivis en quotidien avec consolidation mensuelle." },
+      DCH: { cadence: "Journaliere / Mensuelle", primary: "Journalier", sourceSheet: "DCH", formCode: "DCH", expectedDelay: "J+1 / M+1", detail: "Presence, absences et retards en quotidien, indicateurs RH consolides en mensuel." },
+      EPC: { cadence: "Hebdomadaire", primary: "Hebdomadaire", sourceSheet: "POLE EPC", formCode: "EPC", expectedDelay: "S+1", detail: "Evaluations qualite, erreurs critiques et coaching consolides par semaine." },
+      GDC: { cadence: "Hebdomadaire / Mensuelle", primary: "Hebdomadaire", sourceSheet: "DCM", formCode: "DCM", expectedDelay: "S+1 / M+1", detail: "Conformite contractuelle et SLA suivis par semaine avec consolidation mensuelle." },
+      PAC: { cadence: "Journaliere / Mensuelle", primary: "Journalier", sourceSheet: "FORMULE", formCode: "CONSOLIDE", expectedDelay: "J+1 / M+1", detail: "Indicateurs consolides calcules a partir des donnees journalieres des poles sources." },
+      PMG: { cadence: "Journaliere / Hebdomadaire / Mensuelle", primary: "Journalier", sourceSheet: "Catalogue KPI", formCode: "PMG", expectedDelay: "J+1 / S+1 / M+1", detail: "Disponibilite des moyens suivie au quotidien, demandes et inventaire consolides par periode." },
+    },
+
     koboSubmissions: [
       { form: "KBO-BPO-JOUR-01", branch: "Cote d'Ivoire", kpi: "Taux de service (SL)", collector: "A. Traore", status: "Valide", className: "green" },
       { form: "KBO-WFM-JOUR-02", branch: "Congo", kpi: "Taux d'occupation", collector: "M. Nkoua", status: "En retard", className: "gray" },
@@ -567,6 +585,7 @@
       defaultPole: "BPO",
       defaultCycle: "Hebdomadaire",
       cycles: [
+        { value: "Journalier", deadline: "J+1 avant 10h00", scope: "Controle des collectes journalieres, anomalies et points bloquants" },
         { value: "Hebdomadaire", deadline: "Lundi 08h00", scope: "Suivi operationnel, alertes et actions court terme" },
         { value: "Mensuel", deadline: "05 du mois M+1", scope: "Rapport direction, COMEX et consolidation filiale" },
         { value: "Trimestriel", deadline: "10 du mois suivant", scope: "Analyse strategique, benchmark et trajectoire" },
