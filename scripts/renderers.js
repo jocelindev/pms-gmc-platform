@@ -56,6 +56,10 @@
     ];
   }
 
+  function ruleCountryValue(rule = {}) {
+    return rule.branch || rule.countryName || rule.country || "Groupe";
+  }
+
   function countryFilterValue(country = {}) {
     return country.name || country.id || "Groupe";
   }
@@ -74,14 +78,50 @@
     );
   }
 
-  function getActiveCountry(state = {}) {
-    return findCountryByValue(state.calendarBranchFilter || $("#branch-filter")?.value || "Groupe");
+  function accessRuleMatchesCountry(rule = {}, country = {}) {
+    const ruleCountry = findCountryByValue(ruleCountryValue(rule));
+    if (isGroupCountry(ruleCountry)) return true;
+    if (isGroupCountry(country)) return false;
+    return matchesCountryScope(ruleCountry.name, country);
   }
 
-  function countryOptionsHtml(selectedValue) {
-    const selectedCountry = findCountryByValue(selectedValue);
+  function getAccessRulesForState(state = {}) {
+    if (!state.currentUser || state.currentPermissions?.administration) return [];
+    const sessionRules = Array.isArray(state.userAccessScope)
+      ? state.userAccessScope.filter((rule) => rule?.poleId)
+      : [];
+    const fallbackRule = (state.accessRules || []).find((rule) => rule.id === state.activeAccessRuleId);
+    return sessionRules.length ? sessionRules : fallbackRule ? [fallbackRule] : [];
+  }
+
+  function getAuthorizedCountryOptions(state = {}) {
+    if (!state.currentUser || state.currentPermissions?.administration) return getCountryOptions();
+    const rules = getAccessRulesForState(state);
+    if (!rules.length) return [];
+    if (rules.some((rule) => isGroupCountry(findCountryByValue(ruleCountryValue(rule))))) {
+      return getCountryOptions();
+    }
+    const options = getCountryOptions().filter((country) =>
+      !isGroupCountry(country) &&
+      rules.some((rule) => matchesCountryScope(ruleCountryValue(rule), country))
+    );
+    return options;
+  }
+
+  function getActiveCountry(state = {}) {
+    const authorizedCountries = getAuthorizedCountryOptions(state);
+    const requestedCountry = findCountryByValue(state.calendarBranchFilter || $("#branch-filter")?.value || "Groupe");
+    if (!authorizedCountries.length) return requestedCountry;
+    if (authorizedCountries.some((country) => country.name === requestedCountry.name)) {
+      return requestedCountry;
+    }
+    return authorizedCountries[0];
+  }
+
+  function countryOptionsHtml(selectedValue, state = {}) {
+    const selectedCountry = getActiveCountry({ ...state, calendarBranchFilter: selectedValue });
     const selected = countryFilterValue(selectedCountry);
-    return getCountryOptions()
+    return getAuthorizedCountryOptions(state)
       .map((country) => {
         const value = countryFilterValue(country);
         return `<option value="${escapeHtml(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(country.name)}</option>`;
@@ -108,7 +148,7 @@
 
   function getCountryScopedPoles(state = {}, poles = []) {
     const country = getActiveCountry(state);
-    const sourcePoles = poles.length ? poles : PMS_DATA.reporting.poles;
+    const sourcePoles = arguments.length >= 2 ? poles : PMS_DATA.reporting.poles;
     if (isGroupCountry(country) || !Array.isArray(country.poleIds) || !country.poleIds.length) {
       return sourcePoles;
     }
@@ -212,7 +252,7 @@
 
     const activeCountry = getActiveCountry(state);
     const isGroup = isGroupCountry(activeCountry);
-    const countries = getCountryOptions().filter((country) => !isGroupCountry(country));
+    const countries = getAuthorizedCountryOptions(state).filter((country) => !isGroupCountry(country));
     const visibleCountries = isGroup ? countries : countries.filter((country) => country.name === activeCountry.name);
     const safeCountries = visibleCountries.length ? visibleCountries : countries;
     const average = (field) =>
@@ -247,8 +287,9 @@
     }
 
     if (table) {
-      table.innerHTML = safeCountries
-        .map((country) => {
+      table.innerHTML = safeCountries.length
+        ? safeCountries
+            .map((country) => {
           const isSelected = country.name === activeCountry.name && !isGroup;
           const statusClass = countryStatusClass(country);
           return `
@@ -269,8 +310,9 @@
               </td>
             </tr>
           `;
-        })
-        .join("");
+            })
+            .join("")
+        : `<tr><td colspan="7">Aucun pays / filiale autorise pour ce profil.</td></tr>`;
     }
   }
 
@@ -415,19 +457,24 @@
 
     if (poleFilter) {
       const accessContext = getPoleAccessContext(state);
-      const authorizedPoles = accessContext.poles.length ? accessContext.poles : PMS_DATA.reporting.poles;
-      poleFilter.innerHTML = [
-        `<option value="Tous">Tous</option>`,
-        ...authorizedPoles.map(
-          (pole) => `<option value="${escapeHtml(pole.id)}" ${pole.id === state.currentPoleMonitor ? "selected" : ""}>${escapeHtml(pole.name)}</option>`
-        ),
-      ].join("");
-      poleFilter.value = state.calendarPoleFilter || state.currentPoleMonitor || "Tous";
+      const authorizedPoles = accessContext.isRestricted ? accessContext.poles : PMS_DATA.reporting.poles;
+      poleFilter.innerHTML = authorizedPoles.length
+        ? [
+            `<option value="Tous">Tous</option>`,
+            ...authorizedPoles.map(
+              (pole) => `<option value="${escapeHtml(pole.id)}" ${pole.id === state.currentPoleMonitor ? "selected" : ""}>${escapeHtml(pole.name)}</option>`
+            ),
+          ].join("")
+        : `<option>Aucun pole autorise</option>`;
+      poleFilter.disabled = accessContext.isRestricted && !authorizedPoles.length;
+      if (authorizedPoles.length) {
+        poleFilter.value = state.calendarPoleFilter || state.currentPoleMonitor || "Tous";
+      }
     }
 
     const activeCountry = getActiveCountry(state);
     const activeCountryValue = countryFilterValue(activeCountry);
-    const countrySelectOptions = countryOptionsHtml(activeCountryValue);
+    const countrySelectOptions = countryOptionsHtml(activeCountryValue, state);
     const topbarBranchFilter = $("#branch-filter");
 
     if (topbarBranchFilter) {
@@ -500,19 +547,18 @@
       return { activeRule: null, poles: reporting.poles, isRestricted: false };
     }
 
-    const sessionRules = Array.isArray(state.userAccessScope)
-      ? state.userAccessScope.filter((rule) => rule?.poleId)
-      : [];
-    const fallbackRule = (state.accessRules || []).find((rule) => rule.id === state.activeAccessRuleId);
-    const rules = sessionRules.length ? sessionRules : fallbackRule ? [fallbackRule] : [];
-    const poleIds = [...new Set(rules.map((rule) => rule.poleId))];
+    const activeCountry = getActiveCountry(state);
+    const rules = getAccessRulesForState(state);
+    const countryRules = rules.filter((rule) => accessRuleMatchesCountry(rule, activeCountry));
+    const scopedRules = countryRules.length ? countryRules : [];
+    const poleIds = [...new Set(scopedRules.map((rule) => rule.poleId))];
     const poles = reporting.poles.filter((pole) => poleIds.includes(pole.id));
-    const activeRule = rules.find((rule) => rule.id === state.activeAccessRuleId) || rules[0] || null;
+    const activeRule = scopedRules.find((rule) => rule.id === state.activeAccessRuleId) || scopedRules[0] || null;
 
     return {
       activeRule,
-      poles: poles.length ? poles : reporting.poles,
-      isRestricted: poles.length > 0,
+      poles,
+      isRestricted: true,
     };
   }
 
@@ -915,7 +961,7 @@
 
     const accessContext = getPoleAccessContext(state);
     const activeCountry = getActiveCountry(state);
-    const authorizedPoles = getCountryScopedPoles(state, accessContext.poles.length ? accessContext.poles : reporting.poles);
+    const authorizedPoles = getCountryScopedPoles(state, accessContext.isRestricted ? accessContext.poles : reporting.poles);
     if (!authorizedPoles.length) {
       poleSelect.innerHTML = `<option>Aucun pole autorise</option>`;
       poleSelect.disabled = true;
@@ -1036,7 +1082,7 @@
 
     const accessContext = getPoleAccessContext(state);
     const activeCountry = getActiveCountry(state);
-    const authorizedPoles = getCountryScopedPoles(state, accessContext.poles.length ? accessContext.poles : reporting.poles);
+    const authorizedPoles = getCountryScopedPoles(state, accessContext.isRestricted ? accessContext.poles : reporting.poles);
     if (!authorizedPoles.length) {
       if (poleSelect) {
         poleSelect.innerHTML = `<option>Aucun pole autorise</option>`;
@@ -1297,12 +1343,25 @@
   function renderReportControls(state) {
     const reporting = PMS_DATA.reporting;
     const accessContext = getPoleAccessContext(state);
-    const authorizedPoles = accessContext.poles.length ? accessContext.poles : reporting.poles;
+    const authorizedPoles = accessContext.isRestricted ? accessContext.poles : reporting.poles;
+    const poleSelect = $("#report-pole-select");
+    if (!authorizedPoles.length) {
+      if (poleSelect) {
+        poleSelect.innerHTML = `<option>Aucun pole autorise</option>`;
+        poleSelect.disabled = true;
+      }
+      const cycleSelect = $("#report-cycle-select");
+      if (cycleSelect) {
+        cycleSelect.innerHTML = reporting.cycles
+          .map((cycle) => `<option value="${escapeHtml(cycle.value)}" ${cycle.value === state.currentReportCycle ? "selected" : ""}>${escapeHtml(cycle.value)}</option>`)
+          .join("");
+      }
+      return;
+    }
     if (!authorizedPoles.some((pole) => pole.id === state.currentReportPole)) {
       state.currentReportPole = authorizedPoles[0]?.id || reporting.defaultPole;
     }
 
-    const poleSelect = $("#report-pole-select");
     poleSelect.innerHTML = authorizedPoles
       .map(
         (pole) => `
@@ -1328,7 +1387,17 @@
   function renderReportWorkspace(state) {
     const reporting = PMS_DATA.reporting;
     const accessContext = getPoleAccessContext(state);
-    const authorizedPoles = accessContext.poles.length ? accessContext.poles : reporting.poles;
+    const authorizedPoles = accessContext.isRestricted ? accessContext.poles : reporting.poles;
+    if (!authorizedPoles.length) {
+      $("#report-preview-title").textContent = "Aucun rapport disponible";
+      $("#report-status-pill").className = "status-pill gray";
+      $("#report-status-pill").textContent = "Acces limite";
+      $("#report-summary").innerHTML = `<article class="report-kpi-card"><span>Acces</span><strong>0 pole</strong><small>Aucun pole autorise pour ce pays / filiale.</small></article>`;
+      $("#report-preview").innerHTML = `<div class="empty-kpi-state">Aucun rapport n'est visible pour ce pays / filiale avec ce profil.</div>`;
+      const reportActions = $("#report-actions");
+      if (reportActions) reportActions.innerHTML = "";
+      return;
+    }
     if (!authorizedPoles.some((item) => item.id === state.currentReportPole)) {
       state.currentReportPole = authorizedPoles[0]?.id || reporting.defaultPole;
     }
@@ -1736,6 +1805,7 @@
     const currentAccessRole = accessProfiles.find((role) => role.profile === state.currentAccessProfile) || accessProfiles[0];
     const profileSelect = $("#access-profile");
     const newUserProfileSelect = $("#new-user-profile");
+    const newUserBranchSelect = $("#new-user-branch");
     const newUserPoleSelect = $("#new-user-pole");
     const userTable = $("#user-table");
     const users = state.platformUsers || [];
@@ -1759,7 +1829,7 @@
         <div class="admin-summary-card">
           <span>Affectations</span>
           <strong>${accessRules.length}</strong>
-          <small>dashboards limites par pole</small>
+          <small>dashboards limites par pays + pole</small>
         </div>
         <div class="admin-summary-card">
           <span>Profils</span>
@@ -1769,7 +1839,7 @@
         <div class="admin-summary-card">
           <span>Selection</span>
           <strong>${escapeHtml(currentUser?.fullName || "Utilisateur")}</strong>
-          <small>${escapeHtml(currentUser?.defaultPoleName || "Pole a affecter")}</small>
+          <small>${escapeHtml(currentUser?.defaultBranch || "Groupe")} - ${escapeHtml(currentUser?.defaultPoleName || "Pole a affecter")}</small>
         </div>
       `;
     }
@@ -1810,6 +1880,12 @@
         .join("");
     }
 
+    if (newUserBranchSelect) {
+      const branch = state.currentUserAccessBranch || currentUser?.defaultBranch || "Groupe";
+      newUserBranchSelect.innerHTML = countryOptionsHtml(branch, {});
+      newUserBranchSelect.value = countryFilterValue(findCountryByValue(branch));
+    }
+
     document.querySelectorAll("[data-permission-key]").forEach((checkbox) => {
       checkbox.checked = Boolean(currentAccessRole?.permissions?.[checkbox.dataset.permissionKey]);
     });
@@ -1817,6 +1893,7 @@
     const selectedUserPole =
       reporting.poles.find((pole) => pole.id === state.currentUserAccessPole) || reporting.poles[0];
     const userResponsibleSelect = $("#user-access-responsible");
+    const userBranchSelect = $("#user-access-branch");
     const userPoleSelect = $("#user-access-pole");
     const userProfileSelect = $("#user-access-profile");
     const userDashboardInput = $("#user-access-dashboard");
@@ -1829,6 +1906,7 @@
             <option
               value="${escapeHtml(user.id)}"
               data-pole-id="${escapeHtml(user.defaultPoleId || "")}"
+              data-branch="${escapeHtml(user.defaultBranch || "Groupe")}"
               data-email="${escapeHtml(user.email || "")}"
               data-phone="${escapeHtml(user.phone || "")}"
               ${String(user.id) === String(currentUser?.id) ? "selected" : ""}
@@ -1841,7 +1919,7 @@
         : reporting.poles
             .map(
               (pole) => `
-              <option value="${escapeHtml(pole.id)}" data-pole-id="${escapeHtml(pole.id)}" ${pole.id === selectedUserPole.id ? "selected" : ""}>
+              <option value="${escapeHtml(pole.id)}" data-pole-id="${escapeHtml(pole.id)}" data-branch="Groupe" ${pole.id === selectedUserPole.id ? "selected" : ""}>
                 ${escapeHtml(pole.owner)}
               </option>
             `
@@ -1861,6 +1939,12 @@
         .join("");
     }
 
+    if (userBranchSelect) {
+      const branch = state.currentUserAccessBranch || currentUser?.defaultBranch || "Groupe";
+      userBranchSelect.innerHTML = countryOptionsHtml(branch, {});
+      userBranchSelect.value = countryFilterValue(findCountryByValue(branch));
+    }
+
     if (userProfileSelect) {
       const profile = state.currentUserAccessProfile || "Manager / Responsable";
       userProfileSelect.innerHTML = accessProfiles
@@ -1875,7 +1959,8 @@
     }
 
     if (userDashboardInput) {
-      userDashboardInput.value = `Dashboard Suivi KPI - ${selectedUserPole.name}`;
+      const branch = state.currentUserAccessBranch || currentUser?.defaultBranch || "Groupe";
+      userDashboardInput.value = `Dashboard Suivi KPI - ${countryFilterValue(findCountryByValue(branch))} - ${selectedUserPole.name}`;
     }
 
     const userCount = $("#user-count");
@@ -1895,13 +1980,14 @@
                 <td>${escapeHtml(user.email || "")}</td>
                 <td>${escapeHtml(user.phone || "")}</td>
                 <td>${escapeHtml(user.profile || "")}</td>
+                <td>${escapeHtml(user.defaultBranch || "Groupe")}</td>
                 <td>${escapeHtml(user.defaultPoleName || user.defaultPoleId || "A affecter")}</td>
                 <td>${statusPill(user.status || "Actif", userStatusClass(user.status || "Actif"))}</td>
               </tr>
             `
             )
             .join("")
-        : `<tr><td colspan="6">Aucun utilisateur cree pour le moment.</td></tr>`;
+        : `<tr><td colspan="7">Aucun utilisateur cree pour le moment.</td></tr>`;
     }
 
     const permissionLabels = [
@@ -1961,6 +2047,7 @@
                 return `
                 <tr>
                   <td><strong>${escapeHtml(rule.responsible)}</strong></td>
+                  <td>${escapeHtml(rule.branch || rule.countryName || "Groupe")}</td>
                   <td><strong>${escapeHtml(rule.poleName)}</strong><br><small>${escapeHtml(rule.poleId)}</small></td>
                   <td>${escapeHtml(rule.role)}</td>
                   <td>
@@ -1978,7 +2065,7 @@
               }
             )
             .join("")
-        : `<tr><td colspan="6">Aucune affectation par pole configuree.</td></tr>`;
+        : `<tr><td colspan="7">Aucune affectation par pole configuree.</td></tr>`;
     }
   }
 

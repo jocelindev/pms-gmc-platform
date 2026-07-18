@@ -204,9 +204,115 @@ def audit(conn: sqlite3.Connection, action: str, entity_type: str, entity_id: st
     )
 
 
+def unique_index_columns(conn: sqlite3.Connection, table: str) -> list[list[str]]:
+    indexes = conn.execute(f"PRAGMA index_list({table})").fetchall()
+    unique_columns = []
+    for index in indexes:
+        if not index["unique"]:
+            continue
+        index_name = str(index["name"]).replace("'", "''")
+        columns = [
+            row["name"]
+            for row in conn.execute(f"PRAGMA index_info('{index_name}')").fetchall()
+            if row["name"]
+        ]
+        unique_columns.append(columns)
+    return unique_columns
+
+
+def create_user_access_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE user_access (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          pole_id TEXT NOT NULL,
+          branch TEXT NOT NULL DEFAULT 'Groupe',
+          profile_id INTEGER NOT NULL,
+          dashboard_scope TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'Actif',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (user_id, pole_id, branch),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (pole_id) REFERENCES poles(id) ON DELETE CASCADE,
+          FOREIGN KEY (profile_id) REFERENCES profiles(id)
+        )
+        """
+    )
+
+
+def recreate_user_access_view(conn: sqlite3.Connection) -> None:
+    conn.execute("DROP VIEW IF EXISTS v_user_access_details")
+    conn.execute(
+        """
+        CREATE VIEW v_user_access_details AS
+        SELECT
+          ua.id,
+          u.full_name AS responsible,
+          u.email,
+          p.id AS pole_id,
+          p.name AS pole_name,
+          ua.branch,
+          pr.name AS profile,
+          ua.dashboard_scope,
+          ua.status
+        FROM user_access ua
+        JOIN users u ON u.id = ua.user_id
+        JOIN poles p ON p.id = ua.pole_id
+        JOIN profiles pr ON pr.id = ua.profile_id
+        """
+    )
+
+
+def ensure_user_access_schema(conn: sqlite3.Connection) -> bool:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(user_access)").fetchall()}
+    if not columns:
+        create_user_access_table(conn)
+        recreate_user_access_view(conn)
+        return True
+
+    unique_columns = unique_index_columns(conn, "user_access")
+    needs_rebuild = "branch" not in columns or ["user_id", "pole_id", "branch"] not in unique_columns
+    if not needs_rebuild:
+        recreate_user_access_view(conn)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_user_access_branch ON user_access(branch)")
+        return False
+
+    branch_select = "COALESCE(NULLIF(branch, ''), 'Groupe')" if "branch" in columns else "'Groupe'"
+    conn.execute("DROP VIEW IF EXISTS v_user_access_details")
+    conn.execute("ALTER TABLE user_access RENAME TO user_access_old")
+    create_user_access_table(conn)
+    conn.execute(
+        f"""
+        INSERT OR IGNORE INTO user_access (
+          id, user_id, pole_id, branch, profile_id, dashboard_scope, status, created_at, updated_at
+        )
+        SELECT
+          id,
+          user_id,
+          pole_id,
+          {branch_select},
+          profile_id,
+          dashboard_scope,
+          status,
+          created_at,
+          updated_at
+        FROM user_access_old
+        """
+    )
+    conn.execute("DROP TABLE user_access_old")
+    recreate_user_access_view(conn)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_access_user ON user_access(user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_access_pole ON user_access(pole_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_access_branch ON user_access(branch)")
+    return True
+
+
 def migrate_database(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
     changed = False
+    changed = ensure_user_access_schema(conn) or changed
     if "password_hash" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
         changed = True
@@ -399,9 +505,9 @@ def list_profiles(conn: sqlite3.Connection) -> list[dict]:
 def list_user_access(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         """
-        SELECT id, responsible, pole_id, pole_name, profile, dashboard_scope, status
+        SELECT id, responsible, pole_id, pole_name, branch, profile, dashboard_scope, status
         FROM v_user_access_details
-        ORDER BY id DESC
+        ORDER BY branch, pole_name, responsible
         """
     ).fetchall()
     return [
@@ -411,9 +517,11 @@ def list_user_access(conn: sqlite3.Connection) -> list[dict]:
             "responsible": row["responsible"],
             "poleId": row["pole_id"],
             "poleName": row["pole_name"],
+            "branch": row["branch"] or "Groupe",
+            "countryName": row["branch"] or "Groupe",
             "role": row["profile"],
             "dashboardScope": row["dashboard_scope"],
-            "permission": "Acces limite au dashboard de son pole",
+            "permission": f"Acces limite a {row['branch'] or 'Groupe'} / {row['pole_name']}",
             "status": row["status"],
             "className": "green" if row["status"] == "Actif" else "amber",
         }
@@ -595,7 +703,12 @@ def list_kobo_sources(conn: sqlite3.Connection) -> list[dict]:
     return sources
 
 
-def user_to_front(row: sqlite3.Row, default_pole_id: str | None = None, default_pole_name: str | None = None) -> dict:
+def user_to_front(
+    row: sqlite3.Row,
+    default_pole_id: str | None = None,
+    default_pole_name: str | None = None,
+    default_branch: str | None = None,
+) -> dict:
     return {
         "id": row["id"],
         "fullName": row["full_name"],
@@ -605,6 +718,7 @@ def user_to_front(row: sqlite3.Row, default_pole_id: str | None = None, default_
         "status": row["status"] or "Actif",
         "defaultPoleId": row["default_pole_id"] if "default_pole_id" in row.keys() else default_pole_id,
         "defaultPoleName": row["default_pole_name"] if "default_pole_name" in row.keys() else default_pole_name,
+        "defaultBranch": row["default_branch"] if "default_branch" in row.keys() else default_branch or "Groupe",
     }
 
 
@@ -619,6 +733,7 @@ def list_users(conn: sqlite3.Connection) -> list[dict]:
           u.status,
           COALESCE(pr.name, apr.name, 'Manager / Responsable') AS profile,
           ua.pole_id AS default_pole_id,
+          ua.branch AS default_branch,
           p.name AS default_pole_name
         FROM users u
         LEFT JOIN profiles pr ON pr.id = u.default_profile_id
@@ -686,6 +801,7 @@ def create_platform_user(payload: dict) -> dict:
     password = str(payload.get("password") or payload.get("temporaryPassword") or "").strip()
     default_pole_id = str(payload.get("defaultPoleId") or "").strip()
     default_pole_name = str(payload.get("defaultPoleName") or "").strip()
+    default_branch = str(payload.get("defaultBranch") or payload.get("branch") or "Groupe").strip() or "Groupe"
     if not full_name:
         raise ValueError("Le nom complet est obligatoire.")
     validate_password(password)
@@ -705,14 +821,15 @@ def create_platform_user(payload: dict) -> dict:
               u.status,
               pr.name AS profile,
               ? AS default_pole_id,
+              ? AS default_branch,
               ? AS default_pole_name
             FROM users u
             LEFT JOIN profiles pr ON pr.id = u.default_profile_id
             WHERE u.id = ?
             """,
-            (default_pole_id or None, default_pole_name or None, user_id),
+            (default_pole_id or None, default_branch, default_pole_name or None, user_id),
         ).fetchone()
-        return user_to_front(row, default_pole_id or None, default_pole_name or None)
+        return user_to_front(row, default_pole_id or None, default_pole_name or None, default_branch)
 
 
 def save_user_access(payload: dict) -> dict:
@@ -722,10 +839,11 @@ def save_user_access(payload: dict) -> dict:
     phone = str(payload.get("phone") or "").strip()
     pole_id = str(payload.get("poleId") or "").strip()
     pole_name = str(payload.get("poleName") or pole_id).strip()
+    branch = str(payload.get("branch") or payload.get("countryName") or payload.get("country") or "Groupe").strip() or "Groupe"
     profile = str(payload.get("role") or payload.get("profile") or "").strip()
-    dashboard_scope = str(payload.get("dashboardScope") or f"Dashboard Suivi KPI - {pole_name}").strip()
-    if not responsible or not pole_id or not profile:
-        raise ValueError("Responsable, pole et profil sont obligatoires.")
+    dashboard_scope = str(payload.get("dashboardScope") or f"Dashboard Suivi KPI - {branch} - {pole_name}").strip()
+    if not responsible or not pole_id or not branch or not profile:
+        raise ValueError("Responsable, pays/filiale, pole et profil sont obligatoires.")
 
     with db_connect() as conn:
         profile_id = ensure_profile(conn, profile)
@@ -758,25 +876,25 @@ def save_user_access(payload: dict) -> dict:
             user_id = upsert_user_details(conn, responsible, email or None, phone or None, profile_id, "Actif")
         conn.execute(
             """
-            INSERT INTO user_access (user_id, pole_id, profile_id, dashboard_scope, status, updated_at)
-            VALUES (?, ?, ?, ?, 'Actif', CURRENT_TIMESTAMP)
-            ON CONFLICT(user_id, pole_id) DO UPDATE SET
+            INSERT INTO user_access (user_id, pole_id, branch, profile_id, dashboard_scope, status, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'Actif', CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, pole_id, branch) DO UPDATE SET
               profile_id = excluded.profile_id,
               dashboard_scope = excluded.dashboard_scope,
               status = 'Actif',
               updated_at = CURRENT_TIMESTAMP
             """,
-            (user_id, pole_id, profile_id, dashboard_scope),
+            (user_id, pole_id, branch, profile_id, dashboard_scope),
         )
-        audit(conn, "Affectation acces utilisateur", "user_access", f"{responsible}:{pole_id}", payload)
+        audit(conn, "Affectation acces utilisateur", "user_access", f"{responsible}:{branch}:{pole_id}", payload)
         conn.commit()
         row = conn.execute(
             """
-            SELECT id, responsible, pole_id, pole_name, profile, dashboard_scope, status
+            SELECT id, responsible, pole_id, pole_name, branch, profile, dashboard_scope, status
             FROM v_user_access_details
-            WHERE responsible = ? AND pole_id = ?
+            WHERE responsible = ? AND pole_id = ? AND branch = ?
             """,
-            (responsible, pole_id),
+            (responsible, pole_id, branch),
         ).fetchone()
         return list_user_access_from_rows([row])[0]
 
@@ -789,9 +907,11 @@ def list_user_access_from_rows(rows: list[sqlite3.Row]) -> list[dict]:
             "responsible": row["responsible"],
             "poleId": row["pole_id"],
             "poleName": row["pole_name"],
+            "branch": row["branch"] or "Groupe",
+            "countryName": row["branch"] or "Groupe",
             "role": row["profile"],
             "dashboardScope": row["dashboard_scope"],
-            "permission": "Acces limite au dashboard de son pole",
+            "permission": f"Acces limite a {row['branch'] or 'Groupe'} / {row['pole_name']}",
             "status": row["status"],
             "className": "green" if row["status"] == "Actif" else "amber",
         }
@@ -829,9 +949,11 @@ def access_for_session(conn: sqlite3.Connection, user_id: int, profile: str, per
                 "responsible": row["responsible"] or "Administrateur PMS",
                 "poleId": row["pole_id"],
                 "poleName": row["pole_name"],
+                "branch": "Groupe",
+                "countryName": "Groupe",
                 "role": profile,
-                "dashboardScope": f"Dashboard Suivi KPI - {row['pole_name']}",
-                "permission": "Acces administration a tous les dashboards",
+                "dashboardScope": f"Dashboard Suivi KPI - Groupe - {row['pole_name']}",
+                "permission": "Acces administration a tous les pays et poles",
                 "status": "Actif",
                 "className": "green",
             }
@@ -840,12 +962,12 @@ def access_for_session(conn: sqlite3.Connection, user_id: int, profile: str, per
 
     rows = conn.execute(
         """
-        SELECT id, responsible, pole_id, pole_name, profile, dashboard_scope, status
+        SELECT id, responsible, pole_id, pole_name, branch, profile, dashboard_scope, status
         FROM v_user_access_details
         WHERE id IN (
           SELECT id FROM user_access WHERE user_id = ?
         )
-        ORDER BY pole_name
+        ORDER BY branch, pole_name
         """,
         (user_id,),
     ).fetchall()

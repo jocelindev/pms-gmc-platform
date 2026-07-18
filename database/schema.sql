@@ -66,12 +66,13 @@ CREATE TABLE IF NOT EXISTS user_access (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   pole_id TEXT NOT NULL,
+  branch TEXT NOT NULL DEFAULT 'Groupe',
   profile_id INTEGER NOT NULL,
   dashboard_scope TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'Actif',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (user_id, pole_id),
+  UNIQUE (user_id, pole_id, branch),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (pole_id) REFERENCES poles(id) ON DELETE CASCADE,
   FOREIGN KEY (profile_id) REFERENCES profiles(id)
@@ -218,6 +219,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_user_access_user ON user_access(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_access_pole ON user_access(pole_id);
+CREATE INDEX IF NOT EXISTS idx_user_access_branch ON user_access(branch);
 CREATE INDEX IF NOT EXISTS idx_kpis_pole ON kpis(pole_id);
 CREATE INDEX IF NOT EXISTS idx_objectives_period ON kpi_objectives(period);
 CREATE INDEX IF NOT EXISTS idx_kobo_submissions_form ON kobo_submissions(form_uid);
@@ -231,6 +233,7 @@ SELECT
   u.email,
   p.id AS pole_id,
   p.name AS pole_name,
+  ua.branch,
   pr.name AS profile,
   ua.dashboard_scope,
   ua.status

@@ -300,9 +300,9 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
             user_id = upsert_user(cur, owner, profile_ids["Manager / Responsable"])
             cur.execute(
                 """
-                INSERT INTO user_access (user_id, pole_id, profile_id, dashboard_scope, status, updated_at)
-                VALUES (?, ?, ?, ?, 'Actif', CURRENT_TIMESTAMP)
-                ON CONFLICT(user_id, pole_id) DO UPDATE SET
+                INSERT INTO user_access (user_id, pole_id, branch, profile_id, dashboard_scope, status, updated_at)
+                VALUES (?, ?, 'Groupe', ?, ?, 'Actif', CURRENT_TIMESTAMP)
+                ON CONFLICT(user_id, pole_id, branch) DO UPDATE SET
                   profile_id = excluded.profile_id,
                   dashboard_scope = excluded.dashboard_scope,
                   status = 'Actif',
@@ -312,7 +312,7 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
                     user_id,
                     pole.get("id"),
                     profile_ids["Manager / Responsable"],
-                    f"Dashboard Suivi KPI - {pole.get('name', pole.get('id'))}",
+                    f"Dashboard Suivi KPI - Groupe - {pole.get('name', pole.get('id'))}",
                 ),
             )
 

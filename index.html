@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=country-axis-2026" />
+    <link rel="stylesheet" href="styles.css?v=access-country-axis-2026" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -1131,7 +1131,7 @@
                   <div class="admin-flow">
                     <span>1. Creer utilisateur</span>
                     <span>2. Choisir profil</span>
-                    <span>3. Affecter le pole</span>
+                    <span>3. Affecter pays + pole</span>
                   </div>
                 </div>
                 <div class="admin-summary-grid" id="access-summary-cards"></div>
@@ -1195,6 +1195,10 @@
                     <select id="new-user-profile"></select>
                   </label>
                   <label>
+                    Pays / Filiale propose
+                    <select id="new-user-branch"></select>
+                  </label>
+                  <label>
                     Pole propose
                     <select id="new-user-pole"></select>
                   </label>
@@ -1223,6 +1227,10 @@
                     <select id="user-access-responsible"></select>
                   </label>
                   <label>
+                    Pays / Filiale
+                    <select id="user-access-branch"></select>
+                  </label>
+                  <label>
                     Pole
                     <select id="user-access-pole"></select>
                   </label>
@@ -1241,7 +1249,7 @@
               <section class="panel span-3">
                 <div class="panel-header">
                   <div>
-                    <p class="eyebrow">Affectation par pole</p>
+                    <p class="eyebrow">Affectation par pays et pole</p>
                     <h3>Responsables limites a leur dashboard KPI</h3>
                   </div>
                 </div>
@@ -1250,6 +1258,7 @@
                     <thead>
                       <tr>
                         <th>Responsable</th>
+                        <th>Pays / Filiale</th>
                         <th>Pole</th>
                         <th>Profil</th>
                         <th>Dashboard autorise</th>
@@ -1268,9 +1277,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=country-axis-2026"></script>
-    <script src="scripts/renderers.js?v=country-axis-2026"></script>
-    <script src="scripts/api.js?v=country-axis-2026"></script>
-    <script src="app.js?v=country-axis-2026"></script>
+    <script src="scripts/data.js?v=access-country-axis-2026"></script>
+    <script src="scripts/renderers.js?v=access-country-axis-2026"></script>
+    <script src="scripts/api.js?v=access-country-axis-2026"></script>
+    <script src="app.js?v=access-country-axis-2026"></script>
   </body>
 </html>

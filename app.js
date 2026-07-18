@@ -50,6 +50,7 @@
       status: "Actif",
       defaultPoleId: pole.id,
       defaultPoleName: pole.name,
+      defaultBranch: "Groupe",
     }));
   }
 
@@ -412,9 +413,11 @@
       responsible: pole.owner,
       poleId: pole.id,
       poleName: pole.name,
+      branch: "Groupe",
+      countryName: "Groupe",
       role: "Manager / Responsable",
-      dashboardScope: `Dashboard Suivi KPI - ${pole.name}`,
-      permission: "Acces limite au dashboard de son pole",
+      dashboardScope: `Dashboard Suivi KPI - Groupe - ${pole.name}`,
+      permission: `Acces limite a Groupe / ${pole.name}`,
       status: "Actif",
       className: "green",
     })),
@@ -428,6 +431,7 @@
     currentAdminAccessPole: PMS_DATA.reporting.defaultPole,
     currentAccessProfile: "Administrateur",
     currentUserAccessUserId: `seed-${PMS_DATA.reporting.defaultPole}`,
+    currentUserAccessBranch: "Groupe",
     currentUserAccessPole: PMS_DATA.reporting.defaultPole,
     currentUserAccessProfile: "Manager / Responsable",
     activeAccessRuleId: `ACC-${PMS_DATA.reporting.defaultPole}`,
@@ -478,6 +482,7 @@
         state.accessRules[0];
       if (activeRule) {
         state.activeAccessRuleId = activeRule.id;
+        state.currentUserAccessBranch = activeRule.branch || activeRule.countryName || "Groupe";
         state.currentUserAccessPole = activeRule.poleId;
         state.currentUserAccessProfile = activeRule.role;
       }
@@ -592,12 +597,78 @@
     logout.hidden = false;
   }
 
-  function getAuthorizedPoleIds() {
-    if (state.currentPermissions?.administration) {
+  function countryOptions() {
+    return Array.isArray(PMS_DATA.countries)
+      ? PMS_DATA.countries
+      : [{ id: "Groupe", code: "GROUPE", name: "Groupe" }];
+  }
+
+  function countryValueFromRule(rule = {}) {
+    return rule.branch || rule.countryName || rule.country || "Groupe";
+  }
+
+  function findCountryName(value) {
+    const normalized = normalizeLookup(value || "Groupe");
+    return (
+      countryOptions().find((country) =>
+        [country.id, country.code, country.name].some((item) => normalizeLookup(item) === normalized)
+      )?.name || value || "Groupe"
+    );
+  }
+
+  function isGroupCountryValue(value) {
+    return normalizeLookup(value) === "groupe";
+  }
+
+  function countryMatches(ruleCountry, activeCountry) {
+    const ruleName = findCountryName(ruleCountry);
+    const activeName = findCountryName(activeCountry);
+    if (isGroupCountryValue(ruleName)) return true;
+    if (isGroupCountryValue(activeName)) return false;
+    return normalizeLookup(ruleName) === normalizeLookup(activeName);
+  }
+
+  function getAuthorizedCountries() {
+    if (!state.currentUser || state.currentPermissions?.administration) {
+      return countryOptions().map((country) => country.name);
+    }
+    const scope = Array.isArray(state.userAccessScope) ? state.userAccessScope : [];
+    if (!scope.length) return [];
+    if (scope.some((rule) => isGroupCountryValue(countryValueFromRule(rule)))) {
+      return countryOptions().map((country) => country.name);
+    }
+    return [
+      ...new Set(
+        scope
+          .map((rule) => findCountryName(countryValueFromRule(rule)))
+          .filter((country) => !isGroupCountryValue(country))
+      ),
+    ];
+  }
+
+  function ensureAllowedCountry(countryValue) {
+    const country = findCountryName(countryValue || "Groupe");
+    const authorizedCountries = getAuthorizedCountries();
+    if (!authorizedCountries.length || authorizedCountries.some((item) => normalizeLookup(item) === normalizeLookup(country))) {
+      return country;
+    }
+    return authorizedCountries[0] || country;
+  }
+
+  function getAuthorizedPoleIds(countryValue = state.calendarBranchFilter) {
+    if (!state.currentUser || state.currentPermissions?.administration) {
       return PMS_DATA.reporting.poles.map((pole) => pole.id);
     }
     const scope = Array.isArray(state.userAccessScope) ? state.userAccessScope : [];
-    return [...new Set(scope.map((rule) => rule.poleId).filter(Boolean))];
+    const activeCountry = ensureAllowedCountry(countryValue);
+    return [
+      ...new Set(
+        scope
+          .filter((rule) => countryMatches(countryValueFromRule(rule), activeCountry))
+          .map((rule) => rule.poleId)
+          .filter(Boolean)
+      ),
+    ];
   }
 
   function getAllowedPoleFromScope(requestedPoleId) {
@@ -623,6 +694,8 @@
 
     if (!firstAccess) return;
     state.activeAccessRuleId = firstAccess.id;
+    state.currentUserAccessBranch = firstAccess.branch || firstAccess.countryName || "Groupe";
+    state.calendarBranchFilter = ensureAllowedCountry(state.currentUserAccessBranch);
     state.currentPoleMonitor = firstAccess.poleId;
     state.currentReportPole = firstAccess.poleId;
     state.currentAdminPole = firstAccess.poleId;
@@ -1083,14 +1156,16 @@
   }
 
   function applyCountryScope(countryValue, toastMessage) {
-    state.calendarBranchFilter = countryValue || "Groupe";
+    state.calendarBranchFilter = ensureAllowedCountry(countryValue || "Groupe");
     renderCalendarSlicer(state);
     renderCountryDashboard(state);
     renderPoleSummaryTables(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
+    renderReportControls(state);
+    renderReportWorkspace(state);
     renderKoboTable("", state.koboSubmissions, state.calendarBranchFilter);
-    if (toastMessage) showToast(toastMessage);
+    if (toastMessage) showToast(toastMessage.replace(countryValue || "Groupe", state.calendarBranchFilter));
   }
 
   function setCalendarView(offset) {
@@ -1454,6 +1529,8 @@
 
   function applyAccessRule(rule) {
     state.activeAccessRuleId = rule.id;
+    state.currentUserAccessBranch = rule.branch || rule.countryName || "Groupe";
+    state.calendarBranchFilter = state.currentUserAccessBranch;
     state.currentPoleMonitor = rule.poleId;
     renderPoleControls(state);
     renderPoleMonitor(state);
@@ -1477,6 +1554,7 @@
     const saveAccessButton = $("#save-access-rule");
     const createUserButton = $("#create-user");
     const userAccessResponsible = $("#user-access-responsible");
+    const userAccessBranch = $("#user-access-branch");
     const userAccessPole = $("#user-access-pole");
     const userAccessProfile = $("#user-access-profile");
     const saveUserAccessButton = $("#save-user-access");
@@ -1494,11 +1572,17 @@
       renderAdmin(state);
       setAdminTab("access");
     };
+    const setUserAccessBranch = (branch) => {
+      state.currentUserAccessBranch = findCountryName(branch || "Groupe");
+      renderAdmin(state);
+      setAdminTab("access");
+    };
     const setUserAccessUser = (userId) => {
       const user = state.platformUsers.find((item) => String(item.id) === String(userId));
       if (!user) return false;
       state.currentUserAccessUserId = user.id;
       state.currentUserAccessProfile = user.profile || state.currentUserAccessProfile;
+      state.currentUserAccessBranch = user.defaultBranch || state.currentUserAccessBranch || "Groupe";
       if (user.defaultPoleId) {
         state.currentUserAccessPole = user.defaultPoleId;
       }
@@ -1786,6 +1870,7 @@
         const password = $("#new-user-password")?.value.trim();
         const profile = $("#new-user-profile")?.value || state.currentUserAccessProfile;
         const status = $("#new-user-status")?.value || "Actif";
+        const branch = findCountryName($("#new-user-branch")?.value || state.currentUserAccessBranch || "Groupe");
         const poleId = $("#new-user-pole")?.value || state.currentUserAccessPole;
         const pole = PMS_DATA.reporting.poles.find((item) => item.id === poleId) || PMS_DATA.reporting.poles[0];
 
@@ -1811,6 +1896,7 @@
           phone,
           profile,
           status,
+          defaultBranch: branch,
           defaultPoleId: pole.id,
           defaultPoleName: pole.name,
         };
@@ -1840,6 +1926,7 @@
           ),
         ];
         state.currentUserAccessUserId = savedUser.id;
+        state.currentUserAccessBranch = savedUser.defaultBranch || branch;
         state.currentUserAccessPole = savedUser.defaultPoleId || pole.id;
         state.currentUserAccessProfile = savedUser.profile || profile;
 
@@ -1864,6 +1951,8 @@
         if (selectedUser) {
           state.currentUserAccessUserId = selectedUser.id;
           state.currentUserAccessProfile = selectedUser.profile || state.currentUserAccessProfile;
+          state.currentUserAccessBranch =
+            selectedOption?.dataset?.branch || selectedUser.defaultBranch || state.currentUserAccessBranch || "Groupe";
           const poleId = selectedOption?.dataset?.poleId || selectedUser.defaultPoleId;
           if (poleId) {
             state.currentUserAccessPole = poleId;
@@ -1884,6 +1973,13 @@
       });
     }
 
+    if (userAccessBranch) {
+      userAccessBranch.addEventListener("change", (event) => {
+        setUserAccessBranch(event.target.value);
+        showToast("Pays / filiale selectionne pour affectation.");
+      });
+    }
+
     if (userAccessProfile) {
       userAccessProfile.addEventListener("change", (event) => {
         state.currentUserAccessProfile = event.target.value;
@@ -1895,6 +1991,7 @@
 
     if (saveUserAccessButton) {
       saveUserAccessButton.addEventListener("click", async () => {
+        const branch = findCountryName($("#user-access-branch")?.value || state.currentUserAccessBranch || "Groupe");
         const poleId = $("#user-access-pole")?.value || state.currentUserAccessPole;
         const pole = PMS_DATA.reporting.poles.find((item) => item.id === poleId);
         const responsibleOption = $("#user-access-responsible")?.selectedOptions?.[0];
@@ -1904,27 +2001,30 @@
           selectedUser?.fullName || responsibleOption?.textContent.trim().split(" - ")[0] || pole?.owner || "";
         const role = $("#user-access-profile")?.value || state.currentUserAccessProfile;
 
-        if (!pole || !responsible || !role) {
-          showToast("Choisissez le responsable, le pole et le profil avant d'enregistrer.");
+        if (!pole || !branch || !responsible || !role) {
+          showToast("Choisissez le responsable, le pays / filiale, le pole et le profil avant d'enregistrer.");
           return;
         }
 
         const existingRule = state.accessRules.find(
           (rule) =>
             rule.poleId === pole.id &&
+            findCountryName(rule.branch || rule.countryName || "Groupe") === branch &&
             (String(rule.userId || "") === String(selectedUser?.id || selectedUserId) || rule.responsible === responsible)
         );
         const rule = {
-          id: existingRule?.id || `ACC-${pole.id}-${Date.now().toString().slice(-6)}`,
+          id: existingRule?.id || `ACC-${branch.replace(/[^A-Za-z0-9]+/g, "")}-${pole.id}-${Date.now().toString().slice(-6)}`,
           userId: selectedUser?.id || selectedUserId,
           responsible,
           email: selectedUser?.email || responsibleOption?.dataset?.email || "",
           phone: selectedUser?.phone || responsibleOption?.dataset?.phone || "",
+          branch,
+          countryName: branch,
           poleId: pole.id,
           poleName: pole.name,
           role,
-          dashboardScope: `Dashboard Suivi KPI - ${pole.name}`,
-          permission: "Acces limite au dashboard de son pole",
+          dashboardScope: `Dashboard Suivi KPI - ${branch} - ${pole.name}`,
+          permission: `Acces limite a ${branch} / ${pole.name}`,
           status: "Actif",
           className: "green",
         };
@@ -1944,7 +2044,11 @@
           ...state.accessRules.filter(
             (item) =>
               item.id !== savedRule.id &&
-              !(item.poleId === savedRule.poleId && item.responsible === savedRule.responsible)
+              !(
+                item.poleId === savedRule.poleId &&
+                findCountryName(item.branch || item.countryName || "Groupe") === findCountryName(savedRule.branch || savedRule.countryName || "Groupe") &&
+                item.responsible === savedRule.responsible
+              )
           ),
         ];
         state.platformUsers = state.platformUsers.map((user) =>
@@ -1952,6 +2056,7 @@
             ? {
                 ...user,
                 profile: savedRule.role,
+                defaultBranch: savedRule.branch || savedRule.countryName || branch,
                 defaultPoleId: savedRule.poleId,
                 defaultPoleName: savedRule.poleName,
                 status: "Actif",
@@ -1959,6 +2064,7 @@
             : user
         );
         state.currentUserAccessUserId = savedRule.userId || selectedUserId;
+        state.currentUserAccessBranch = savedRule.branch || savedRule.countryName || branch;
         state.currentUserAccessPole = savedRule.poleId;
         state.currentUserAccessProfile = savedRule.role;
         state.activeAccessRuleId = savedRule.id;
@@ -1969,8 +2075,8 @@
         setAdminTab("access");
         showToast(
           savedInDatabase
-            ? `Acces enregistre dans la base: ${savedRule.responsible} - ${savedRule.poleName} - ${savedRule.role}.`
-            : `Acces enregistre en local: ${responsible} - ${pole.name} - ${role}.`
+            ? `Acces enregistre dans la base: ${savedRule.responsible} - ${branch} - ${savedRule.poleName} - ${savedRule.role}.`
+            : `Acces enregistre en local: ${responsible} - ${branch} - ${pole.name} - ${role}.`
         );
       });
     }
@@ -1998,6 +2104,7 @@
         showToast("Affectation utilisateur introuvable.");
         return;
       }
+      state.currentUserAccessBranch = rule.branch || rule.countryName || "Groupe";
       state.currentUserAccessPole = rule.poleId;
       state.currentUserAccessProfile = rule.role;
       state.activeAccessRuleId = rule.id;

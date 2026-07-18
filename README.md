@@ -90,7 +90,7 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
 - Suivi de performance par pole avec checklist de publication.
 - Reporting periodique par pole : hebdomadaire, mensuel, trimestriel, semestriel et annuel.
 - Historique des rapports, commentaires responsables, validation N+1 et exports JSON/CSV.
-- Administration et droits d'acces.
+- Administration et droits d'acces par utilisateur, pays / filiale, pole et profil.
 
 ## Donnees integrees depuis les fichiers source
 
