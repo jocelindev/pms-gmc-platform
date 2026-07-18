@@ -329,6 +329,11 @@ button {
   display: none;
 }
 
+body[data-active-view="admin"] .topbar .filters label,
+body[data-active-view="admin"] .calendar-slicer {
+  display: none;
+}
+
 .eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.08em;

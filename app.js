@@ -1121,6 +1121,7 @@
     document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
     document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add("active");
     document.querySelector(`#${view}`)?.classList.add("active");
+    document.body.dataset.activeView = view;
     document.body.classList.toggle("dashboard-mode", view === "dashboard");
     $("#view-title").textContent = viewTitles[view] || "PMS GMC Group";
     window.scrollTo({ top: 0, behavior: "smooth" });
