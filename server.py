@@ -50,6 +50,11 @@ KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT = 15 * 60
 KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS_DEFAULT = 8
 KOBO_AUTO_SYNC_ROLES = ("referentielKpi", "donneesCalcul")
 KOBO_TOKEN_ENV_KEYS = ("PMS_KOBO_API_TOKEN", "KOBO_API_TOKEN")
+REFERENCE_KOBO_CURRENT_UID = "agJCJ2VqwMGNk586NHJ39W"
+REFERENCE_KOBO_OLD_UIDS = ("auGyH8vhCsK9KKtG2fu2u5",)
+REFERENCE_KOBO_TITLE = "PMS GMC - Formulaire 1 - Referentiel KPI et formules"
+REFERENCE_KOBO_SOURCE_TYPE = "KoboCollect Referentiel KPI"
+REFERENCE_KOBO_DEFAULT_SERVER = "https://kf.kobotoolbox.org"
 AUTO_KOBO_LOCK = threading.Lock()
 AUTO_KOBO_STATE = {
     "running": False,
@@ -461,11 +466,92 @@ def ensure_kpi_daily_data_schema(conn: sqlite3.Connection) -> bool:
     return True
 
 
+def migrate_reference_kobo_uid(conn: sqlite3.Connection) -> bool:
+    table = conn.execute(
+        """
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table' AND name = 'kobo_forms'
+        """
+    ).fetchone()
+    if not table:
+        return False
+
+    changed = False
+    current = conn.execute(
+        "SELECT id FROM kobo_forms WHERE uid = ?",
+        (REFERENCE_KOBO_CURRENT_UID,),
+    ).fetchone()
+    old_rows = conn.execute(
+        f"""
+        SELECT id, uid
+        FROM kobo_forms
+        WHERE uid IN ({",".join("?" for _ in REFERENCE_KOBO_OLD_UIDS)})
+        """,
+        REFERENCE_KOBO_OLD_UIDS,
+    ).fetchall()
+
+    if old_rows and not current:
+        conn.execute(
+            f"""
+            UPDATE kobo_forms
+            SET uid = ?,
+                title = ?,
+                server_url = COALESCE(NULLIF(server_url, ''), ?),
+                source_type = ?,
+                status = 'Actif',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE uid IN ({",".join("?" for _ in REFERENCE_KOBO_OLD_UIDS)})
+            """,
+            (
+                REFERENCE_KOBO_CURRENT_UID,
+                REFERENCE_KOBO_TITLE,
+                REFERENCE_KOBO_DEFAULT_SERVER,
+                REFERENCE_KOBO_SOURCE_TYPE,
+                *REFERENCE_KOBO_OLD_UIDS,
+            ),
+        )
+        changed = True
+    elif old_rows and current:
+        conn.execute(
+            f"""
+            UPDATE kobo_forms
+            SET source_type = 'KoboCollect Archive',
+                status = 'Archive'
+            WHERE uid IN ({",".join("?" for _ in REFERENCE_KOBO_OLD_UIDS)})
+            """,
+            REFERENCE_KOBO_OLD_UIDS,
+        )
+        changed = True
+
+    current = conn.execute(
+        "SELECT id FROM kobo_forms WHERE uid = ?",
+        (REFERENCE_KOBO_CURRENT_UID,),
+    ).fetchone()
+    if current:
+        conn.execute(
+            """
+            INSERT INTO kobo_form_fields (form_id, field_name, field_label, field_type, mapped_to, required)
+            VALUES (?, 'pays_filiale', 'branch', 'Champ referentiel KPI', 'branch', 1)
+            ON CONFLICT(form_id, field_name) DO UPDATE SET
+              field_label = excluded.field_label,
+              field_type = excluded.field_type,
+              mapped_to = excluded.mapped_to,
+              required = excluded.required
+            """,
+            (current["id"],),
+        )
+        changed = True
+
+    return changed
+
+
 def migrate_database(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
     changed = False
     changed = ensure_user_access_schema(conn) or changed
     ensure_kpi_daily_data_schema(conn)
+    changed = migrate_reference_kobo_uid(conn) or changed
     if "password_hash" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
         changed = True

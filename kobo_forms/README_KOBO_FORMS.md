@@ -6,7 +6,7 @@ Ce dossier contient les deux modeles XLSForm a importer dans KoboToolbox.
 
 Fichier corrige a importer : `PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026_corrige_pays_20260720.xlsx`
 
-UID Kobo publie : `auGyH8vhCsK9KKtG2fu2u5`
+UID Kobo publie : `agJCJ2VqwMGNk586NHJ39W`
 
 Ce formulaire sert a declarer le referentiel KPI :
 

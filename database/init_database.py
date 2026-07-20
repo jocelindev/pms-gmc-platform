@@ -24,7 +24,7 @@ DEFAULT_USER_PASSWORD = os.environ.get("PMS_DEFAULT_USER_PASSWORD", "Palladium@2
 DEFAULT_KOBO_SERVER_URL = "https://kf.kobotoolbox.org"
 DEFAULT_KOBO_SOURCES = [
     {
-        "uid": "auGyH8vhCsK9KKtG2fu2u5",
+        "uid": "agJCJ2VqwMGNk586NHJ39W",
         "title": "PMS GMC - Formulaire 1 - Referentiel KPI et formules",
         "source_type": "KoboCollect Referentiel KPI",
         "cadence": "Selon periode",

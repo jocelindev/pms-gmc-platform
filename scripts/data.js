@@ -335,7 +335,7 @@
       {
         role: "referentielKpi",
         serverUrl: "https://kf.kobotoolbox.org",
-        formId: "auGyH8vhCsK9KKtG2fu2u5",
+        formId: "agJCJ2VqwMGNk586NHJ39W",
         title: "PMS GMC - Formulaire 1 - Referentiel KPI et formules",
         mode: "KoboCollect Referentiel KPI",
         status: "Actif",
