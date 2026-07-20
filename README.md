@@ -69,6 +69,10 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
 - Deux modeles XLSForm sont disponibles dans `kobo_forms/` :
   - `PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026.xlsx` pour le referentiel KPI, les objectifs et les formules.
   - `PMS_GMC_Formulaire_2_Donnees_Calcul_Journalieres_2026.xlsx` pour les donnees brutes journalieres de calcul.
+- Les deux formulaires publies dans KoboToolbox sont deja preconfigures :
+  - Formulaire 1 UID `auGyH8vhCsK9KKtG2fu2u5`.
+  - Formulaire 2 UID `aZ5JcFjcL9YvnQozqHWrqN`.
+- Il reste seulement a renseigner le token API Kobo dans **Administration > KoboCollecte**, puis cliquer sur `Synchroniser depuis Kobo`.
 - Depuis l'interface, ces modeles sont telechargeables dans **Administration > KoboCollecte**, avant les zones UID/token.
 - Le serveur lit les metadonnees du formulaire Kobo et enregistre les champs detectes dans SQLite.
 - Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.

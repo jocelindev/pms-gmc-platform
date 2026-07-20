@@ -61,6 +61,10 @@
     return JSON.parse(JSON.stringify(value));
   }
 
+  const defaultKoboSources = Array.isArray(PMS_DATA.koboConfiguredSources) ? PMS_DATA.koboConfiguredSources : [];
+  const defaultObjectiveKoboSource = defaultKoboSources.find((source) => source.role === "referentielKpi") || null;
+  const defaultCalculationKoboSource = defaultKoboSources.find((source) => source.role === "donneesCalcul") || null;
+
   function resetReportingToBaseline() {
     Object.keys(PMS_DATA.reporting).forEach((key) => {
       delete PMS_DATA.reporting[key];
@@ -694,8 +698,8 @@
     currentUser: null,
     currentPermissions: {},
     userAccessScope: [],
-    objectiveKoboSource: null,
-    calculationKoboSource: null,
+    objectiveKoboSource: defaultObjectiveKoboSource ? clone(defaultObjectiveKoboSource) : null,
+    calculationKoboSource: defaultCalculationKoboSource ? clone(defaultCalculationKoboSource) : null,
     databaseOverview: null,
     databaseTablePreview: null,
     currentDatabaseTable: "",

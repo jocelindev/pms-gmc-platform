@@ -21,6 +21,61 @@ DEFAULT_DB_PATH = DATABASE_DIR / "pms_gmc.sqlite"
 PASSWORD_ITERATIONS = 210_000
 DEFAULT_ADMIN_PASSWORD = os.environ.get("PMS_ADMIN_PASSWORD", "Admin@2026!")
 DEFAULT_USER_PASSWORD = os.environ.get("PMS_DEFAULT_USER_PASSWORD", "Palladium@2026!")
+DEFAULT_KOBO_SERVER_URL = "https://kf.kobotoolbox.org"
+DEFAULT_KOBO_SOURCES = [
+    {
+        "uid": "auGyH8vhCsK9KKtG2fu2u5",
+        "title": "PMS GMC - Formulaire 1 - Referentiel KPI et formules",
+        "source_type": "KoboCollect Referentiel KPI",
+        "cadence": "Selon periode",
+        "fields": {
+            "id": "id_kpi",
+            "category": "categorie_organisationnelle",
+            "entity": "entite_direction",
+            "subEntity": "sous_entite_pole_filiale",
+            "pole": "groupe_de_rattachement",
+            "path": "chemin_organisationnel",
+            "title": "intitule_du_kpi",
+            "definition": "description_definition",
+            "type": "type_de_kpi",
+            "unit": "unite_de_mesure",
+            "formula": "formule_de_calcul",
+            "target": "valeur_cible",
+            "collectionFrequency": "frequence_de_collecte",
+            "reportingFrequency": "periodicite_du_reporting",
+            "sourceData": "source_de_la_donnee",
+            "owner": "responsable_du_kpi",
+            "respondent": "repondant",
+            "respondentFunction": "fonction_du_repondant",
+            "year": "annee",
+            "validation": "validation_hierarchique",
+            "validator": "validateur",
+            "comments": "commentaires",
+            "submittedAt": "date_de_soumission",
+            "sourceReference": "reference_source",
+            "documentStatus": "statut_documentaire",
+            "attention": "points_d_attention",
+        },
+        "field_type": "Champ referentiel KPI",
+    },
+    {
+        "uid": "aZ5JcFjcL9YvnQozqHWrqN",
+        "title": "PMS GMC - Formulaire 2 - Donnees de calcul journalieres",
+        "source_type": "KoboCollect Donnees de calcul",
+        "cadence": "Journalier",
+        "fields": {
+            "pole": "pole_id",
+            "kpi": "id_kpi",
+            "period": "periode_reporting",
+            "element": "element_id",
+            "value": "valeur_element",
+            "branch": "filiale",
+            "date": "date_collecte",
+            "validation": "validation_hierarchique",
+        },
+        "field_type": "Champ donnees de calcul",
+    },
+]
 
 
 PERMISSIONS = [
@@ -236,6 +291,45 @@ def upsert_pole(cur: sqlite3.Cursor, pole: dict) -> None:
     )
 
 
+def seed_default_kobo_sources(cur: sqlite3.Cursor) -> None:
+    for source in DEFAULT_KOBO_SOURCES:
+        cur.execute(
+            """
+            INSERT INTO kobo_forms (uid, title, server_url, cadence, source_type, status, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'Actif', CURRENT_TIMESTAMP)
+            ON CONFLICT(uid) DO UPDATE SET
+              title = excluded.title,
+              server_url = excluded.server_url,
+              cadence = excluded.cadence,
+              source_type = excluded.source_type,
+              status = 'Actif',
+              updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                source["uid"],
+                source["title"],
+                DEFAULT_KOBO_SERVER_URL,
+                source["cadence"],
+                source["source_type"],
+            ),
+        )
+        cur.execute("SELECT id FROM kobo_forms WHERE uid = ?", (source["uid"],))
+        form_id = int(cur.fetchone()[0])
+        for mapped_to, field_name in source["fields"].items():
+            cur.execute(
+                """
+                INSERT INTO kobo_form_fields (form_id, field_name, field_label, field_type, mapped_to, required)
+                VALUES (?, ?, ?, ?, ?, 1)
+                ON CONFLICT(form_id, field_name) DO UPDATE SET
+                  field_label = excluded.field_label,
+                  field_type = excluded.field_type,
+                  mapped_to = excluded.mapped_to,
+                  required = excluded.required
+                """,
+                (form_id, field_name, mapped_to, source["field_type"], mapped_to),
+            )
+
+
 def seed_database(conn: sqlite3.Connection, data: dict) -> None:
     cur = conn.cursor()
     cur.execute("PRAGMA foreign_keys = ON")
@@ -382,6 +476,8 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
             """,
             (uid, uid),
         )
+
+    seed_default_kobo_sources(cur)
 
     required_fields = data.get("objectiveKoboTemplate", {}).get("requiredFields", [])
     if required_fields:

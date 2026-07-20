@@ -793,8 +793,25 @@
                   </a>
                 </div>
                 <p class="kobo-template-note">
-                  Importer ces modeles dans KoboToolbox, publier les formulaires, puis renseigner les UID ci-dessous.
+                  Les deux formulaires sont deja importes et configures. Renseigner seulement le token API Kobo pour synchroniser les soumissions.
                 </p>
+                <div class="kobo-sync-ready" aria-label="Configuration Kobo prete">
+                  <div>
+                    <span>Formulaire 1 configure</span>
+                    <strong>auGyH8vhCsK9KKtG2fu2u5</strong>
+                    <small>Referentiel KPI, objectifs et formules.</small>
+                  </div>
+                  <div>
+                    <span>Formulaire 2 configure</span>
+                    <strong>aZ5JcFjcL9YvnQozqHWrqN</strong>
+                    <small>Donnees journalieres et elements de calcul.</small>
+                  </div>
+                  <div>
+                    <span>Action restante</span>
+                    <strong>Token API Kobo</strong>
+                    <small>Coller le token puis cliquer sur Synchroniser depuis Kobo.</small>
+                  </div>
+                </div>
               </section>
 
               <section class="panel span-3 admin-kobo-source-panel">
@@ -807,11 +824,11 @@
                 <div class="admin-kobo-form admin-kobo-dual-form">
                   <label>
                     Adresse serveur Kobo
-                    <input id="admin-kobo-reference-server" class="search-input" inputmode="url" placeholder="https://kf.kobotoolbox.org" />
+                    <input id="admin-kobo-reference-server" class="search-input" inputmode="url" value="https://kf.kobotoolbox.org" placeholder="https://kf.kobotoolbox.org" />
                   </label>
                   <label>
                     ID formulaire KPI / formules
-                    <input id="admin-kobo-reference-form-id" class="search-input" placeholder="ex. aKPIFormules2026" />
+                    <input id="admin-kobo-reference-form-id" class="search-input" value="auGyH8vhCsK9KKtG2fu2u5" placeholder="ex. aKPIFormules2026" />
                   </label>
                   <label>
                     Token API Kobo
@@ -945,11 +962,11 @@
                 <div class="admin-kobo-form admin-kobo-dual-form">
                   <label>
                     Adresse serveur Kobo
-                    <input id="admin-kobo-calculation-server" class="search-input" inputmode="url" placeholder="https://kf.kobotoolbox.org" />
+                    <input id="admin-kobo-calculation-server" class="search-input" inputmode="url" value="https://kf.kobotoolbox.org" placeholder="https://kf.kobotoolbox.org" />
                   </label>
                   <label>
                     ID formulaire donnees de calcul
-                    <input id="admin-kobo-calculation-form-id" class="search-input" placeholder="ex. aDonneesCalculKPI2026" />
+                    <input id="admin-kobo-calculation-form-id" class="search-input" value="aZ5JcFjcL9YvnQozqHWrqN" placeholder="ex. aDonneesCalculKPI2026" />
                   </label>
                   <label>
                     Token API Kobo
