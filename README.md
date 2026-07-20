@@ -81,7 +81,7 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
 - Le serveur lit les metadonnees du formulaire Kobo et enregistre les champs detectes dans SQLite.
 - Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.
 - Le jeton API sert uniquement a la synchronisation courante : il n'est pas renvoye a l'interface ni affiche comme formulaire actif.
-- Les trois formulaires utilisent maintenant le meme champ `ID KPI officiel`, propose en liste recherchable `KPI-001` a `KPI-074`. Les responsables choisissent l'ID au lieu de le saisir librement.
+- Les trois formulaires utilisent maintenant le meme champ `ID KPI officiel`, propose en liste recherchable `KPI-001` a `KPI-200`. Les KPI presents dans le catalogue affichent aussi l'intitule, la formule de calcul et la cible; les autres IDs restent en reserve pour les futurs KPI.
 - Dans Administration > KoboCollecte, la logique PMS distingue trois sources : `KPI et formules`, `Objectifs mensuels` et `Elements de calcul`.
 - Le formulaire `KPI et formules` reste compatible avec `Copie de Catalogu.xlsx` et exploite aussi `GMC_FICHE_COLLECTE_V2.xlsx`, notamment la feuille `FORMULE` : 44 KPI/formules metier et 7 onglets de collecte.
 - Le moteur PMS rapproche automatiquement les trois formulaires par `pays / filiale + pole + ID KPI officiel + periode`, applique la formule du catalogue, calcule l'objectif a date a partir de l'objectif mensuel, puis alimente le tableau de bord et l'onglet `Suivi par pole`.

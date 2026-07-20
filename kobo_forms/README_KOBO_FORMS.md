@@ -57,11 +57,13 @@ Pour chaque mois, le PMS calcule aussi le cumul du 1er jour du mois jusqu'a la d
 
 ## Regle commune ID KPI
 
-Les trois formulaires utilisent le meme champ `ID KPI officiel`, propose en liste recherchable `KPI-001` a `KPI-074`.
+Les trois formulaires utilisent le meme champ `ID KPI officiel`, propose en liste recherchable `KPI-001` a `KPI-200`.
+Les KPI deja presents dans le catalogue affichent aussi l'intitule, la formule de calcul et la cible. Exemple : `KPI-001 - Chiffre d'affaires | Calcul: Volume produit x Prix unitaire HT | Cible: 100`.
 
 - Dans le Formulaire 1, cet ID declare le KPI officiel et sa formule.
 - Dans le Formulaire Objectifs mensuels, cet ID rattache la cible mensuelle au KPI officiel.
 - Dans le Formulaire Donnees de calcul, cet ID rattache les valeurs collectees au KPI a calculer.
+- Les IDs apres les KPI deja catalogues sont des reserves pour les nouveaux KPI. Ils ne deviennent valides dans la plateforme qu'apres declaration dans le Formulaire 1.
 
 Si un objectif mensuel ou une donnee de calcul utilise un ID qui n'existe pas dans le Formulaire 1, la plateforme le signale comme ecart de rapprochement au lieu de l'afficher comme KPI valide.
 
