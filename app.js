@@ -61,9 +61,10 @@
     return JSON.parse(JSON.stringify(value));
   }
 
-  const OPERATIONAL_KOBO_ROLES = new Set(["referentielKpi", "donneesCalcul"]);
+  const OPERATIONAL_KOBO_ROLES = new Set(["referentielKpi", "objectifsMensuels", "donneesCalcul"]);
   const defaultKoboSources = Array.isArray(PMS_DATA.koboConfiguredSources) ? PMS_DATA.koboConfiguredSources : [];
   const defaultObjectiveKoboSource = defaultKoboSources.find((source) => source.role === "referentielKpi") || null;
+  const defaultMonthlyObjectiveKoboSource = defaultKoboSources.find((source) => source.role === "objectifsMensuels") || null;
   const defaultCalculationKoboSource = defaultKoboSources.find((source) => source.role === "donneesCalcul") || null;
 
   function resetReportingToBaseline() {
@@ -576,6 +577,9 @@
         value: result.value,
         valueLabel: result.valueLabel,
         target: result.target,
+        monthlyTarget: result.monthlyTarget,
+        targetValue: result.targetValue,
+        targetMode: result.targetMode,
         status: result.status,
       });
       historyByKpi.set(key, history);
@@ -595,6 +599,7 @@
           branch: kpi.branch || activeCountry || "Groupe",
           value: kpi.valueLabel || "En attente calcul",
           target: kpi.target || "A completer",
+          monthlyTarget: kpi.monthlyTarget || "",
           trend: "Reference Kobo",
           status: "gray",
           source: kpi.source || "KoboCollect",
@@ -622,6 +627,10 @@
         branch: result.branch || activeCountry || "Groupe",
         value: result.valueLabel,
         target: result.target || "A completer",
+        monthlyTarget: result.monthlyTarget || "",
+        targetValue: result.targetValue,
+        targetMode: result.targetMode || "",
+        objectiveSource: result.objectiveSource || "",
         trend: result.trend || "Calcul Kobo",
         status: result.status || "gray",
         source: result.source || "KoboCollect",
@@ -745,6 +754,7 @@
     currentPermissions: {},
     userAccessScope: [],
     objectiveKoboSource: defaultObjectiveKoboSource ? clone(defaultObjectiveKoboSource) : null,
+    monthlyObjectiveKoboSource: defaultMonthlyObjectiveKoboSource ? clone(defaultMonthlyObjectiveKoboSource) : null,
     calculationKoboSource: defaultCalculationKoboSource ? clone(defaultCalculationKoboSource) : null,
     koboAutoSync: null,
     databaseOverview: null,
@@ -820,9 +830,13 @@
     }
     if (Array.isArray(payload.koboSources)) {
       const referenceSource = payload.koboSources.find((source) => source.role === "referentielKpi");
+      const monthlyObjectiveSource = payload.koboSources.find((source) => source.role === "objectifsMensuels");
       const calculationSource = payload.koboSources.find((source) => source.role === "donneesCalcul");
       if (referenceSource) {
         state.objectiveKoboSource = referenceSource;
+      }
+      if (monthlyObjectiveSource) {
+        state.monthlyObjectiveKoboSource = monthlyObjectiveSource;
       }
       if (calculationSource) {
         state.calculationKoboSource = calculationSource;
@@ -1328,6 +1342,9 @@
         state.koboActiveForm = result.activeForm;
         if (Array.isArray(result.kpiCalculationResults)) {
           state.kpiCalculationResults = result.kpiCalculationResults;
+        }
+        if (Array.isArray(result.objectives)) {
+          state.kpiObjectives = result.objectives;
         }
         if (Array.isArray(result.kpiDailyDates)) {
           state.kpiDailyDates = result.kpiDailyDates;
@@ -2032,8 +2049,10 @@
     setAdminTab(state.currentAdminTab);
 
     const adminKoboReferenceButton = $("#admin-kobo-reference-save");
+    const adminKoboMonthlyObjectiveButton = $("#admin-kobo-monthly-objective-save");
     const adminKoboCalculationButton = $("#admin-kobo-calculation-save");
     const adminKoboReferenceSyncButton = $("#admin-kobo-reference-sync");
+    const adminKoboMonthlyObjectiveSyncButton = $("#admin-kobo-monthly-objective-sync");
     const adminKoboCalculationSyncButton = $("#admin-kobo-calculation-sync");
     const accessProfile = $("#access-profile");
     const saveAccessButton = $("#save-access-rule");
@@ -2116,6 +2135,19 @@
       { mappedTo: "branch", inputId: "#admin-kobo-calculation-branch-field", defaultValue: "filiale" },
       { mappedTo: "date", inputId: "#admin-kobo-calculation-date-field", defaultValue: "date_collecte" },
       { mappedTo: "validation", inputId: "#admin-kobo-calculation-validation-field", defaultValue: "validation_hierarchique" },
+    ];
+    const monthlyObjectiveKoboFields = [
+      { mappedTo: "branch", inputId: "#admin-kobo-monthly-objective-branch-field", defaultValue: "pays_filiale" },
+      { mappedTo: "pole", inputId: "#admin-kobo-monthly-objective-pole-field", defaultValue: "pole_id" },
+      { mappedTo: "kpi", inputId: "#admin-kobo-monthly-objective-kpi-field", defaultValue: "id_kpi" },
+      { mappedTo: "period", inputId: "#admin-kobo-monthly-objective-period-field", defaultValue: "periode_objectif" },
+      { mappedTo: "target", inputId: "#admin-kobo-monthly-objective-target-field", defaultValue: "objectif_mensuel" },
+      { mappedTo: "unit", inputId: "#admin-kobo-monthly-objective-unit-field", defaultValue: "unite_mesure" },
+      { mappedTo: "frequency", inputId: "#admin-kobo-monthly-objective-frequency-field", defaultValue: "frequence_objectif" },
+      { mappedTo: "distributionMode", inputId: "#admin-kobo-monthly-objective-distribution-field", defaultValue: "mode_repartition" },
+      { mappedTo: "sourceData", inputId: "#admin-kobo-monthly-objective-source-field", defaultValue: "source_objectif" },
+      { mappedTo: "responsible", inputId: "#admin-kobo-monthly-objective-responsible-field", defaultValue: "responsable_objectif" },
+      { mappedTo: "validation", inputId: "#admin-kobo-monthly-objective-validation-field", defaultValue: "validation_hierarchique" },
     ];
 
     const saveAdminKoboSource = async ({
@@ -2214,6 +2246,9 @@
         if (Array.isArray(result.kpiCalculationResults)) {
           state.kpiCalculationResults = result.kpiCalculationResults;
         }
+        if (Array.isArray(result.objectives)) {
+          state.kpiObjectives = result.objectives;
+        }
         if (Array.isArray(result.kpiDailyDates)) {
           state.kpiDailyDates = result.kpiDailyDates;
         }
@@ -2253,7 +2288,7 @@
           serverInputId: "#admin-kobo-reference-server",
           formInputId: "#admin-kobo-reference-form-id",
           mode: "KoboCollect Referentiel KPI",
-          detail: "KPI, objectifs et formules de calcul par pole.",
+          detail: "KPI et formules de calcul par pole.",
           successLabel: "Formulaire KPI et formules",
           fieldType: "Champ referentiel KPI",
           fields: referenceKoboFields,
@@ -2272,10 +2307,46 @@
           formInputId: "#admin-kobo-reference-form-id",
           tokenInputId: "#admin-kobo-reference-token",
           mode: "KoboCollect Referentiel KPI",
-          detail: "KPI, objectifs et formules de calcul par pole.",
+          detail: "KPI et formules de calcul par pole.",
           successLabel: "Formulaire KPI et formules",
           fieldType: "Champ referentiel KPI",
           fields: referenceKoboFields,
+        })
+      );
+    }
+
+    if (adminKoboMonthlyObjectiveButton) {
+      adminKoboMonthlyObjectiveButton.addEventListener("click", () =>
+        saveAdminKoboSource({
+          role: "objectifsMensuels",
+          stateKey: "monthlyObjectiveKoboSource",
+          statusId: "#admin-kobo-monthly-objective-status",
+          serverInputId: "#admin-kobo-monthly-objective-server",
+          formInputId: "#admin-kobo-monthly-objective-form-id",
+          mode: "KoboCollect Objectifs mensuels",
+          detail: "Objectifs mensuels par pays / filiale, pole, KPI et mois.",
+          successLabel: "Formulaire objectifs mensuels",
+          fieldType: "Champ objectifs mensuels",
+          fields: monthlyObjectiveKoboFields,
+        })
+      );
+    }
+
+    if (adminKoboMonthlyObjectiveSyncButton) {
+      adminKoboMonthlyObjectiveSyncButton.addEventListener("click", () =>
+        syncAdminKoboSource({
+          button: adminKoboMonthlyObjectiveSyncButton,
+          role: "objectifsMensuels",
+          stateKey: "monthlyObjectiveKoboSource",
+          statusId: "#admin-kobo-monthly-objective-status",
+          serverInputId: "#admin-kobo-monthly-objective-server",
+          formInputId: "#admin-kobo-monthly-objective-form-id",
+          tokenInputId: "#admin-kobo-monthly-objective-token",
+          mode: "KoboCollect Objectifs mensuels",
+          detail: "Objectifs mensuels par pays / filiale, pole, KPI et mois.",
+          successLabel: "Formulaire objectifs mensuels",
+          fieldType: "Champ objectifs mensuels",
+          fields: monthlyObjectiveKoboFields,
         })
       );
     }

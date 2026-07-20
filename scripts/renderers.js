@@ -396,7 +396,7 @@
 
   function metricFromTarget(kpi = {}) {
     const current = currentMetricValue(kpi);
-    const target = targetValueForKpi(kpi);
+    const target = Number.isFinite(Number(kpi.targetValue)) ? Number(kpi.targetValue) : targetValueForKpi(kpi);
     if (!Number.isFinite(current) || !Number.isFinite(target)) {
       return { label: "Vs Target", display: "--", className: "empty" };
     }
@@ -1645,7 +1645,8 @@
       </div>
       ${renderTrendStrip(selected.kpi, selected.pole)}
       <div class="kpi-detail-grid">
-        <div><span>Objectif</span><strong>${escapeHtml(selected.kpi.target)}</strong></div>
+        <div><span>Objectif a date</span><strong>${escapeHtml(selected.kpi.target)}</strong></div>
+        <div><span>Objectif mensuel</span><strong>${escapeHtml(selected.kpi.monthlyTarget || selected.kpi.target || "A completer")}</strong></div>
         <div><span>Source Kobo</span><strong>${escapeHtml(selected.kpi.source)}</strong></div>
         <div><span>Collecte</span><strong>${escapeHtml(kpiCollectionFrequency(selected.kpi, selected.pole))}</strong></div>
         <div><span>Validation</span><strong>${escapeHtml(profile.hierarchicalValidation || "Sous reserve")}</strong></div>
@@ -2315,7 +2316,7 @@
     if (proposals) {
       const items = quality.proposals?.length
         ? quality.proposals
-        : ["Configurer puis synchroniser les deux formulaires KoboCollect pour activer le calcul automatique."];
+        : ["Configurer puis synchroniser les trois sources KoboCollect pour activer le calcul automatique."];
       proposals.innerHTML = items
         .slice(0, 3)
         .map((item) => `<span>${escapeHtml(item)}</span>`)
@@ -2958,8 +2959,12 @@
     const catalogProfile = getObjectiveCatalogProfile(selectedKpiItem, selectedPole);
     const objectiveTemplate = PMS_DATA.objectiveKoboTemplate || {};
     const objectives = state.kpiObjectives || [];
-    const countFields = (objectiveTemplate.requiredFields?.length || 0) + (objectiveTemplate.calculationFields?.length || 0);
+    const countFields =
+      (objectiveTemplate.requiredFields?.length || 0) +
+      (objectiveTemplate.objectiveFields?.length || 0) +
+      (objectiveTemplate.calculationFields?.length || 0);
     const referenceSource = state.objectiveKoboSource;
+    const monthlyObjectiveSource = state.monthlyObjectiveKoboSource;
     const calculationSource = state.calculationKoboSource;
     const sourceProfile = objectiveTemplate.sourceWorkbookProfile || {};
     const collectionProfile = objectiveTemplate.collectionWorkbookProfile || {};
@@ -2976,6 +2981,11 @@
         </div>
         <div class="admin-summary-card">
           <span>Formulaire 2</span>
+          <strong>Objectifs mensuels</strong>
+          <small>${escapeHtml(monthlyObjectiveSource?.formId || "A connecter")}</small>
+        </div>
+        <div class="admin-summary-card">
+          <span>Formulaire 3</span>
           <strong>Donnees calcul</strong>
           <small>${escapeHtml(calculationSource?.formId || "A connecter")}</small>
         </div>
@@ -2992,7 +3002,7 @@
         <div class="admin-summary-card">
           <span>Champs attendus</span>
           <strong>${countFields}</strong>
-          <small>sur les deux formulaires Kobo</small>
+          <small>sur les trois formulaires Kobo</small>
         </div>
         <div class="admin-summary-card">
           <span>Catalogue source</span>
@@ -3107,6 +3117,23 @@
         validation: "#admin-kobo-calculation-validation-field",
       },
     });
+    fillKoboSourceForm(monthlyObjectiveSource, {
+      server: "#admin-kobo-monthly-objective-server",
+      form: "#admin-kobo-monthly-objective-form-id",
+      fields: {
+        branch: "#admin-kobo-monthly-objective-branch-field",
+        pole: "#admin-kobo-monthly-objective-pole-field",
+        kpi: "#admin-kobo-monthly-objective-kpi-field",
+        period: "#admin-kobo-monthly-objective-period-field",
+        target: "#admin-kobo-monthly-objective-target-field",
+        unit: "#admin-kobo-monthly-objective-unit-field",
+        frequency: "#admin-kobo-monthly-objective-frequency-field",
+        distributionMode: "#admin-kobo-monthly-objective-distribution-field",
+        sourceData: "#admin-kobo-monthly-objective-source-field",
+        responsible: "#admin-kobo-monthly-objective-responsible-field",
+        validation: "#admin-kobo-monthly-objective-validation-field",
+      },
+    });
 
     const setKoboSourceStatus = (selector, source, fallback) => {
       const status = $(selector);
@@ -3123,6 +3150,11 @@
       "#admin-kobo-reference-status",
       referenceSource,
       "Aucun formulaire KPI/formules configure."
+    );
+    setKoboSourceStatus(
+      "#admin-kobo-monthly-objective-status",
+      monthlyObjectiveSource,
+      "Aucun formulaire objectifs mensuels configure."
     );
     setKoboSourceStatus(
       "#admin-kobo-calculation-status",
@@ -3189,7 +3221,8 @@
     if (fieldList) {
       const fieldGroups = [
         { title: "Formulaire 1 - KPI et formules", fields: objectiveTemplate.requiredFields || [] },
-        { title: "Formulaire 2 - Elements de calcul", fields: objectiveTemplate.calculationFields || [] },
+        { title: "Formulaire Objectifs - Cibles mensuelles", fields: objectiveTemplate.objectiveFields || [] },
+        { title: "Formulaire Donnees - Elements de calcul", fields: objectiveTemplate.calculationFields || [] },
       ];
       const fieldGroupsMarkup = fieldGroups
         .map(

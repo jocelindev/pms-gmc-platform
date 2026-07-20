@@ -227,7 +227,7 @@
                     <th>KPI</th>
                     <th>Valeur du jour</th>
                     <th>Cumul mensuel a date</th>
-                    <th>Objectif</th>
+                    <th>Objectif a date</th>
                     <th>Vs target</th>
                     <th>Tendance</th>
                     <th>Source</th>
@@ -728,7 +728,7 @@
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Donnees KoboCollect</p>
-                  <h3>Objectifs KPI importes depuis le formulaire KoboCollect</h3>
+                  <h3>Objectifs KPI importes depuis le formulaire Objectifs mensuels</h3>
                 </div>
                 <span class="status-pill gray" id="objective-count">0 objectif</span>
               </div>
@@ -761,48 +761,61 @@
                 <div class="panel-header">
                   <div>
                     <p class="eyebrow">Logique KoboCollect</p>
-                    <h3>Deux formulaires pour alimenter le PMS</h3>
+                    <h3>Trois formulaires relies pour alimenter le PMS</h3>
                   </div>
                 </div>
                 <div class="kobo-logic-grid">
                   <div class="kobo-logic-card">
                     <span>1</span>
                     <strong>KPI et formules</strong>
-                    <p>Liste les KPI par pole, les objectifs, les frequences et la formule de calcul.</p>
+                    <p>Liste les KPI par pole, les frequences, les unites et la formule de calcul.</p>
                   </div>
                   <div class="kobo-logic-card">
                     <span>2</span>
+                    <strong>Objectifs mensuels</strong>
+                    <p>Definit les cibles mensuelles par pays / filiale, pole, KPI et mois.</p>
+                  </div>
+                  <div class="kobo-logic-card">
+                    <span>3</span>
                     <strong>Elements de calcul</strong>
                     <p>Collecte les donnees brutes utilisees par les formules pour calculer chaque KPI.</p>
                   </div>
                   <div class="kobo-logic-card">
-                    <span>3</span>
+                    <span>4</span>
                     <strong>Calcul PMS</strong>
-                    <p>Rapproche les deux sources par pays / filiale, pole, KPI et periode pour alimenter les dashboards.</p>
+                    <p>Rapproche les trois sources par pays / filiale, pole, KPI et periode pour alimenter les dashboards.</p>
                   </div>
                 </div>
                 <div class="kobo-template-actions" aria-label="Modeles Kobo XLSForm">
                   <a class="ghost-action" href="kobo_forms/PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026_corrige_pays_20260720.xlsx" download>
                     Telecharger formulaire 1
                   </a>
+                  <a class="ghost-action" href="kobo_forms/PMS_GMC_Formulaire_Objectifs_Mensuels_2026.xlsx" download>
+                    Telecharger objectifs
+                  </a>
                   <a class="ghost-action" href="kobo_forms/PMS_GMC_Formulaire_2_Donnees_Calcul_Journalieres_2026.xlsx" download>
-                    Telecharger formulaire 2
+                    Telecharger donnees
                   </a>
                   <a class="ghost-action" href="kobo_forms/README_KOBO_FORMS.md" target="_blank" rel="noreferrer">
                     Voir le guide
                   </a>
                 </div>
                 <p class="kobo-template-note">
-                  Les deux formulaires sont deja importes et configures. Renseigner seulement le token API Kobo pour synchroniser les soumissions.
+                  Le referentiel KPI et les donnees de calcul sont preconfigures. Ajouter l'UID du formulaire Objectifs mensuels pour activer le Vs Target.
                 </p>
                 <div class="kobo-sync-ready" aria-label="Configuration Kobo prete">
                   <div>
                     <span>Formulaire 1 configure</span>
                     <strong>agJCJ2VqwMGNk586NHJ39W</strong>
-                    <small>Referentiel KPI, objectifs et formules.</small>
+                    <small>Referentiel KPI et formules.</small>
                   </div>
                   <div>
-                    <span>Formulaire 2 configure</span>
+                    <span>Objectifs mensuels</span>
+                    <strong>A connecter</strong>
+                    <small>Cibles mensuelles officielles.</small>
+                  </div>
+                  <div>
+                    <span>Donnees de calcul configurees</span>
                     <strong>aZ5JcFjcL9YvnQozqHWrqN</strong>
                     <small>Donnees journalieres et elements de calcul.</small>
                   </div>
@@ -883,7 +896,7 @@
                     <input id="admin-kobo-reference-formula-field" class="search-input" value="formule_de_calcul" />
                   </label>
                   <label>
-                    Champ valeur cible
+                    Champ cible reference optionnelle
                     <input id="admin-kobo-reference-target-field" class="search-input" value="valeur_cible" />
                   </label>
                   <label>
@@ -959,7 +972,85 @@
               <section class="panel span-3 admin-kobo-source-panel">
                 <div class="panel-header">
                   <div>
-                    <p class="eyebrow">Formulaire 2</p>
+                    <p class="eyebrow">Objectifs mensuels</p>
+                    <h3>Cibles KPI par mois</h3>
+                  </div>
+                </div>
+                <div class="admin-kobo-form admin-kobo-dual-form">
+                  <label>
+                    Adresse serveur Kobo
+                    <input id="admin-kobo-monthly-objective-server" class="search-input" inputmode="url" value="https://kf.kobotoolbox.org" placeholder="https://kf.kobotoolbox.org" />
+                  </label>
+                  <label>
+                    ID formulaire objectifs mensuels
+                    <input id="admin-kobo-monthly-objective-form-id" class="search-input" placeholder="ex. aObjectifsMensuels2026" />
+                  </label>
+                  <label>
+                    Token API Kobo
+                    <input id="admin-kobo-monthly-objective-token" class="search-input" type="password" autocomplete="off" placeholder="Token API pour synchroniser" />
+                  </label>
+                  <label>
+                    Champ pays / filiale
+                    <input id="admin-kobo-monthly-objective-branch-field" class="search-input" value="pays_filiale" />
+                  </label>
+                  <label>
+                    Champ pole
+                    <input id="admin-kobo-monthly-objective-pole-field" class="search-input" value="pole_id" />
+                  </label>
+                  <label>
+                    Champ KPI
+                    <input id="admin-kobo-monthly-objective-kpi-field" class="search-input" value="id_kpi" />
+                  </label>
+                  <label>
+                    Champ periode objectif
+                    <input id="admin-kobo-monthly-objective-period-field" class="search-input" value="periode_objectif" />
+                  </label>
+                  <label>
+                    Champ objectif mensuel
+                    <input id="admin-kobo-monthly-objective-target-field" class="search-input" value="objectif_mensuel" />
+                  </label>
+                  <label>
+                    Champ unite
+                    <input id="admin-kobo-monthly-objective-unit-field" class="search-input" value="unite_mesure" />
+                  </label>
+                  <label>
+                    Champ frequence objectif
+                    <input id="admin-kobo-monthly-objective-frequency-field" class="search-input" value="frequence_objectif" />
+                  </label>
+                  <label>
+                    Champ mode repartition
+                    <input id="admin-kobo-monthly-objective-distribution-field" class="search-input" value="mode_repartition" />
+                  </label>
+                  <label>
+                    Champ source objectif
+                    <input id="admin-kobo-monthly-objective-source-field" class="search-input" value="source_objectif" />
+                  </label>
+                  <label>
+                    Champ responsable objectif
+                    <input id="admin-kobo-monthly-objective-responsible-field" class="search-input" value="responsable_objectif" />
+                  </label>
+                  <label>
+                    Champ validation
+                    <input id="admin-kobo-monthly-objective-validation-field" class="search-input" value="validation_hierarchique" />
+                  </label>
+                </div>
+                <div class="connector-actions admin-kobo-actions">
+                  <button class="primary-action" id="admin-kobo-monthly-objective-save" type="button">
+                    Enregistrer le formulaire objectifs
+                  </button>
+                  <button class="ghost-action" id="admin-kobo-monthly-objective-sync" type="button">
+                    Synchroniser depuis Kobo
+                  </button>
+                </div>
+                <div class="connector-status empty" id="admin-kobo-monthly-objective-status">
+                  Aucun formulaire objectifs mensuels configure.
+                </div>
+              </section>
+
+              <section class="panel span-3 admin-kobo-source-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Donnees de calcul</p>
                     <h3>Elements de calcul des KPI</h3>
                   </div>
                 </div>
@@ -1026,7 +1117,7 @@
                 <div class="panel-header">
                   <div>
                     <p class="eyebrow">Structure KoboCollect</p>
-                    <h3>Champs attendus pour les deux formulaires</h3>
+                    <h3>Champs attendus pour les trois formulaires</h3>
                   </div>
                   <span class="status-pill green" id="objective-field-count">0 champ</span>
                 </div>

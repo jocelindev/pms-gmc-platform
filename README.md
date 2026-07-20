@@ -66,23 +66,26 @@ C:\Users\dquin\Documents\developpement Web\pms-gmc-platform\index.html
 
 La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'est l'espace de parametrage des formulaires qui alimentent la plateforme.
 
-- Deux modeles XLSForm sont disponibles dans `kobo_forms/` :
-  - `PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026_corrige_pays_20260720.xlsx` pour le referentiel KPI, les objectifs et les formules.
+- Trois modeles XLSForm sont disponibles dans `kobo_forms/` :
+  - `PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026_corrige_pays_20260720.xlsx` pour le referentiel KPI et les formules.
+  - `PMS_GMC_Formulaire_Objectifs_Mensuels_2026.xlsx` pour les objectifs mensuels officiels par pays / filiale, pole, KPI et mois.
   - `PMS_GMC_Formulaire_2_Donnees_Calcul_Journalieres_2026.xlsx` pour les donnees brutes journalieres de calcul.
-- Les deux formulaires publies dans KoboToolbox sont deja preconfigures :
+- Les formulaires publies dans KoboToolbox sont preconfigures quand leur UID est connu :
   - Formulaire 1 UID `agJCJ2VqwMGNk586NHJ39W`.
+  - Formulaire Objectifs mensuels : UID a renseigner apres import KoboToolbox.
   - Formulaire 2 UID `aZ5JcFjcL9YvnQozqHWrqN`.
 - Pour une synchronisation automatique, ajouter le token dans Render comme variable d'environnement secrete `PMS_KOBO_API_TOKEN`.
-- Par defaut, le serveur synchronise automatiquement les deux formulaires toutes les 15 minutes avec `PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS=900`.
+- Par defaut, le serveur synchronise automatiquement les formulaires operationnels toutes les 15 minutes avec `PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS=900`.
 - Si `PMS_KOBO_API_TOKEN` n'est pas encore configure, il reste possible de renseigner le token API Kobo dans **Administration > KoboCollecte**, puis cliquer sur `Synchroniser depuis Kobo`.
 - Depuis l'interface, ces modeles sont telechargeables dans **Administration > KoboCollecte**, avant les zones UID/token.
 - Le serveur lit les metadonnees du formulaire Kobo et enregistre les champs detectes dans SQLite.
 - Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.
 - Le jeton API sert uniquement a la synchronisation courante : il n'est pas renvoye a l'interface ni affiche comme formulaire actif.
-- Dans Administration > KoboCollecte, la logique PMS distingue deux formulaires : un formulaire `KPI et formules` par pole, et un formulaire `Elements de calcul` qui collecte les donnees brutes utilisees par ces formules.
+- Dans Administration > KoboCollecte, la logique PMS distingue trois sources : `KPI et formules`, `Objectifs mensuels` et `Elements de calcul`.
 - Le formulaire `KPI et formules` reste compatible avec `Copie de Catalogu.xlsx` et exploite aussi `GMC_FICHE_COLLECTE_V2.xlsx`, notamment la feuille `FORMULE` : 44 KPI/formules metier et 7 onglets de collecte.
-- Le moteur PMS rapproche automatiquement les deux formulaires par `pays / filiale + pole + KPI + periode`, applique la formule du catalogue, puis alimente le tableau de bord et l'onglet `Suivi par pole`.
-- Sans soumission du formulaire 1, aucun KPI n'est affiche dans les vues metier. Quand le formulaire 1 est alimente mais que le formulaire 2 n'a pas encore de donnees, les KPI apparaissent avec le statut `En attente calcul`.
+- Le moteur PMS rapproche automatiquement les trois formulaires par `pays / filiale + pole + KPI + periode`, applique la formule du catalogue, calcule l'objectif a date a partir de l'objectif mensuel, puis alimente le tableau de bord et l'onglet `Suivi par pole`.
+- Sans soumission du formulaire 1, aucun KPI n'est affiche dans les vues metier. Quand le formulaire 1 est alimente mais que les donnees de calcul ne sont pas encore synchronisees, les KPI apparaissent avec le statut `En attente calcul`.
+- Si les donnees de calcul existent mais que l'objectif mensuel Kobo manque, le KPI reste calcule mais son statut reste `Objectif Kobo manquant` / attente au lieu d'etre classe rouge a tort.
 - Dans l'administration, `Enregistrer` conserve l'UID et le mapping des champs; `Synchroniser depuis Kobo` utilise le token API pour importer les soumissions et rendre les KPI visibles.
 
 ## Contenu de cette version

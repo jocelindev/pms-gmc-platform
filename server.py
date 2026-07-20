@@ -4,6 +4,7 @@ import argparse
 import ast
 import base64
 import binascii
+import calendar
 import datetime as dt
 import hashlib
 import hmac
@@ -48,7 +49,7 @@ KOBO_REQUEST_TIMEOUT = 15
 KOBO_SUBMISSION_LIMIT = 500
 KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT = 15 * 60
 KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS_DEFAULT = 8
-KOBO_AUTO_SYNC_ROLES = ("referentielKpi", "donneesCalcul")
+KOBO_AUTO_SYNC_ROLES = ("referentielKpi", "objectifsMensuels", "donneesCalcul")
 KOBO_TOKEN_ENV_KEYS = ("PMS_KOBO_API_TOKEN", "KOBO_API_TOKEN")
 REFERENCE_KOBO_CURRENT_UID = "agJCJ2VqwMGNk586NHJ39W"
 REFERENCE_KOBO_OLD_UIDS = ("auGyH8vhCsK9KKtG2fu2u5",)
@@ -101,6 +102,9 @@ KOBO_FIELD_ALIASES = {
     "submitted_at": ["_submission_time", "_date_submitted", "submission_time", "submitted_at", "end", "today"],
     "period": ["periode_reporting", "periode", "period", "periode_objectif", "mois", "date_reporting"],
     "value": ["kpi_value", "valeur", "value", "valeur_kpi", "resultat", "score", "realisation"],
+    "target": ["objectif_mensuel", "valeur_objectif", "objectif_kpi", "objectif", "valeur_cible", "cible"],
+    "unit": ["unite_mesure", "unite_de_mesure", "unite"],
+    "distribution_mode": ["mode_repartition", "repartition_objectif", "type_objectif"],
     "validation_status": ["validation_status", "statut_validation", "validation_hierarchique", "validation"],
 }
 CATALOG_POLE_ALIASES = {
@@ -802,7 +806,56 @@ def objective_to_front(row: sqlite3.Row) -> dict:
     }
 
 
+def objective_record_to_front(record: dict, pole_names: dict[str, str] | None = None) -> dict:
+    pole_names = pole_names or {}
+    return {
+        "id": record.get("id") or f"OBJ-KOBO-{record.get('periodMonth', '')}-{record.get('poleId', '')}-{record.get('kpiKey', '')}",
+        "poleId": record.get("poleId") or "",
+        "poleName": pole_names.get(record.get("poleId"), record.get("poleId") or ""),
+        "branch": record.get("branch") or "Groupe",
+        "kpiName": record.get("kpiName") or record.get("kpiRaw") or record.get("kpiKey") or "",
+        "target": record.get("target") or "Objectif a renseigner",
+        "targetNumeric": record.get("targetNumeric"),
+        "unit": record.get("unit") or "",
+        "period": record.get("period") or record.get("periodMonth") or "",
+        "periodMonth": record.get("periodMonth") or "",
+        "frequency": record.get("frequency") or "Mensuelle",
+        "distributionMode": record.get("distributionMode") or "Automatique",
+        "catalogId": record.get("kpiRaw") or record.get("kpiKey") or "A definir",
+        "type": "Objectif mensuel",
+        "formula": "Lie au referentiel KPI",
+        "sourceData": record.get("sourceData") or "",
+        "responsible": record.get("responsible") or "",
+        "validation": record.get("validation") or "A valider",
+        "documentStatus": record.get("documentStatus") or "Objectif Kobo",
+        "attention": record.get("attention") or "",
+        "sourceServer": record.get("sourceServer") or "",
+        "sourceForm": record.get("sourceForm") or "",
+        "sourceFields": {
+            "pole": "pole_id",
+            "kpi": "id_kpi",
+            "target": "objectif_mensuel",
+            "period": "periode_objectif",
+            "unit": "unite_mesure",
+            "frequency": "frequence_objectif",
+            "source": "source_objectif",
+            "validation": "validation_hierarchique",
+        },
+    }
+
+
 def list_objectives(conn: sqlite3.Connection) -> list[dict]:
+    sources = list_kobo_sources(conn)
+    objective_source = next((source for source in sources if source.get("role") == "objectifsMensuels"), None)
+    if objective_source:
+        records, _warnings = extract_monthly_objective_records(conn, objective_source)
+        if records:
+            pole_names = {row["id"]: row["name"] for row in conn.execute("SELECT id, name FROM poles").fetchall()}
+            return [
+                objective_record_to_front(record, pole_names)
+                for record in sorted(records, key=lambda item: (item.get("periodMonth", ""), item.get("poleId", ""), item.get("kpiKey", "")), reverse=True)
+            ]
+
     rows = conn.execute(
         """
         SELECT
@@ -898,6 +951,8 @@ def kobo_source_role(source_type: str) -> str:
     value = (source_type or "").lower()
     if "donnees de calcul" in value:
         return "donneesCalcul"
+    if "objectif mensuel" in value or "objectifs mensuels" in value or "cible mensuelle" in value or "cibles mensuelles" in value:
+        return "objectifsMensuels"
     if "referentiel" in value or "objectifs kpi" in value:
         return "referentielKpi"
     return "autre"
@@ -2024,6 +2079,130 @@ def parse_number(value) -> float | None:
         return None
 
 
+def parse_period_month(value) -> tuple[str, int, int] | None:
+    raw_value = text_or_empty(value)
+    if not raw_value:
+        return None
+
+    daily_date = parse_daily_period_date(raw_value)
+    if daily_date:
+        return daily_date.strftime("%Y-%m"), daily_date.year, daily_date.month
+
+    compact_month = re.search(r"\b(20\d{2})(\d{2})\b", raw_value)
+    if compact_month:
+        year = int(compact_month.group(1))
+        month = int(compact_month.group(2))
+        if 1 <= month <= 12:
+            return f"{year:04d}-{month:02d}", year, month
+
+    iso_month = re.search(r"\b(20\d{2})[-/](\d{1,2})\b", raw_value)
+    if iso_month:
+        year = int(iso_month.group(1))
+        month = int(iso_month.group(2))
+        if 1 <= month <= 12:
+            return f"{year:04d}-{month:02d}", year, month
+
+    normalized = normalize_match_key(raw_value)
+    named_month = re.search(r"\b([a-z]+)\s+(20\d{2})\b", normalized)
+    if named_month:
+        month_key = named_month.group(1)
+        month = PERIOD_MONTH_INDEX.get(month_key)
+        if not month:
+            month = next(
+                (month_number for name, month_number in PERIOD_MONTH_INDEX.items() if month_key.startswith(name) or name.startswith(month_key)),
+                None,
+            )
+        if month:
+            year = int(named_month.group(2))
+            return f"{year:04d}-{month:02d}", year, month
+
+    return None
+
+
+def month_key_from_date(value: dt.date | None) -> str:
+    return value.strftime("%Y-%m") if value else ""
+
+
+def target_comparator(target: str) -> str:
+    text = str(target or "")
+    if "<=" in text:
+        return "<="
+    if ">=" in text:
+        return ">="
+    if "<" in text:
+        return "<"
+    if ">" in text:
+        return ">"
+    normalized = normalize_match_key(text)
+    if "maximum" in normalized or "max" in normalized:
+        return "<="
+    if "minimum" in normalized or "min" in normalized:
+        return ">="
+    return ""
+
+
+def should_prorate_monthly_target(reference: dict, objective: dict | None = None) -> bool:
+    mode = normalize_match_key((objective or {}).get("distributionMode") or "")
+    if mode:
+        if any(term in mode for term in ("fixe", "non prorata", "non prorate", "taux")):
+            return False
+        if any(term in mode for term in ("prorata", "jour", "ouvrable", "ouvre", "calendaire", "hebdo", "semaine")):
+            return True
+
+    raw_text = f"{reference.get('kpiName', '')} {reference.get('unit', '')} {reference.get('formula', '')} {reference.get('type', '')}"
+    normalized = normalize_match_key(raw_text)
+    if "%" in raw_text or any(term in normalized for term in ("taux", "ratio", "sla", "csat", "score", "qualite", "satisfaction", "dmt", "delai", "mttr")):
+        return False
+    return any(term in normalized for term in ("montant", "fcfa", "xof", "chiffre affaires", " ca ", "vente", "sales", "nombre", "nb", "quantite", "volume", "production", "appel", "ticket", "contrat", "livrable", "dossier"))
+
+
+def effective_target_for_group(reference: dict, objective: dict | None, group: dict) -> dict:
+    if not objective:
+        return {
+            "label": "Objectif Kobo manquant",
+            "monthlyLabel": "",
+            "numeric": None,
+            "statusReady": False,
+            "mode": "manquant",
+        }
+
+    raw_target = text_or_empty(objective.get("target"))
+    target_number = objective.get("targetNumeric")
+    if target_number is None:
+        target_number = parse_number(raw_target)
+    if target_number is None:
+        return {
+            "label": raw_target or "Objectif Kobo manquant",
+            "monthlyLabel": raw_target,
+            "numeric": None,
+            "statusReady": False,
+            "mode": objective.get("distributionMode") or "mensuel",
+        }
+
+    effective_value = float(target_number)
+    mode = objective.get("distributionMode") or "Mensuel"
+    period_end = parse_daily_period_date(group.get("periodEnd") or "")
+    if not period_end:
+        period_end = parse_daily_period_date(group.get("period") or "")
+    if period_end and should_prorate_monthly_target(reference, objective):
+        days_in_month = calendar.monthrange(period_end.year, period_end.month)[1]
+        days_elapsed = 1 if group.get("periodType") == "day" else max(1, min(period_end.day, days_in_month))
+        effective_value = effective_value * days_elapsed / days_in_month
+        mode = "Objectif journalier" if group.get("periodType") == "day" else "Objectif a date"
+
+    comparator = target_comparator(raw_target)
+    unit = objective.get("unit") or reference.get("unit") or ""
+    formatted_value = format_calculated_value(effective_value, unit)
+    label = f"{comparator} {formatted_value}".strip()
+    return {
+        "label": label,
+        "monthlyLabel": raw_target or formatted_value,
+        "numeric": effective_value,
+        "statusReady": True,
+        "mode": mode,
+    }
+
+
 def format_number(value: float, decimals: int = 1) -> str:
     if value is None:
         return "N/A"
@@ -2296,6 +2475,113 @@ def upsert_kpi_daily_data(
     )
 
 
+def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source: dict | None) -> tuple[list[dict], list[str]]:
+    if not objective_source:
+        return [], []
+
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM kobo_submissions
+        WHERE form_uid = ?
+        ORDER BY created_at DESC, id DESC
+        """,
+        (objective_source["formId"],),
+    ).fetchall()
+    records: list[dict] = []
+    warnings: list[str] = []
+    for row in rows:
+        payload = parse_raw_payload(row)
+        branch_raw = mapped_submission_value(objective_source, payload, "branch", ["pays_filiale", "filiale", "pays", "branch"])
+        pole_raw = mapped_submission_value(objective_source, payload, "pole", ["pole_id", "pole", "groupe_de_rattachement", "direction_pole", "direction"])
+        kpi_raw = mapped_submission_value(objective_source, payload, "kpi", ["id_kpi", "kpi_id", "kpi", "kpi_name", "indicateur"])
+        period_raw = mapped_submission_value(objective_source, payload, "period", ["periode_objectif", "periode_reporting", "periode", "mois", "period"])
+        target_raw = mapped_submission_value(objective_source, payload, "target", ["objectif_mensuel", "valeur_objectif", "objectif_kpi", "objectif", "valeur_cible", "cible"])
+        unit_raw = mapped_submission_value(objective_source, payload, "unit", ["unite_mesure", "unite_de_mesure", "unite"])
+        frequency_raw = mapped_submission_value(objective_source, payload, "frequency", ["frequence_objectif", "frequence_collecte", "frequence"])
+        distribution_raw = mapped_submission_value(objective_source, payload, "distributionMode", ["mode_repartition", "repartition_objectif", "type_objectif"])
+        source_raw = mapped_submission_value(objective_source, payload, "sourceData", ["source_objectif", "source_donnee", "source_de_la_donnee"])
+        responsible_raw = mapped_submission_value(objective_source, payload, "responsible", ["responsable_objectif", "responsable_du_kpi", "responsable"])
+        validation_raw = mapped_submission_value(objective_source, payload, "validation", ["validation_hierarchique", "validation_status", "statut_validation"])
+        status_raw = mapped_submission_value(objective_source, payload, "documentStatus", ["statut_objectif", "statut_documentaire", "statut"])
+        attention_raw = mapped_submission_value(objective_source, payload, "attention", ["commentaires", "points_d_attention", "observation"])
+
+        pole_id = resolve_catalog_pole_id(conn, pole_raw or row["pole_id"])
+        kpi_key = normalize_match_key(kpi_raw or row["kpi_name"])
+        period_month = parse_period_month(period_raw or row["period"])
+        target_text = text_or_empty(target_raw if target_raw not in (None, "") else row["value"])
+        if not pole_id or not kpi_key or not period_month or not target_text:
+            warnings.append("Objectif mensuel ignore: pays/pole/KPI/periode/objectif incomplet.")
+            continue
+
+        month_key, _year, _month = period_month
+        branch = text_or_empty(branch_raw or row["branch"] or "Groupe") or "Groupe"
+        records.append(
+            {
+                "id": f"OBJ-KOBO-{row['id']}",
+                "branch": branch,
+                "branchKey": branch_lookup_key(branch),
+                "poleId": pole_id,
+                "kpiKey": kpi_key,
+                "kpiRaw": text_or_empty(kpi_raw or row["kpi_name"]),
+                "kpiName": text_or_empty(kpi_raw or row["kpi_name"]),
+                "period": text_or_empty(period_raw or row["period"]),
+                "periodMonth": month_key,
+                "target": target_text,
+                "targetNumeric": parse_number(target_text),
+                "unit": text_or_empty(unit_raw),
+                "frequency": text_or_empty(frequency_raw or "Mensuelle"),
+                "distributionMode": text_or_empty(distribution_raw or "Automatique"),
+                "sourceData": text_or_empty(source_raw),
+                "responsible": text_or_empty(responsible_raw or row["collector"]),
+                "validation": text_or_empty(validation_raw or row["validation_status"]),
+                "documentStatus": text_or_empty(status_raw or "Objectif Kobo"),
+                "attention": text_or_empty(attention_raw),
+                "sourceForm": objective_source["formId"],
+                "sourceServer": objective_source.get("serverUrl") or "",
+            }
+        )
+
+    unique_warnings = []
+    for warning in warnings:
+        if warning and warning not in unique_warnings:
+            unique_warnings.append(warning)
+    return records, unique_warnings[:5]
+
+
+def build_objective_lookup(records: list[dict]) -> tuple[dict[tuple[str, str, str, str], dict], dict[tuple[str, str, str], dict | None], dict[tuple[str, str], dict | None]]:
+    exact: dict[tuple[str, str, str, str], dict] = {}
+    by_pole_kpi_month: dict[tuple[str, str, str], dict | None] = {}
+    by_kpi_month: dict[tuple[str, str], dict | None] = {}
+    for record in records:
+        keys = [record.get("kpiKey"), normalize_match_key(record.get("kpiRaw")), normalize_match_key(record.get("kpiName"))]
+        for key in [item for item in keys if item]:
+            exact[(record["branchKey"], record["poleId"], key, record["periodMonth"])] = record
+            pole_key = (record["poleId"], key, record["periodMonth"])
+            if pole_key not in by_pole_kpi_month:
+                by_pole_kpi_month[pole_key] = record
+            else:
+                existing = by_pole_kpi_month[pole_key]
+                if existing is None:
+                    pass
+                elif branch_is_group(existing["branch"]):
+                    pass
+                elif branch_is_group(record["branch"]):
+                    by_pole_kpi_month[pole_key] = record
+                elif existing["branchKey"] != record["branchKey"]:
+                    by_pole_kpi_month[pole_key] = None
+
+            kpi_month_key = (key, record["periodMonth"])
+            if kpi_month_key not in by_kpi_month:
+                by_kpi_month[kpi_month_key] = record
+            elif by_kpi_month[kpi_month_key] and (
+                by_kpi_month[kpi_month_key]["poleId"] != record["poleId"]
+                or by_kpi_month[kpi_month_key]["branchKey"] != record["branchKey"]
+            ):
+                by_kpi_month[kpi_month_key] = None
+    return exact, by_pole_kpi_month, by_kpi_month
+
+
 def list_kpi_daily_dates(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         """
@@ -2347,7 +2633,7 @@ def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
     submissions = []
     for row in rows:
         source_role = kobo_source_role(row["source_type"] or "")
-        if source_role not in {"referentielKpi", "donneesCalcul"}:
+        if source_role not in {"referentielKpi", "objectifsMensuels", "donneesCalcul"}:
             continue
         status = row["validation_status"] or "A valider"
         submissions.append(
@@ -2372,11 +2658,15 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         source_by_role.setdefault(source["role"], source)
 
     reference_source = source_by_role.get("referentielKpi")
+    objective_source = source_by_role.get("objectifsMensuels")
     calculation_source = source_by_role.get("donneesCalcul")
     quality = {
         "configured": bool(reference_source),
+        "objectiveFormConfigured": bool(objective_source),
         "calculationFormConfigured": bool(calculation_source),
         "referenceCount": 0,
+        "objectiveRecords": 0,
+        "objectiveCount": 0,
         "calculationRecords": 0,
         "dailyDataRows": 0,
         "calculationGroups": 0,
@@ -2385,10 +2675,12 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         "unmatchedCalculationCount": 0,
         "uncalculatedCount": 0,
         "missingTargetCount": 0,
+        "missingMonthlyObjectiveCount": 0,
         "missingFormulaCount": 0,
         "matchRate": 0,
         "calculationRate": 0,
         "referenceKpis": [],
+        "monthlyObjectives": [],
         "warnings": [],
         "proposals": [],
     }
@@ -2421,11 +2713,20 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         if calculation_source
         else []
     )
+    objective_records, objective_warnings = extract_monthly_objective_records(conn, objective_source)
+    objective_lookup, objective_by_pole_kpi_month, objective_by_kpi_month = build_objective_lookup(objective_records)
 
     quality["referenceCount"] = len(reference_rows)
+    quality["objectiveRecords"] = len(objective_records)
+    quality["objectiveCount"] = len(objective_records)
     quality["calculationRecords"] = len(calculation_rows)
     if not reference_rows:
         quality["warnings"].append("Aucune soumission trouvee pour le formulaire KPI/formules.")
+    if not objective_source:
+        quality["warnings"].append("Formulaire objectifs mensuels non configure.")
+    elif not objective_records:
+        quality["warnings"].append("Aucune soumission trouvee pour le formulaire objectifs mensuels.")
+    quality["warnings"].extend(objective_warnings)
     if not calculation_source:
         quality["warnings"].append("Formulaire donnees de calcul non configure.")
     elif not calculation_rows:
@@ -2469,6 +2770,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "kpiName": kpi_name or kpi_code,
             "formula": text_or_empty(mapped_submission_value(reference_source, payload, "formula", ["formule_de_calcul", "formule"])),
             "target": text_or_empty(mapped_submission_value(reference_source, payload, "target", ["valeur_cible", "seuil_cible", "objectif", "objectif_cible"])),
+            "type": text_or_empty(mapped_submission_value(reference_source, payload, "type", ["type_de_kpi", "type_kpi"])),
             "unit": text_or_empty(mapped_submission_value(reference_source, payload, "unit", ["unite_de_mesure", "unite"])),
             "sourceData": text_or_empty(
                 mapped_submission_value(reference_source, payload, "sourceData", ["source_de_la_donnee", "source_donnee"])
@@ -2484,8 +2786,6 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         references.append(record)
         if not record["formula"]:
             quality["missingFormulaCount"] += 1
-        if not record["target"]:
-            quality["missingTargetCount"] += 1
 
         keys = [record["kpiId"], record["kpiName"]]
         for key_value in keys:
@@ -2606,17 +2906,6 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "branch": branch,
             "validation": text_or_empty(validation_raw or row["validation_status"]),
         }
-        calculation_entries.append(
-            {
-                "branch": branch,
-                "branchKey": branch_lookup_key(branch),
-                "poleId": pole_id,
-                "kpiKey": kpi_key,
-                "kpiRaw": kpi_raw_text,
-                "periodDate": period_date,
-                "element": element,
-            }
-        )
         if period_date:
             upsert_kpi_daily_data(
                 conn,
@@ -2636,6 +2925,17 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             )
             continue
 
+        calculation_entries.append(
+            {
+                "branch": branch,
+                "branchKey": branch_lookup_key(branch),
+                "poleId": pole_id,
+                "kpiKey": kpi_key,
+                "kpiRaw": kpi_raw_text,
+                "periodDate": None,
+                "element": element,
+            }
+        )
         add_calculation_group(
             pole_id,
             kpi_key,
@@ -2745,6 +3045,11 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     results: list[dict] = []
     pole_names = {row["id"]: row["name"] for row in conn.execute("SELECT id, name FROM poles").fetchall()}
 
+    quality["monthlyObjectives"] = [
+        objective_record_to_front(record, pole_names)
+        for record in sorted(objective_records, key=lambda item: (item.get("periodMonth", ""), item.get("poleId", ""), item.get("kpiKey", "")), reverse=True)
+    ][:200]
+
     def reference_for_group(group: dict) -> dict | None:
         group_branch_key = group.get("branchKey") or "groupe"
         exact_reference = reference_lookup.get((group_branch_key, group["poleId"], group["kpiKey"]))
@@ -2755,28 +3060,78 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             return group_reference
         return reference_by_pole_kpi.get((group["poleId"], group["kpiKey"])) or reference_by_kpi.get(group["kpiKey"])
 
+    def month_key_for_group(group: dict) -> str:
+        for value in (group.get("periodEnd"), group.get("periodStart"), group.get("period")):
+            parsed_date = parse_daily_period_date(value or "")
+            if parsed_date:
+                return month_key_from_date(parsed_date)
+            parsed_month = parse_period_month(value or "")
+            if parsed_month:
+                return parsed_month[0]
+        return ""
+
+    def objective_for_group(reference: dict, group: dict) -> dict | None:
+        period_month = month_key_for_group(group)
+        if not period_month:
+            return None
+        group_branch_key = group.get("branchKey") or "groupe"
+        key_candidates = [
+            group.get("kpiKey"),
+            normalize_match_key(reference.get("kpiId")),
+            normalize_match_key(reference.get("kpiName")),
+        ]
+        for key in [candidate for candidate in key_candidates if candidate]:
+            for branch_key in (group_branch_key, "groupe", reference.get("branchKey")):
+                if not branch_key:
+                    continue
+                objective = objective_lookup.get((branch_key, reference["poleId"], key, period_month))
+                if objective:
+                    return objective
+            objective = objective_by_pole_kpi_month.get((reference["poleId"], key, period_month))
+            if objective:
+                return objective
+            objective = objective_by_kpi_month.get((key, period_month))
+            if objective:
+                return objective
+        return None
+
+    def latest_objective_for_reference(record: dict) -> dict | None:
+        key_candidates = [normalize_match_key(record.get("kpiId")), normalize_match_key(record.get("kpiName"))]
+        matches = []
+        for objective in objective_records:
+            if objective.get("poleId") != record.get("poleId"):
+                continue
+            if objective.get("branchKey") not in {record.get("branchKey"), "groupe"} and not branch_is_group(record.get("branch")):
+                continue
+            if objective.get("kpiKey") in key_candidates:
+                matches.append(objective)
+        return sorted(matches, key=lambda item: item.get("periodMonth", "")).pop() if matches else None
+
     quality["referenceKpis"] = sorted(
         [
-            {
-                "id": f"{record['branchKey']}:{record['poleId']}:{record['kpiId']}",
-                "branch": record["branch"],
-                "branchKey": record["branchKey"],
-                "poleId": record["poleId"],
-                "poleName": pole_names.get(record["poleId"], record["poleId"]),
-                "kpiId": record["kpiId"],
-                "kpiName": record["kpiName"],
-                "target": record["target"] or "A completer",
-                "unit": record["unit"],
-                "formula": record["formula"] or "Formule a completer",
-                "source": reference_source["formId"],
-                "sourceData": record["sourceData"],
-                "owner": record["owner"],
-                "collectionFrequency": record["collectionFrequency"],
-                "reportingFrequency": record["reportingFrequency"],
-                "status": "gray",
-                "valueLabel": "En attente calcul",
-                "method": "Reference Kobo, donnees de calcul attendues",
-            }
+            (
+                lambda linked_objective: {
+                    "id": f"{record['branchKey']}:{record['poleId']}:{record['kpiId']}",
+                    "branch": record["branch"],
+                    "branchKey": record["branchKey"],
+                    "poleId": record["poleId"],
+                    "poleName": pole_names.get(record["poleId"], record["poleId"]),
+                    "kpiId": record["kpiId"],
+                    "kpiName": record["kpiName"],
+                    "target": linked_objective["target"] if linked_objective else "Objectif Kobo mensuel attendu",
+                    "monthlyTarget": linked_objective["target"] if linked_objective else "",
+                    "unit": linked_objective.get("unit") or record["unit"] if linked_objective else record["unit"],
+                    "formula": record["formula"] or "Formule a completer",
+                    "source": reference_source["formId"],
+                    "sourceData": record["sourceData"],
+                    "owner": record["owner"],
+                    "collectionFrequency": record["collectionFrequency"],
+                    "reportingFrequency": record["reportingFrequency"],
+                    "status": "gray",
+                    "valueLabel": "En attente calcul",
+                    "method": "Reference Kobo, donnees de calcul attendues",
+                }
+            )(latest_objective_for_reference(record))
             for record in references
         ],
         key=lambda item: (item["branch"], item["poleName"], item["kpiName"]),
@@ -2799,7 +3154,11 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 quality["warnings"].extend(formula_warnings[:1])
             continue
 
-        status = rag_status(value, reference["target"], reference["kpiName"], reference["formula"])
+        objective = objective_for_group(reference, group)
+        target_info = effective_target_for_group(reference, objective, group)
+        if not objective and not is_month_to_date:
+            quality["missingMonthlyObjectiveCount"] += 1
+        status = rag_status(value, target_info["label"], reference["kpiName"], reference["formula"]) if target_info["statusReady"] else "gray"
         result = {
             "id": f"{group.get('branchKey') or 'groupe'}:{group['poleId']}:{reference['kpiId']}:{normalize_submission_key(group['period'])}",
             "branch": group.get("branch") or "Groupe",
@@ -2814,11 +3173,15 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "periodType": group.get("periodType") or "period",
             "value": round(value, 4),
             "valueLabel": format_calculated_value(value, reference["unit"]),
-            "target": reference["target"] or "A completer",
-            "unit": reference["unit"],
+            "target": target_info["label"],
+            "monthlyTarget": target_info["monthlyLabel"],
+            "targetValue": round(target_info["numeric"], 4) if target_info["numeric"] is not None else None,
+            "targetMode": target_info["mode"],
+            "unit": objective.get("unit") or reference["unit"] if objective else reference["unit"],
             "status": status,
             "trend": "Calcul Kobo",
             "source": calculation_source["formId"] if calculation_source else reference_source["formId"],
+            "objectiveSource": objective.get("sourceForm") if objective else "",
             "formula": reference["formula"] or "Formule a completer",
             "sourceData": reference["sourceData"],
             "method": method,
@@ -2839,23 +3202,23 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     if quality["calculationGroups"]:
         quality["matchRate"] = round((quality["matchedCalculationGroups"] / quality["calculationGroups"]) * 100)
         quality["calculationRate"] = round((quality["calculatedCount"] / quality["calculationGroups"]) * 100)
-    if quality["calculationGroups"]:
-        quality["calculationRate"] = round((quality["calculatedCount"] / quality["calculationGroups"]) * 100)
 
     if quality["unmatchedCalculationCount"]:
         quality["proposals"].append(
-            "Uniformiser les champs pays_filiale/filiale, pole_id, id_kpi et periode_reporting dans les deux formulaires pour supprimer les ecarts."
+            "Uniformiser les champs pays_filiale/filiale, pole_id, id_kpi et periode_reporting dans les formulaires pour supprimer les ecarts."
         )
-    if quality["missingTargetCount"]:
-        quality["proposals"].append("Completer les valeurs cibles dans le formulaire KPI/formules pour fiabiliser le statut vert/orange/rouge.")
+    if quality["missingMonthlyObjectiveCount"]:
+        quality["proposals"].append("Renseigner les objectifs mensuels Kobo pour calculer le Vs Target et le statut vert/orange/rouge.")
     if quality["missingFormulaCount"]:
         quality["proposals"].append("Formaliser les formules restantes avec les memes libelles que les elements collectes.")
+    if references and not objective_source:
+        quality["proposals"].append("Ajouter le formulaire Objectifs mensuels pour comparer les realisations aux cibles du mois.")
     if references and not calculation_source:
         quality["proposals"].append("Les KPI du referentiel sont visibles; ajouter le formulaire donnees de calcul pour obtenir les valeurs.")
     if not results and quality["configured"]:
         quality["proposals"].append("Synchroniser le formulaire donnees de calcul pour remplacer les valeurs en attente.")
     if not quality["proposals"]:
-        quality["proposals"].append("Maintenir le meme pays / filiale, pole et id_kpi dans les deux formulaires pour garder le calcul automatique stable.")
+        quality["proposals"].append("Maintenir le meme pays / filiale, pole, id_kpi et mois dans les trois formulaires pour garder le calcul automatique stable.")
 
     unique_warnings = []
     for warning in quality["warnings"]:
@@ -3006,6 +3369,7 @@ def sync_kobo_form(payload: dict) -> dict:
         kpi_results, kpi_quality = calculate_kpi_results(conn)
         kpi_daily_dates = list_kpi_daily_dates(conn)
         kobo_submissions = list_kobo_submissions(conn)
+        objectives = list_objectives(conn)
 
     detail = f"{len(fields)} champ(s) detecte(s), {imported} soumission(s) lue(s)."
     if data_warning:
@@ -3021,6 +3385,7 @@ def sync_kobo_form(payload: dict) -> dict:
         "kpiDailyDates": kpi_daily_dates,
         "kpiCalculationResults": kpi_results,
         "kpiCalculationQuality": kpi_quality,
+        "objectives": objectives,
         "koboSubmissions": kobo_submissions,
     }
 
