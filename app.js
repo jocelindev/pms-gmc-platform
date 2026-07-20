@@ -71,12 +71,11 @@
       delete PMS_DATA.reporting[key];
     });
     Object.assign(PMS_DATA.reporting, clone(reportingBaseline));
-    Object.entries(PMS_DATA.reporting.kpisByPole || {}).forEach(([poleId, kpis]) => {
-      PMS_DATA.reporting.kpisByPole[poleId] = (kpis || []).map((kpi) => toPendingReferenceKpi(kpi, poleId));
-    });
+    PMS_DATA.reporting.kpisByPole = {};
     PMS_DATA.reporting.poles.forEach((pole) => {
+      PMS_DATA.reporting.kpisByPole[pole.id] = [];
       refreshPoleMetrics(pole.id, PMS_DATA.reporting.kpisByPole[pole.id] || [], {
-        lastReport: "Donnees Kobo attendues",
+        lastReport: "Referentiel KPI Kobo attendu",
         lateSubmissions: 0,
         quality: 0,
         readiness: 0,
@@ -553,7 +552,6 @@
 
   function applyCalculatedKpisToReporting() {
     resetReportingToBaseline();
-    seedFormulaDictionaryToReporting();
     const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
     const referenceKpis = Array.isArray(state.kpiCalculationQuality?.referenceKpis)
       ? state.kpiCalculationQuality.referenceKpis

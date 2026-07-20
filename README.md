@@ -82,7 +82,7 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
 - Dans Administration > KoboCollecte, la logique PMS distingue deux formulaires : un formulaire `KPI et formules` par pole, et un formulaire `Elements de calcul` qui collecte les donnees brutes utilisees par ces formules.
 - Le formulaire `KPI et formules` reste compatible avec `Copie de Catalogu.xlsx` et exploite aussi `GMC_FICHE_COLLECTE_V2.xlsx`, notamment la feuille `FORMULE` : 44 KPI/formules metier et 7 onglets de collecte.
 - Le moteur PMS rapproche automatiquement les deux formulaires par `pays / filiale + pole + KPI + periode`, applique la formule du catalogue, puis alimente le tableau de bord et l'onglet `Suivi par pole`.
-- Meme sans donnees de calcul, les KPI issus de la fiche de collecte restent visibles par pole avec le statut `En attente Kobo`.
+- Sans soumission du formulaire 1, aucun KPI n'est affiche dans les vues metier. Quand le formulaire 1 est alimente mais que le formulaire 2 n'a pas encore de donnees, les KPI apparaissent avec le statut `En attente calcul`.
 - Dans l'administration, `Enregistrer` conserve l'UID et le mapping des champs; `Synchroniser depuis Kobo` utilise le token API pour importer les soumissions et rendre les KPI visibles.
 
 ## Contenu de cette version

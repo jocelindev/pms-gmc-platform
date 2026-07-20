@@ -1993,11 +1993,21 @@
   }
 
   function renderKpiTable(filter = "") {
-    const rows = filterRows(PMS_DATA.formulaDictionary, filter, ["id", "direction", "name", "category", "formula", "frequency", "target"]);
-    $("#kpi-table").innerHTML = rows
-      .map((item) => {
+    const rows = Object.entries(PMS_DATA.reporting.kpisByPole || {}).flatMap(([poleId, kpis]) => {
+      const pole = PMS_DATA.reporting.poles.find((item) => item.id === poleId) || { id: poleId, name: poleId };
+      return (kpis || []).map((kpi) => ({
+        ...kpi,
+        poleId,
+        direction: pole.name,
+        frequency: kpi.collectionFrequency || kpi.reportingFrequency || "",
+      }));
+    });
+    const filteredRows = filterRows(rows, filter, ["id", "direction", "name", "category", "formula", "frequency", "target"]);
+    $("#kpi-table").innerHTML = filteredRows.length
+      ? filteredRows
+          .map((item) => {
         const target = item.target || "";
-        const status = target.includes("<=") || target.includes(">=") ? "green" : "amber";
+        const status = item.calculated ? item.status : "gray";
         return `
           <tr>
             <td><strong>${escapeHtml(item.name)}</strong><br><small>${escapeHtml(item.category)}</small></td>
@@ -2005,12 +2015,13 @@
             <td>${escapeHtml(item.frequency)}</td>
             <td>${escapeHtml(target || "A completer")}</td>
             <td>${escapeHtml(item.formula || "Formule a completer")}</td>
-            <td>${escapeHtml(item.source)} #${escapeHtml(item.id)}</td>
-            <td>${statusPill(status === "green" ? "Cadre defini" : "Cible a preciser", status)}</td>
+            <td>${escapeHtml(item.source || "KoboCollect")} #${escapeHtml(item.id || "")}</td>
+            <td>${statusPill(item.calculated ? ragLabel(status) : "Reference Kobo", status)}</td>
           </tr>
         `;
       })
-      .join("");
+      .join("")
+      : `<tr><td colspan="7">Aucun KPI disponible. Le formulaire 1 Kobo doit d'abord alimenter le referentiel.</td></tr>`;
   }
 
   function renderGroups() {
