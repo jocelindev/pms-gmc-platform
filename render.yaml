@@ -6,3 +6,8 @@ services:
     buildCommand: python -m py_compile server.py start.py database/init_database.py
     startCommand: python start.py --host 0.0.0.0
     healthCheckPath: /api/health
+    envVars:
+      - key: PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS
+        value: "900"
+      - key: PMS_KOBO_API_TOKEN
+        sync: false

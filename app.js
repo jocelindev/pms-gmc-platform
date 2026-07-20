@@ -700,6 +700,7 @@
     userAccessScope: [],
     objectiveKoboSource: defaultObjectiveKoboSource ? clone(defaultObjectiveKoboSource) : null,
     calculationKoboSource: defaultCalculationKoboSource ? clone(defaultCalculationKoboSource) : null,
+    koboAutoSync: null,
     databaseOverview: null,
     databaseTablePreview: null,
     currentDatabaseTable: "",
@@ -780,6 +781,9 @@
       if (calculationSource) {
         state.calculationKoboSource = calculationSource;
       }
+    }
+    if (payload.koboAutoSync) {
+      state.koboAutoSync = payload.koboAutoSync;
     }
     ensureCalendarDateFromAvailableData();
     applyCalculatedKpisToReporting();
@@ -1220,9 +1224,10 @@
 
     const syncKoboForm = async (triggerButton) => {
       const { serverUrl, formUid, token } = readKoboConnection();
+      const hasServerToken = Boolean(state.koboAutoSync?.tokenConfigured);
 
-      if (!serverUrl || !formUid || !token) {
-        setKoboStatus("warning", "Renseignez le serveur, l'ID formulaire et le jeton API.");
+      if (!serverUrl || !formUid || (!token && !hasServerToken)) {
+        setKoboStatus("warning", "Renseignez le serveur, l'ID formulaire et le jeton API, ou configurez PMS_KOBO_API_TOKEN sur Render.");
         showToast("Synchronisation Kobo incomplete: informations manquantes.");
         return;
       }
@@ -2098,8 +2103,13 @@
 
     const syncAdminKoboSource = async (config) => {
       const token = $(config.tokenInputId)?.value.trim();
-      if (!token) {
-        updateAdminKoboStatus(config.statusId, "warning", "Renseignez le token API Kobo avant la synchronisation.");
+      const hasServerToken = Boolean(state.koboAutoSync?.tokenConfigured);
+      if (!token && !hasServerToken) {
+        updateAdminKoboStatus(
+          config.statusId,
+          "warning",
+          "Renseignez le token API Kobo ou configurez PMS_KOBO_API_TOKEN sur Render."
+        );
         showToast("Token API Kobo requis pour importer les soumissions.");
         return;
       }

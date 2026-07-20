@@ -2750,6 +2750,7 @@
     const sourceProfile = objectiveTemplate.sourceWorkbookProfile || {};
     const collectionProfile = objectiveTemplate.collectionWorkbookProfile || {};
     const objectiveSummary = $("#objective-summary-cards");
+    const autoSync = state.koboAutoSync || {};
 
     if (objectiveSummary) {
       const selectedPoleObjectives = objectives.filter((objective) => objective.poleId === selectedPole.id).length;
@@ -2794,6 +2795,41 @@
           <strong>${sourceProfile.formulaMissing || 0}</strong>
           <small>formule manquante / ${sourceProfile.targetMissing || 0} cible(s) a completer</small>
         </div>
+      `;
+    }
+
+    const autoSummary = $("#admin-kobo-auto-summary");
+    if (autoSummary) {
+      const formatSyncDate = (value) => {
+        if (!value) return "Jamais";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "Jamais";
+        return date.toLocaleString("fr-FR", {
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      };
+      const intervalMinutes = Math.max(1, Math.round((autoSync.intervalSeconds || 900) / 60));
+      const statusLabel = autoSync.running
+        ? "Synchronisation en cours"
+        : autoSync.enabled
+          ? `Active toutes les ${intervalMinutes} min`
+          : autoSync.tokenConfigured
+            ? "Intervalle automatique inactif"
+            : "Token Render a configurer";
+      const detail = autoSync.lastError
+        ? `Derniere erreur: ${autoSync.lastError}`
+        : autoSync.lastSyncAt
+          ? `Derniere synchro: ${formatSyncDate(autoSync.lastSyncAt)}`
+          : autoSync.tokenConfigured
+            ? "Premiere synchronisation en attente."
+            : "Ajouter PMS_KOBO_API_TOKEN dans Render pour automatiser.";
+      autoSummary.innerHTML = `
+        <span>Synchronisation automatique</span>
+        <strong>${escapeHtml(statusLabel)}</strong>
+        <small>${escapeHtml(detail)}</small>
       `;
     }
 

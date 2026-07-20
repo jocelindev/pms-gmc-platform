@@ -46,7 +46,7 @@ Pour chaque mois, le PMS calcule aussi le cumul du 1er jour du mois jusqu'a la d
 4. Importer le formulaire 2, puis le publier.
 5. Dans la plateforme, aller dans `Administration > KoboCollecte`.
 6. Verifier que les UID preconfigures sont bien affiches.
-7. Renseigner le token API Kobo.
-8. Cliquer sur `Synchroniser depuis Kobo`.
+7. Pour automatiser, configurer le token API Kobo dans Render avec la variable secrete `PMS_KOBO_API_TOKEN`.
+8. Sinon, renseigner le token dans l'interface et cliquer sur `Synchroniser depuis Kobo`.
 
 Important : dans le formulaire 2, l'`ID KPI` doit etre identique a celui du formulaire 1. L'`element de calcul` doit reprendre le meme libelle que celui utilise dans la formule.

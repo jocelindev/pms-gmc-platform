@@ -72,7 +72,9 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
 - Les deux formulaires publies dans KoboToolbox sont deja preconfigures :
   - Formulaire 1 UID `auGyH8vhCsK9KKtG2fu2u5`.
   - Formulaire 2 UID `aZ5JcFjcL9YvnQozqHWrqN`.
-- Il reste seulement a renseigner le token API Kobo dans **Administration > KoboCollecte**, puis cliquer sur `Synchroniser depuis Kobo`.
+- Pour une synchronisation automatique, ajouter le token dans Render comme variable d'environnement secrete `PMS_KOBO_API_TOKEN`.
+- Par defaut, le serveur synchronise automatiquement les deux formulaires toutes les 15 minutes avec `PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS=900`.
+- Si `PMS_KOBO_API_TOKEN` n'est pas encore configure, il reste possible de renseigner le token API Kobo dans **Administration > KoboCollecte**, puis cliquer sur `Synchroniser depuis Kobo`.
 - Depuis l'interface, ces modeles sont telechargeables dans **Administration > KoboCollecte**, avant les zones UID/token.
 - Le serveur lit les metadonnees du formulaire Kobo et enregistre les champs detectes dans SQLite.
 - Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.

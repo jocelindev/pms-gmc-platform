@@ -13,6 +13,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 import unicodedata
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -45,6 +46,20 @@ SESSION_SIGNING_SECRET = os.environ.get(
 MIN_PASSWORD_LENGTH = 8
 KOBO_REQUEST_TIMEOUT = 15
 KOBO_SUBMISSION_LIMIT = 500
+KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT = 15 * 60
+KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS_DEFAULT = 8
+KOBO_AUTO_SYNC_ROLES = ("referentielKpi", "donneesCalcul")
+KOBO_TOKEN_ENV_KEYS = ("PMS_KOBO_API_TOKEN", "KOBO_API_TOKEN")
+AUTO_KOBO_LOCK = threading.Lock()
+AUTO_KOBO_STATE = {
+    "running": False,
+    "lastAttemptAt": "",
+    "lastSyncAt": "",
+    "lastError": "",
+    "lastReason": "",
+    "lastResult": [],
+}
+AUTO_KOBO_LAST_SYNC_TS = 0.0
 SENSITIVE_DATABASE_TERMS = (
     "password",
     "hash",
@@ -267,7 +282,7 @@ def slugify(value: str) -> str:
 
 
 def db_connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     migrate_database(conn)
@@ -870,6 +885,7 @@ def list_users(conn: sqlite3.Connection) -> list[dict]:
 
 
 def get_bootstrap_payload() -> dict:
+    trigger_kobo_auto_sync("Ouverture plateforme", force=False)
     with db_connect() as conn:
         kpi_results, kpi_quality = calculate_kpi_results(conn)
         return {
@@ -884,6 +900,7 @@ def get_bootstrap_payload() -> dict:
             "kpiDailyDates": list_kpi_daily_dates(conn),
             "kpiCalculationResults": kpi_results,
             "kpiCalculationQuality": kpi_quality,
+            "koboAutoSync": get_kobo_auto_sync_status(),
         }
 
 
@@ -1502,6 +1519,33 @@ def normalize_kobo_server_url(raw_url: str) -> str:
     if path.endswith("/api/v2"):
         path = path[: -len("/api/v2")]
     return f"{parsed.scheme}://{parsed.netloc}{path}"
+
+
+def env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def get_kobo_auto_sync_interval_seconds() -> int:
+    return max(0, env_int("PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS", KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT))
+
+
+def get_kobo_auto_sync_startup_delay_seconds() -> int:
+    return max(0, env_int("PMS_KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS", KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS_DEFAULT))
+
+
+def get_kobo_api_token_from_env() -> tuple[str, str]:
+    for key in KOBO_TOKEN_ENV_KEYS:
+        token = os.environ.get(key, "").strip()
+        if token:
+            return token, key
+    return "", ""
+
+
+def utc_timestamp() -> str:
+    return dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def kobo_api_url(server_url: str, api_path: str) -> str:
@@ -2615,10 +2659,12 @@ def sync_kobo_form(payload: dict) -> dict:
     server_url = normalize_kobo_server_url(str(payload.get("serverUrl") or payload.get("origin") or ""))
     form_uid = str(payload.get("formUid") or payload.get("uid") or payload.get("name") or "").strip()
     token = str(payload.get("token") or payload.get("apiToken") or "").strip()
+    if not token:
+        token, _ = get_kobo_api_token_from_env()
     if not server_url or not form_uid:
         raise ValueError("Adresse serveur Kobo et UID formulaire obligatoires.")
     if not token:
-        raise ValueError("Jeton API Kobo obligatoire pour synchroniser le formulaire.")
+        raise ValueError("Jeton API Kobo obligatoire pour synchroniser le formulaire. Configurez PMS_KOBO_API_TOKEN sur Render ou saisissez le token dans l'interface.")
 
     encoded_uid = quote(form_uid, safe="")
     asset = kobo_request_json(server_url, f"/api/v2/assets/{encoded_uid}/", token)
@@ -2767,6 +2813,110 @@ def sync_kobo_form(payload: dict) -> dict:
     }
 
 
+def get_kobo_auto_sync_status() -> dict:
+    token, token_env = get_kobo_api_token_from_env()
+    interval = get_kobo_auto_sync_interval_seconds()
+    with AUTO_KOBO_LOCK:
+        status = dict(AUTO_KOBO_STATE)
+        last_sync_ts = AUTO_KOBO_LAST_SYNC_TS
+    next_run_at = ""
+    if token and interval > 0 and last_sync_ts:
+        next_run_at = dt.datetime.fromtimestamp(last_sync_ts + interval, dt.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    status.update(
+        {
+            "enabled": bool(token and interval > 0),
+            "tokenConfigured": bool(token),
+            "tokenEnv": token_env,
+            "intervalSeconds": interval,
+            "nextRunAt": next_run_at,
+        }
+    )
+    return status
+
+
+def auto_kobo_sync_worker(token: str, reason: str) -> None:
+    global AUTO_KOBO_LAST_SYNC_TS
+    results = []
+    error = ""
+    synced_at = ""
+    try:
+        with db_connect() as conn:
+            sources = [
+                source
+                for source in list_kobo_sources(conn)
+                if source.get("role") in KOBO_AUTO_SYNC_ROLES and source.get("serverUrl") and source.get("formId")
+            ]
+        sources.sort(key=lambda source: KOBO_AUTO_SYNC_ROLES.index(source["role"]))
+        for source in sources:
+            result = sync_kobo_form(
+                {
+                    "serverUrl": source["serverUrl"],
+                    "formUid": source["formId"],
+                    "token": token,
+                }
+            )
+            synced_at = result.get("lastSyncAt") or synced_at
+            results.append(
+                {
+                    "role": source["role"],
+                    "formId": source["formId"],
+                    "fieldsDetected": result.get("fieldsDetected", 0),
+                    "submissionsImported": result.get("submissionsImported", 0),
+                    "warning": result.get("syncWarning", ""),
+                    "lastSyncAt": result.get("lastSyncAt", ""),
+                }
+            )
+        AUTO_KOBO_LAST_SYNC_TS = time.time()
+    except Exception as exc:
+        error = str(exc)
+    finally:
+        with AUTO_KOBO_LOCK:
+            AUTO_KOBO_STATE["running"] = False
+            AUTO_KOBO_STATE["lastSyncAt"] = synced_at or AUTO_KOBO_STATE.get("lastSyncAt", "")
+            AUTO_KOBO_STATE["lastError"] = error
+            AUTO_KOBO_STATE["lastReason"] = reason
+            AUTO_KOBO_STATE["lastResult"] = results
+
+
+def trigger_kobo_auto_sync(reason: str, force: bool = False) -> bool:
+    token, _ = get_kobo_api_token_from_env()
+    interval = get_kobo_auto_sync_interval_seconds()
+    if not token or interval <= 0:
+        return False
+
+    global AUTO_KOBO_LAST_SYNC_TS
+    now = time.time()
+    with AUTO_KOBO_LOCK:
+        if AUTO_KOBO_STATE["running"]:
+            return False
+        if not force and AUTO_KOBO_LAST_SYNC_TS and now - AUTO_KOBO_LAST_SYNC_TS < interval:
+            return False
+        AUTO_KOBO_STATE["running"] = True
+        AUTO_KOBO_STATE["lastAttemptAt"] = utc_timestamp()
+        AUTO_KOBO_STATE["lastReason"] = reason
+        AUTO_KOBO_STATE["lastError"] = ""
+
+    thread = threading.Thread(target=auto_kobo_sync_worker, args=(token, reason), daemon=True)
+    thread.start()
+    return True
+
+
+def kobo_auto_sync_loop() -> None:
+    time.sleep(get_kobo_auto_sync_startup_delay_seconds())
+    while True:
+        interval = get_kobo_auto_sync_interval_seconds()
+        if interval > 0:
+            trigger_kobo_auto_sync("Synchronisation automatique", force=False)
+        time.sleep(max(60, interval or 60))
+
+
+def start_kobo_auto_sync_scheduler() -> None:
+    if get_kobo_auto_sync_interval_seconds() <= 0:
+        return
+    thread = threading.Thread(target=kobo_auto_sync_loop, daemon=True)
+    thread.start()
+
+
 def save_kobo_form(payload: dict) -> dict:
     name = str(payload.get("name") or "").strip()
     origin = str(payload.get("origin") or "").strip()
@@ -2848,6 +2998,9 @@ class PMSHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/bootstrap":
                 self.send_json(get_bootstrap_payload())
+                return
+            if path == "/api/kobo/auto-status":
+                self.send_json(get_kobo_auto_sync_status())
                 return
             if path == "/api/database/overview":
                 require_admin_session(self.headers)
@@ -2966,6 +3119,7 @@ def main() -> None:
     DB_PATH = Path(args.db).resolve()
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer((args.host, args.port), PMSHandler)
+    start_kobo_auto_sync_scheduler()
     print(f"PMS GMC API disponible sur http://{args.host}:{args.port}/")
     print(f"Base SQLite: {DB_PATH}")
     server.serve_forever()

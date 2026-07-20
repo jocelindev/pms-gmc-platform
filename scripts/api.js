@@ -88,6 +88,9 @@
         timeout: 20000,
       });
     },
+    koboAutoStatus() {
+      return request("/kobo/auto-status", { timeout: 5000 });
+    },
     databaseOverview() {
       return request("/database/overview", { timeout: 5000 });
     },
