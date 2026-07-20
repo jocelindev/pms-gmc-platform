@@ -59,6 +59,7 @@ Pour chaque mois, le PMS calcule aussi le cumul du 1er jour du mois jusqu'a la d
 
 Les trois formulaires utilisent le meme champ `ID KPI officiel`, propose en liste recherchable `KPI-001` a `KPI-200`.
 Les KPI deja presents dans le catalogue affichent aussi l'intitule, la formule de calcul et la cible. Exemple : `KPI-001 - Chiffre d'affaires | Calcul: Volume produit x Prix unitaire HT | Cible: 100`.
+Pour etre accepte par Kobo, la valeur interne enregistree est `KPI_001`, `KPI_002`, etc. La plateforme PMS reconnait automatiquement ce format et l'affiche comme `KPI-001`, `KPI-002`, etc.
 
 - Dans le Formulaire 1, cet ID declare le KPI officiel et sa formule.
 - Dans le Formulaire Objectifs mensuels, cet ID rattache la cible mensuelle au KPI officiel.

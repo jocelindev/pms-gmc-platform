@@ -1908,6 +1908,14 @@ def normalize_match_key(value) -> str:
     return re.sub(r"[^a-z0-9]+", " ", ascii_value.lower()).strip()
 
 
+def canonical_kpi_code(value) -> str:
+    text = text_or_empty(value)
+    match = re.fullmatch(r"kpi[\s_-]*(\d+)", text, flags=re.IGNORECASE)
+    if match:
+        return f"KPI-{int(match.group(1)):03d}"
+    return text
+
+
 def branch_lookup_key(value) -> str:
     normalized = normalize_match_key(value)
     if not normalized:
@@ -2755,7 +2763,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             ["groupe_de_rattachement", "sous_entite_pole_filiale", "direction_pole", "direction", "pole_id", "pole"],
         )
         pole_id = resolve_catalog_pole_id(conn, pole_raw or row["pole_id"])
-        kpi_code = text_or_empty(mapped_submission_value(reference_source, payload, "id", ["id_kpi", "kpi_id", "code", "n", "numero"]))
+        kpi_code = canonical_kpi_code(mapped_submission_value(reference_source, payload, "id", ["id_kpi", "kpi_id", "code", "n", "numero"]))
         kpi_name = text_or_empty(
             mapped_submission_value(reference_source, payload, "title", ["intitule_du_kpi", "indicateur_kpi", "indicateur", "kpi_name", "kpi"])
         )
