@@ -744,6 +744,8 @@ def list_reports(conn: sqlite3.Connection) -> list[dict]:
         """
         SELECT id, pole_id, cycle, period, format, status, generated_at, created_at
         FROM reports
+        WHERE id NOT LIKE 'CAL-%'
+          AND id NOT LIKE 'RPT-2026-%'
         ORDER BY created_at DESC, id DESC
         LIMIT 50
         """
@@ -930,7 +932,9 @@ def list_database_objects(conn: sqlite3.Connection) -> list[dict]:
         columns = conn.execute(f"PRAGMA table_info({quoted_name})").fetchall()
         sensitive_columns = [column["name"] for column in columns if is_sensitive_database_column(column["name"])]
         try:
-            count_row = conn.execute(f"SELECT COUNT(*) AS row_count FROM {quoted_name}").fetchone()
+            count_row = conn.execute(
+                f"SELECT COUNT(*) AS row_count FROM {quoted_name} {database_visible_where_clause(name)}"
+            ).fetchone()
             row_count = int(count_row["row_count"] if count_row else 0)
         except sqlite3.DatabaseError:
             row_count = 0
@@ -962,6 +966,27 @@ def sanitize_database_value(column_name: str, value):
     return text
 
 
+def database_visible_where_clause(table_name: str) -> str:
+    if table_name == "kobo_submissions":
+        return """
+        WHERE form_uid IN (
+          SELECT uid
+          FROM kobo_forms
+          WHERE lower(coalesce(source_type, '')) LIKE '%referentiel%'
+             OR lower(coalesce(source_type, '')) LIKE '%calcul%'
+        )
+        """
+    if table_name == "validation_queue":
+        return "WHERE id NOT LIKE 'VAL-102%'"
+    if table_name == "reports":
+        return "WHERE id NOT LIKE 'CAL-%' AND id NOT LIKE 'RPT-2026-%'"
+    if table_name == "notifications":
+        return "WHERE 1 = 0"
+    if table_name == "audit_logs":
+        return "WHERE coalesce(entity_type, '') <> 'prototype'"
+    return ""
+
+
 def get_database_overview() -> dict:
     with db_connect() as conn:
         tables = list_database_objects(conn)
@@ -986,7 +1011,10 @@ def get_database_table_preview(table_name: str, limit: int = 50) -> dict:
         quoted_name = quote_sql_identifier(table_name)
         columns = conn.execute(f"PRAGMA table_info({quoted_name})").fetchall()
         column_names = [column["name"] for column in columns]
-        rows = conn.execute(f"SELECT * FROM {quoted_name} LIMIT ?", (limit,)).fetchall()
+        rows = conn.execute(
+            f"SELECT * FROM {quoted_name} {database_visible_where_clause(table_name)} LIMIT ?",
+            (limit,),
+        ).fetchall()
         return {
             "name": selected["name"],
             "label": selected["label"],
@@ -2195,6 +2223,9 @@ def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
     ).fetchall()
     submissions = []
     for row in rows:
+        source_role = kobo_source_role(row["source_type"] or "")
+        if source_role not in {"referentielKpi", "donneesCalcul"}:
+            continue
         status = row["validation_status"] or "A valider"
         submissions.append(
             {
@@ -2205,7 +2236,7 @@ def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
                 "status": status,
                 "className": status_class_from_validation(status),
                 "period": row["period"] or "",
-                "sourceRole": kobo_source_role(row["source_type"] or ""),
+                "sourceRole": source_role,
             }
         )
     return submissions
@@ -2795,6 +2826,7 @@ def sync_kobo_form(payload: dict) -> dict:
         synced_at = conn.execute("SELECT CURRENT_TIMESTAMP AS synced_at").fetchone()["synced_at"]
         kpi_results, kpi_quality = calculate_kpi_results(conn)
         kpi_daily_dates = list_kpi_daily_dates(conn)
+        kobo_submissions = list_kobo_submissions(conn)
 
     detail = f"{len(fields)} champ(s) detecte(s), {imported} soumission(s) lue(s)."
     if data_warning:
@@ -2810,6 +2842,7 @@ def sync_kobo_form(payload: dict) -> dict:
         "kpiDailyDates": kpi_daily_dates,
         "kpiCalculationResults": kpi_results,
         "kpiCalculationQuality": kpi_quality,
+        "koboSubmissions": kobo_submissions,
     }
 
 

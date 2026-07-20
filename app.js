@@ -61,6 +61,7 @@
     return JSON.parse(JSON.stringify(value));
   }
 
+  const OPERATIONAL_KOBO_ROLES = new Set(["referentielKpi", "donneesCalcul"]);
   const defaultKoboSources = Array.isArray(PMS_DATA.koboConfiguredSources) ? PMS_DATA.koboConfiguredSources : [];
   const defaultObjectiveKoboSource = defaultKoboSources.find((source) => source.role === "referentielKpi") || null;
   const defaultCalculationKoboSource = defaultKoboSources.find((source) => source.role === "donneesCalcul") || null;
@@ -70,19 +71,33 @@
       delete PMS_DATA.reporting[key];
     });
     Object.assign(PMS_DATA.reporting, clone(reportingBaseline));
+    Object.entries(PMS_DATA.reporting.kpisByPole || {}).forEach(([poleId, kpis]) => {
+      PMS_DATA.reporting.kpisByPole[poleId] = (kpis || []).map((kpi) => toPendingReferenceKpi(kpi, poleId));
+    });
+    PMS_DATA.reporting.poles.forEach((pole) => {
+      refreshPoleMetrics(pole.id, PMS_DATA.reporting.kpisByPole[pole.id] || [], {
+        lastReport: "Donnees Kobo attendues",
+        lateSubmissions: 0,
+        quality: 0,
+        readiness: 0,
+      });
+    });
   }
 
   function statusLabel(status) {
     if (status === "green") return "Valide";
     if (status === "amber") return "A surveiller";
     if (status === "red") return "Plan requis";
-    return "A verifier";
+    return "En attente Kobo";
   }
 
   function scoreFromKpis(kpis) {
-    if (!kpis.length) return 0;
+    const measurableKpis = kpis.filter(
+      (kpi) => kpi.calculated && ["green", "amber", "red"].includes(kpi.status)
+    );
+    if (!measurableKpis.length) return null;
     const weights = { green: 100, amber: 70, red: 35, gray: 50 };
-    const score = kpis.reduce((sum, kpi) => sum + (weights[kpi.status] || 50), 0) / kpis.length;
+    const score = measurableKpis.reduce((sum, kpi) => sum + (weights[kpi.status] || 0), 0) / measurableKpis.length;
     return Math.round(score);
   }
 
@@ -124,25 +139,53 @@
     byPole.set(poleId, items);
   }
 
+  function toPendingReferenceKpi(kpi = {}, poleId = "") {
+    const pole = PMS_DATA.reporting.poles.find((item) => item.id === poleId) || { id: poleId };
+    const profile = getObjectiveCatalogProfile(kpi, pole) || {};
+    return {
+      ...kpi,
+      id: kpi.id || profile.id || kpi.name,
+      name: kpi.name || profile.title || profile.name || "KPI a renseigner",
+      value: "En attente Kobo",
+      target: kpi.target || profile.target || "A completer",
+      trend: "Donnees attendues",
+      status: "gray",
+      source: profile.sourceData || kpi.source || "Referentiel KPI",
+      collectionFrequency: kpi.collectionFrequency || profile.collectionFrequency || PMS_DATA.collectionCadenceByPole?.[poleId]?.cadence || "A preciser",
+      reportingFrequency: kpi.reportingFrequency || profile.reportingFrequency || PMS_DATA.collectionCadenceByPole?.[poleId]?.primary || "A preciser",
+      calculated: false,
+      pendingCalculation: true,
+      period: "A collecter",
+      formula: kpi.formula || profile.formula || "Formule a completer",
+      method: "Donnees Kobo attendues",
+      category: kpi.category || profile.type || "Referentiel KPI",
+      trendHistory: [],
+    };
+  }
+
   function refreshPoleMetrics(poleId, kpis, options = {}) {
     const pole = PMS_DATA.reporting.poles.find((item) => item.id === poleId);
-    if (!pole || !kpis.length) return;
+    if (!pole) return;
     const cadenceProfile = PMS_DATA.collectionCadenceByPole?.[poleId] || {};
-    const redCount = kpis.filter((item) => item.status === "red").length;
-    const amberCount = kpis.filter((item) => item.status === "amber").length;
-    const grayCount = kpis.filter((item) => item.status === "gray").length;
+    const measuredKpis = kpis.filter((item) => item.calculated && ["green", "amber", "red"].includes(item.status));
+    const redCount = measuredKpis.filter((item) => item.status === "red").length;
+    const amberCount = measuredKpis.filter((item) => item.status === "amber").length;
     const score = scoreFromKpis(kpis);
+    const hasCalculatedData = measuredKpis.length > 0;
     pole.kpiCount = kpis.length;
+    pole.calculatedKpiCount = measuredKpis.length;
+    pole.pendingKpiCount = Math.max(0, kpis.length - measuredKpis.length);
+    pole.hasCalculatedData = hasCalculatedData;
     pole.collectionCadence = options.collectionCadence || pole.collectionCadence || cadenceProfile.cadence || "Selon referentiel KPI";
     pole.collectionPrimary = options.collectionPrimary || pole.collectionPrimary || cadenceProfile.primary || "A preciser";
     pole.collectionSourceSheet = options.collectionSourceSheet || pole.collectionSourceSheet || cadenceProfile.sourceSheet || "";
     pole.collectionExpectedDelay = options.collectionExpectedDelay || pole.collectionExpectedDelay || cadenceProfile.expectedDelay || "";
     pole.score = score;
-    pole.rag = redCount ? "red" : amberCount ? "amber" : grayCount ? "gray" : "green";
-    pole.status = statusLabel(pole.rag);
+    pole.rag = hasCalculatedData ? (redCount ? "red" : amberCount ? "amber" : "green") : "gray";
+    pole.status = hasCalculatedData ? statusLabel(pole.rag) : "En attente donnees";
     pole.lastReport = options.lastReport || pole.lastReport || "Reference fichier collecte";
-    pole.quality = options.quality ?? pole.quality ?? 0;
-    pole.readiness = options.readiness ?? score;
+    pole.quality = hasCalculatedData ? options.quality ?? pole.quality ?? 0 : 0;
+    pole.readiness = hasCalculatedData ? options.readiness ?? score ?? 0 : 0;
     pole.lateSubmissions = options.lateSubmissions ?? pole.lateSubmissions ?? 0;
   }
 
@@ -604,9 +647,9 @@
   }
 
   const state = {
-    koboSubmissions: JSON.parse(JSON.stringify(PMS_DATA.koboSubmissions)),
-    validationQueue: JSON.parse(JSON.stringify(PMS_DATA.validationQueue)),
-    reportHistory: JSON.parse(JSON.stringify(PMS_DATA.reporting.history)),
+    koboSubmissions: [],
+    validationQueue: [],
+    reportHistory: [],
     koboActiveForm: null,
     kpiCalculationResults: [],
     kpiDailyDates: [],
@@ -755,10 +798,10 @@
       state.kpiObjectives = payload.objectives;
     }
     if (Array.isArray(payload.reportHistory)) {
-      state.reportHistory = payload.reportHistory;
+      state.reportHistory = payload.reportHistory.filter((report) => !String(report.id || "").startsWith("RPT-2026-"));
     }
     if (Array.isArray(payload.koboSubmissions)) {
-      state.koboSubmissions = payload.koboSubmissions;
+      state.koboSubmissions = payload.koboSubmissions.filter((item) => OPERATIONAL_KOBO_ROLES.has(item.sourceRole));
     }
     if (Array.isArray(payload.kpiCalculationResults)) {
       state.kpiCalculationResults = payload.kpiCalculationResults;
@@ -1261,6 +1304,9 @@
         }
         if (Array.isArray(result.kpiDailyDates)) {
           state.kpiDailyDates = result.kpiDailyDates;
+        }
+        if (Array.isArray(result.koboSubmissions)) {
+          state.koboSubmissions = result.koboSubmissions.filter((item) => OPERATIONAL_KOBO_ROLES.has(item.sourceRole));
         }
         if (result.kpiCalculationQuality) {
           state.kpiCalculationQuality = result.kpiCalculationQuality;

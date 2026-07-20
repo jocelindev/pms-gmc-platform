@@ -2877,6 +2877,18 @@ textarea {
   color: var(--palladium-blue);
 }
 
+.spark-empty {
+  width: 100%;
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.68);
+}
+
 .table-wrap {
   overflow: auto;
 }

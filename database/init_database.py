@@ -466,7 +466,6 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
         )
 
     source_forms = {source for _, source in kpi_records if source}
-    source_forms.update(item.get("form") for item in data.get("koboSubmissions", []) if item.get("form"))
     for uid in sorted(source_forms):
         cur.execute(
             """
@@ -506,114 +505,6 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
                 """,
                 (form_id, field.get("key"), field.get("label"), field.get("source")),
             )
-
-    for item in data.get("koboSubmissions", []):
-        cur.execute(
-            """
-            INSERT INTO kobo_submissions (
-              form_uid, branch, kpi_name, collector, validation_status, raw_payload_json
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                item.get("form"),
-                item.get("branch"),
-                item.get("kpi"),
-                item.get("collector"),
-                item.get("status", "A valider"),
-                json.dumps(item, ensure_ascii=False),
-            ),
-        )
-
-    for item in data.get("validationQueue", []):
-        cur.execute(
-            """
-            INSERT INTO validation_queue (id, form_uid, pole_id, issue, owner, status, class_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              form_uid = excluded.form_uid,
-              pole_id = excluded.pole_id,
-              issue = excluded.issue,
-              owner = excluded.owner,
-              status = excluded.status,
-              class_name = excluded.class_name
-            """,
-            (
-                item.get("id"),
-                item.get("form"),
-                item.get("pole"),
-                item.get("issue"),
-                item.get("owner"),
-                item.get("status"),
-                item.get("className"),
-            ),
-        )
-
-    for item in reporting.get("calendar", []):
-        report_id = f"CAL-{item.get('pole')}-{slugify(item.get('cycle', 'cycle'))}-{slugify(item.get('period', 'period'))}"
-        cur.execute(
-            """
-            INSERT INTO reports (id, pole_id, cycle, period, status, owner, due_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              status = excluded.status,
-              owner = excluded.owner,
-              due_at = excluded.due_at
-            """,
-            (
-                report_id,
-                item.get("pole"),
-                item.get("cycle"),
-                item.get("period"),
-                item.get("status"),
-                item.get("owner"),
-                item.get("due"),
-            ),
-        )
-
-    for item in reporting.get("history", []):
-        cur.execute(
-            """
-            INSERT INTO reports (id, pole_id, cycle, period, format, status, generated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              format = excluded.format,
-              status = excluded.status,
-              generated_at = excluded.generated_at
-            """,
-            (
-                item.get("id"),
-                item.get("pole"),
-                item.get("cycle"),
-                item.get("period"),
-                item.get("format"),
-                item.get("status"),
-                item.get("generatedAt"),
-            ),
-        )
-
-    for alert in data.get("alerts", []):
-        cur.execute(
-            """
-            INSERT INTO notifications (title, scope, detail, level, status)
-            VALUES (?, ?, ?, ?, 'Non lu')
-            """,
-            (
-                alert.get("title"),
-                alert.get("scope"),
-                alert.get("detail"),
-                alert.get("level", "info"),
-            ),
-        )
-
-    for action in data.get("auditTrail", []):
-        cur.execute(
-            """
-            INSERT INTO audit_logs (action, entity_type, details)
-            VALUES (?, 'prototype', ?)
-            """,
-            ("import_audit_trail", action),
-        )
 
     conn.commit()
 

@@ -542,18 +542,48 @@
   function renderBranches() {
     const target = $("#branch-bars");
     if (!target) return;
-    const branches = getCountryOptions().filter((country) => !isGroupCountry(country));
+    const branches = getCountryOptions()
+      .filter((country) => !isGroupCountry(country))
+      .map((country) => countryDataProfile(country));
     target.innerHTML = branches
       .map(
         (branch) => `
           <div class="branch-bar-row">
             <strong>${escapeHtml(branch.name)}</strong>
-            <div class="bar-track"><div class="bar-fill" style="width:${branch.score}%"></div></div>
-            <span>${branch.score}</span>
+            <div class="bar-track"><div class="bar-fill ${escapeHtml(branch.hasData ? scoreClass(branch.score) : "gray")}" style="width:${branch.hasData ? branch.score : 0}%"></div></div>
+            <span>${branch.hasData ? branch.score : "--"}</span>
           </div>
         `
       )
       .join("");
+  }
+
+  function countryPoleScope(country = {}) {
+    const poles = PMS_DATA.reporting?.poles || [];
+    if (isGroupCountry(country) || !Array.isArray(country.poleIds) || !country.poleIds.length) return poles;
+    const poleIds = new Set(country.poleIds);
+    return poles.filter((pole) => poleIds.has(pole.id));
+  }
+
+  function countryDataProfile(country = {}) {
+    const poles = countryPoleScope(country);
+    const dataPoles = poles.filter(hasPoleData);
+    const hasData = dataPoles.length > 0;
+    const score = hasData ? averageNumber(dataPoles.map((pole) => pole.score)) : null;
+    const quality = hasData ? averageNumber(dataPoles.map((pole) => pole.quality)) : null;
+    const lateSubmissions = dataPoles.reduce((sum, pole) => sum + Number(pole.lateSubmissions || 0), 0);
+    const kpiCount = poles.reduce((sum, pole) => sum + Number(pole.kpiCount || 0), 0);
+    return {
+      ...country,
+      score,
+      quality,
+      kpiCount,
+      lateSubmissions,
+      activePoles: poles.length,
+      hasData,
+      status: hasData ? (lateSubmissions ? "A surveiller" : "Alimente") : "En attente Kobo",
+      className: hasData ? (lateSubmissions ? "amber" : scoreClass(score)) : "gray",
+    };
   }
 
   function renderCountryDashboard(state = {}) {
@@ -565,13 +595,14 @@
     const activeCountry = getActiveCountry(state);
     const isGroup = isGroupCountry(activeCountry);
     const countries = getAuthorizedCountryOptions(state).filter((country) => !isGroupCountry(country));
-    const visibleCountries = isGroup ? countries : countries.filter((country) => country.name === activeCountry.name);
-    const safeCountries = visibleCountries.length ? visibleCountries : countries;
-    const average = (field) =>
-      Math.round(safeCountries.reduce((sum, country) => sum + Number(country[field] || 0), 0) / Math.max(safeCountries.length, 1));
+    const visibleCountries = (isGroup ? countries : countries.filter((country) => country.name === activeCountry.name)).map(countryDataProfile);
+    const safeCountries = (visibleCountries.length ? visibleCountries : countries.map(countryDataProfile));
+    const dataCountries = safeCountries.filter((country) => country.hasData);
+    const average = (field) => (dataCountries.length ? averageNumber(dataCountries.map((country) => country[field])) : null);
     const totalKpis = safeCountries.reduce((sum, country) => sum + Number(country.kpiCount || 0), 0);
     const totalLate = safeCountries.reduce((sum, country) => sum + Number(country.lateSubmissions || 0), 0);
-    const scopeClass = isGroup ? "green" : countryStatusClass(activeCountry);
+    const activeCountryProfile = countryDataProfile(activeCountry);
+    const scopeClass = isGroup ? (dataCountries.length ? "green" : "gray") : activeCountryProfile.className;
 
     if (scope) {
       scope.className = `status-pill ${scopeClass}`;
@@ -581,7 +612,7 @@
     if (cards) {
       const summaryCards = [
         { label: isGroup ? "Pays suivis" : "Pays actif", value: isGroup ? safeCountries.length : activeCountry.code, hint: isGroup ? "perimetre consolide" : activeCountry.name },
-        { label: "Score moyen", value: average("score"), hint: "performance pays" },
+        { label: "Score moyen", value: dataCountries.length ? average("score") : "--", hint: dataCountries.length ? "performance calculee" : "donnees Kobo attendues" },
         { label: "KPI attendus", value: totalKpis, hint: isGroup ? "tous pays" : "perimetre actif" },
         { label: "Retards Kobo", value: totalLate, hint: totalLate ? "a traiter" : "aucun retard" },
       ];
@@ -603,16 +634,16 @@
         ? safeCountries
             .map((country) => {
           const isSelected = country.name === activeCountry.name && !isGroup;
-          const statusClass = countryStatusClass(country);
+          const statusClass = country.className || countryStatusClass(country);
           return `
             <tr>
               <td>
                 <strong>${escapeHtml(country.name)}</strong>
                 <small class="country-code">${escapeHtml(country.code)}</small>
               </td>
-              <td><strong>${escapeHtml(country.score)}</strong></td>
+              <td><strong>${escapeHtml(country.hasData ? country.score : "--")}</strong></td>
               <td>${escapeHtml(country.kpiCount)}</td>
-              <td>${escapeHtml(country.quality)}%</td>
+              <td>${escapeHtml(country.hasData ? `${country.quality}%` : "--")}</td>
               <td>${statusPill(country.status, statusClass)}</td>
               <td>${escapeHtml(country.lateSubmissions)}</td>
               <td>
@@ -628,32 +659,43 @@
     }
   }
 
-  function renderExecutiveAlerts() {
+  function renderExecutiveAlerts(state = {}) {
     const target = $("#executive-alerts");
     if (!target) return;
-    target.innerHTML = PMS_DATA.alerts
-      .slice(0, 3)
-      .map(
-        (alert) => `
-          <article class="alert-item">
-            <div>
-              <strong>${escapeHtml(alert.title)}</strong>
-              <p>${escapeHtml(alert.scope)} - ${escapeHtml(alert.detail)}</p>
-            </div>
-            ${statusPill(alert.level === "red" ? "Critique" : alert.level === "amber" ? "Vigilance" : "Manquant", alert.level)}
-          </article>
-        `
-      )
-      .join("");
+    const context = getDashboardContext(state);
+    const alerts = dashboardCriticalRows(context, 3).filter((row) => hasKpiData(row.kpi));
+    target.innerHTML = alerts.length
+      ? alerts
+          .map(
+            (row) => `
+              <article class="alert-item">
+                <div>
+                  <strong>${escapeHtml(row.kpi.name)}</strong>
+                  <p>${escapeHtml(row.pole.name)} - ${escapeHtml(row.kpi.value)} vs cible ${escapeHtml(row.kpi.target)}</p>
+                </div>
+                ${statusPill(row.kpi.status === "red" ? "Critique" : "Vigilance", row.kpi.status)}
+              </article>
+            `
+          )
+          .join("")
+      : `<div class="empty-kpi-state">Aucune alerte tant que les KPI ne sont pas calcules depuis Kobo.</div>`;
   }
 
-  function renderSparkline() {
+  function renderSparkline(state = {}) {
     const target = $("#ipg-sparkline");
     if (!target) return;
-    const values = [72, 75, 78, 77, 80, 82];
-    target.innerHTML = values
-      .map((value) => `<div class="spark-bar" data-value="${value}" style="height:${value}%"></div>`)
-      .join("");
+    const context = getDashboardPoleContext(state);
+    const values = scopedKpiDataRows(context.kpiRows)
+      .flatMap((row) => (row.kpi.trendHistory || []).map((point) => Number(point.value)).filter(Number.isFinite))
+      .slice(-6);
+    target.innerHTML = values.length
+      ? values
+          .map((value) => {
+            const height = Math.max(8, Math.min(100, Math.abs(value)));
+            return `<div class="spark-bar" data-value="${escapeHtml(value)}" style="height:${height}%"></div>`;
+          })
+          .join("")
+      : `<div class="spark-empty">En attente Kobo</div>`;
   }
 
   function renderCatalogStats() {
@@ -978,7 +1020,7 @@
     if (status === "green") return "Vert";
     if (status === "red") return "Rouge";
     if (status === "amber") return "Orange";
-    if (status === "gray") return "A verifier";
+    if (status === "gray") return "En attente Kobo";
     return status;
   }
 
@@ -1020,10 +1062,48 @@
     return Math.round(validValues.reduce((sum, value) => sum + value, 0) / validValues.length);
   }
 
+  function parseNumber(value) {
+    const text = String(value ?? "").replace(",", ".");
+    const match = text.match(/[-+]?\d+(?:\.\d+)?/);
+    return match ? Number(match[0]) : null;
+  }
+
   function scoreClass(score) {
-    if (score >= 80) return "green";
-    if (score >= 70) return "amber";
+    const numericScore = Number(score);
+    if (!Number.isFinite(numericScore)) return "gray";
+    if (numericScore >= 80) return "green";
+    if (numericScore >= 70) return "amber";
     return "red";
+  }
+
+  function hasKpiData(kpi = {}) {
+    return Boolean(kpi.calculated && ["green", "amber", "red"].includes(kpi.status));
+  }
+
+  function poleDataKpis(pole = {}) {
+    if (!pole) return [];
+    return (PMS_DATA.reporting.kpisByPole[pole.id] || []).filter(hasKpiData);
+  }
+
+  function hasPoleData(pole = {}) {
+    if (!pole) return false;
+    return Boolean(pole.hasCalculatedData || Number(pole.calculatedKpiCount || 0) > 0 || poleDataKpis(pole).length);
+  }
+
+  function metricValueOrPending(pole = {}, value, suffix = "") {
+    return hasPoleData(pole) && Number.isFinite(Number(value)) ? `${value}${suffix}` : "--";
+  }
+
+  function metricStatusOrPending(pole = {}) {
+    return hasPoleData(pole) ? pole.status || ragLabel(pole.rag || "gray") : "En attente Kobo";
+  }
+
+  function metricClassOrPending(pole = {}, value) {
+    return hasPoleData(pole) ? scoreClass(value) : "gray";
+  }
+
+  function scopedKpiDataRows(rows = []) {
+    return rows.filter((row) => hasKpiData(row.kpi));
   }
 
   function dashboardKpiKey(pole = {}, kpi = {}, index = 0) {
@@ -1138,11 +1218,8 @@
     if (Array.isArray(country.poleIds) && country.poleIds.length && !country.poleIds.includes(pole.id)) {
       return null;
     }
-    const seed = String(`${pole.id}${country.code || country.id}`)
-      .split("")
-      .reduce((sum, char) => sum + char.charCodeAt(0), 0);
-    const variation = (seed % 9) - 4;
-    return Math.max(0, Math.min(100, Math.round(pole.score * 0.56 + country.score * 0.34 + pole.quality * 0.1 + variation)));
+    if (!hasPoleData(pole)) return null;
+    return Math.max(0, Math.min(100, Math.round(Number(pole.score || 0))));
   }
 
   function renderDashboardControlCards(context) {
@@ -1167,19 +1244,35 @@
     const knownTargets = context.kpiRows.filter(targetKnown);
     const reachedTargets = knownTargets.filter(targetReached).length;
     const objectiveRate = knownTargets.length ? Math.round((reachedTargets / knownTargets.length) * 100) : 0;
-    const score = selectedPole ? Number(selectedPole.score || 0) : 0;
-    const quality = selectedPole ? Number(selectedPole.quality || 0) : 0;
+    const hasData = selectedPole ? hasPoleData(selectedPole) : false;
+    const score = hasData ? Number(selectedPole.score || 0) : null;
+    const quality = hasData ? Number(selectedPole.quality || 0) : null;
     const lateSubmissions = selectedPole ? Number(selectedPole.lateSubmissions || 0) : 0;
     const cards = [
-      { label: "Score du pole", value: score || "--", hint: selectedPole?.owner || "Responsable a definir", className: scoreClass(score) },
+      {
+        label: "Score du pole",
+        value: metricValueOrPending(selectedPole, score),
+        hint: hasData ? selectedPole?.owner || "Responsable a definir" : "donnees Kobo attendues",
+        className: metricClassOrPending(selectedPole, score),
+      },
       { label: "KPI suivis", value: totalKpis, hint: `${pendingCount} en attente Kobo`, className: pendingCount ? "amber" : "green" },
       { label: "KPI critiques", value: redCount, hint: `${amberCount} KPI orange`, className: redCount ? "red" : amberCount ? "amber" : "green" },
-      { label: "Vs objectifs", value: `${objectiveRate}%`, hint: `${reachedTargets}/${knownTargets.length || 0} cibles atteintes`, className: objectiveRate >= 80 ? "green" : objectiveRate >= 65 ? "amber" : "red" },
-      { label: "Qualite Kobo", value: `${quality}%`, hint: lateSubmissions ? `${lateSubmissions} retard(s)` : "collecte a jour", className: lateSubmissions ? "amber" : scoreClass(quality) },
+      {
+        label: "Vs objectifs",
+        value: hasData ? `${objectiveRate}%` : "--",
+        hint: hasData ? `${reachedTargets}/${knownTargets.length || 0} cibles atteintes` : "calcul apres collecte",
+        className: hasData ? (objectiveRate >= 80 ? "green" : objectiveRate >= 65 ? "amber" : "red") : "gray",
+      },
+      {
+        label: "Qualite Kobo",
+        value: metricValueOrPending(selectedPole, quality, "%"),
+        hint: hasData ? (lateSubmissions ? `${lateSubmissions} retard(s)` : "collecte a jour") : "aucune soumission calculee",
+        className: hasData ? (lateSubmissions ? "amber" : scoreClass(quality)) : "gray",
+      },
     ];
     const ipgScore = $("#dashboard-ipg-score");
     const ipgLabel = $("#dashboard-ipg-label");
-    if (ipgScore) ipgScore.textContent = score || "--";
+    if (ipgScore) ipgScore.textContent = hasData ? score || "--" : "--";
     if (ipgLabel) ipgLabel.textContent = `${context.activeCountry.name} - ${totalKpis} KPI visibles`;
     target.innerHTML = cards
       .map(
@@ -1196,6 +1289,7 @@
 
   function dashboardCriticalRows(context, limit = 6) {
     return [...context.kpiRows]
+      .filter((row) => hasKpiData(row.kpi))
       .map((row) => ({ ...row, riskScore: kpiRiskScore(row) }))
       .filter((row) => row.riskScore >= 60)
       .sort((left, right) => right.riskScore - left.riskScore)
@@ -1207,12 +1301,13 @@
     const badge = $("#dashboard-director-badge");
     if (!brief && !badge) return;
     const criticalRows = dashboardCriticalRows(context, 4);
-    const score = averageNumber(context.visiblePoles.map((pole) => pole.score));
-    const lateSubmissions = context.visiblePoles.reduce((sum, pole) => sum + Number(pole.lateSubmissions || 0), 0);
-    const actionCount = context.visiblePoles.reduce((sum, pole) => sum + Number(pole.actionCount || 0), 0);
+    const dataPoles = context.visiblePoles.filter(hasPoleData);
+    const score = dataPoles.length ? averageNumber(dataPoles.map((pole) => pole.score)) : null;
+    const lateSubmissions = dataPoles.reduce((sum, pole) => sum + Number(pole.lateSubmissions || 0), 0);
+    const actionCount = dataPoles.reduce((sum, pole) => sum + Number(pole.actionCount || 0), 0);
     const mode = state.actorScope === "direction" ? "Direction" : "Responsable";
     if (badge) {
-      badge.className = `status-pill ${criticalRows.length ? "amber" : "green"}`;
+      badge.className = `status-pill ${dataPoles.length ? (criticalRows.length ? "amber" : "green") : "gray"}`;
       badge.textContent = mode;
     }
     if (!brief) return;
@@ -1220,14 +1315,14 @@
     brief.innerHTML = `
       <div class="director-score status-${escapeHtml(scoreClass(score))}">
         <span>Score pilotage</span>
-        <strong>${escapeHtml(score || "--")}</strong>
-        <small>${escapeHtml(context.activeCountry.name)}</small>
+        <strong>${escapeHtml(dataPoles.length ? score || "--" : "--")}</strong>
+        <small>${escapeHtml(dataPoles.length ? context.activeCountry.name : "donnees Kobo attendues")}</small>
       </div>
       <div class="director-decisions">
         <strong>${mode === "Direction" ? "Decisions a prendre" : "Priorites du responsable"}</strong>
-        <p>${criticalRows.length ? `${criticalRows.length} KPI a suivre en priorite, dont ${escapeHtml(topRisk.kpi.name)} sur ${escapeHtml(topRisk.pole.name)}.` : "Aucune alerte critique sur le perimetre actif."}</p>
-        <p>${lateSubmissions ? `${lateSubmissions} collecte(s) Kobo en retard a relancer.` : "Collectes Kobo sous controle sur le perimetre actif."}</p>
-        <p>${actionCount} action(s) ouverte(s) a suivre avant la prochaine validation.</p>
+        <p>${dataPoles.length ? (criticalRows.length ? `${criticalRows.length} KPI a suivre en priorite, dont ${escapeHtml(topRisk.kpi.name)} sur ${escapeHtml(topRisk.pole.name)}.` : "Aucune alerte critique sur le perimetre actif.") : "Aucune performance calculee tant que Kobo n'a pas renvoye de soumissions."}</p>
+        <p>${dataPoles.length ? (lateSubmissions ? `${lateSubmissions} collecte(s) Kobo en retard a relancer.` : "Collectes Kobo sous controle sur le perimetre actif.") : "Les alertes seront produites apres synchronisation de donnees."}</p>
+        <p>${dataPoles.length ? `${actionCount} action(s) ouverte(s) a suivre avant la prochaine validation.` : "Les plans d'action seront crees depuis les ecarts reels."}</p>
       </div>
     `;
   }
@@ -1321,8 +1416,13 @@
   function renderDashboardRanking(context) {
     const target = $("#dashboard-pole-ranking");
     if (!target) return;
-    const best = [...context.visiblePoles].sort((left, right) => right.score - left.score).slice(0, 3);
-    const risk = [...context.visiblePoles].sort((left, right) => left.score - right.score).slice(0, 3);
+    const dataPoles = context.visiblePoles.filter(hasPoleData);
+    if (!dataPoles.length) {
+      target.innerHTML = `<div class="empty-kpi-state">Classement disponible apres reception de donnees Kobo calculees.</div>`;
+      return;
+    }
+    const best = [...dataPoles].sort((left, right) => right.score - left.score).slice(0, 3);
+    const risk = [...dataPoles].sort((left, right) => left.score - right.score).slice(0, 3);
     const rows = [
       ...best.map((pole) => ({ pole, label: "Top", className: "green" })),
       ...risk.map((pole) => ({ pole, label: "Risque", className: scoreClass(pole.score) })),
@@ -1337,7 +1437,7 @@
                   <strong>${escapeHtml(pole.name)}</strong>
                   <small>${escapeHtml(pole.owner)}</small>
                 </div>
-                <b>${escapeHtml(pole.score)}</b>
+                <b>${escapeHtml(metricValueOrPending(pole, pole.score))}</b>
               </div>
             `
           )
@@ -1349,8 +1449,8 @@
     const target = $("#dashboard-quality-list");
     if (!target) return;
     const activeCountry = context.activeCountry;
-    const submissions = filterRowsByCountry(state.koboSubmissions || PMS_DATA.koboSubmissions, activeCountry);
-    const rows = [...context.visiblePoles]
+    const submissions = filterRowsByCountry(state.koboSubmissions || [], activeCountry);
+    const rows = [...context.visiblePoles].filter(hasPoleData)
       .sort((left, right) => Number(right.lateSubmissions || 0) - Number(left.lateSubmissions || 0) || left.quality - right.quality)
       .slice(0, 5);
     target.innerHTML = `
@@ -1371,18 +1471,23 @@
             </div>
           `
         )
-        .join("")}
+        .join("") || `<div class="empty-kpi-state">Qualite Kobo calculee apres import de donnees.</div>`}
     `;
   }
 
   function renderDashboardObjectives(context) {
     const target = $("#dashboard-objective-summary");
     if (!target) return;
-    const knownRows = context.kpiRows.filter(targetKnown);
+    const dataRows = scopedKpiDataRows(context.kpiRows);
+    const knownRows = dataRows.filter(targetKnown);
     const reached = knownRows.filter(targetReached);
-    const missing = context.kpiRows.length - knownRows.length;
+    const missing = dataRows.length - knownRows.length;
     const rate = knownRows.length ? Math.round((reached.length / knownRows.length) * 100) : 0;
     const redObjectives = knownRows.filter((row) => metricFromTarget(row.kpi).className === "negative").slice(0, 3);
+    if (!dataRows.length) {
+      target.innerHTML = `<div class="empty-kpi-state">Atteinte des objectifs disponible apres calcul des KPI Kobo.</div>`;
+      return;
+    }
     target.innerHTML = `
       <div class="objective-rate-card status-${escapeHtml(scoreClass(rate))}">
         <span>Taux d'atteinte</span>
@@ -1428,16 +1533,21 @@
     const target = $("#dashboard-actions-list");
     if (!target) return;
     const criticalRows = dashboardCriticalRows(context, 4);
-    const plans = criticalRows.length
-      ? criticalRows.map((row, index) => ({
+    const dataRows = criticalRows.filter((row) => hasKpiData(row.kpi));
+    const plans = dataRows.length
+      ? dataRows.map((row) => ({
           title: `Redresser ${row.kpi.name}`,
           owner: row.pole.owner,
           due: cadenceProfileForPole(row.pole).expectedDelay || "Prochaine validation",
-          progress: PMS_DATA.actionPlans[index % PMS_DATA.actionPlans.length]?.progress || 35,
+          progress: 0,
           detail: `${row.pole.name} - valeur ${row.kpi.value}, cible ${row.kpi.target}.`,
           key: row.key,
         }))
-      : PMS_DATA.actionPlans.slice(0, 3);
+      : [];
+    if (!plans.length) {
+      target.innerHTML = `<div class="empty-kpi-state">Actions generees apres detection d'ecarts reels dans Kobo.</div>`;
+      return;
+    }
     target.innerHTML = plans
       .map(
         (plan) => `
@@ -1461,7 +1571,7 @@
     const target = $("#dashboard-forecast-list");
     if (!target) return;
     const rows = context.kpiRows
-      .filter((row) => row.kpi.status !== "red" && kpiTrendMetrics(row.kpi, row.pole).some((metric) => metric.className === "negative"))
+      .filter((row) => hasKpiData(row.kpi) && row.kpi.status !== "red" && kpiTrendMetrics(row.kpi, row.pole).some((metric) => metric.className === "negative"))
       .sort((left, right) => kpiRiskScore(right) - kpiRiskScore(left))
       .slice(0, 4);
     target.innerHTML = rows.length
@@ -1484,12 +1594,11 @@
   function renderDashboardValidationLog(context, state = {}) {
     const target = $("#dashboard-validation-log");
     if (!target) return;
-    const queue = (state.validationQueue || PMS_DATA.validationQueue || [])
+    const queue = (state.validationQueue || [])
       .filter((item) => context.visiblePoles.some((pole) => pole.id === item.pole))
       .slice(0, 4);
-    const audit = (PMS_DATA.auditTrail || []).slice(0, Math.max(0, 4 - queue.length));
-    target.innerHTML = [
-      ...queue.map(
+    target.innerHTML = queue.length
+      ? queue.map(
         (item) => `
           <div class="audit-row">
             <span class="status-pill ${escapeHtml(item.className || "amber")}">${escapeHtml(item.status)}</span>
@@ -1499,16 +1608,8 @@
             </div>
           </div>
         `
-      ),
-      ...audit.map(
-        (item) => `
-          <div class="audit-row">
-            <span class="status-pill gray">Trace</span>
-            <div><small>${escapeHtml(item)}</small></div>
-          </div>
-        `
-      ),
-    ].join("");
+      ).join("")
+      : `<div class="empty-kpi-state">Aucune anomalie de validation issue des donnees pour le moment.</div>`;
   }
 
   function renderDashboardKpiDetail(context, state = {}) {
@@ -1562,8 +1663,11 @@
     if (!table) return;
     const rows = context.kpiRows || [];
     if (count) {
-      count.className = `status-pill ${rows.length ? "green" : "gray"}`;
-      count.textContent = `${rows.length} ligne${rows.length > 1 ? "s" : ""}`;
+      const dataRows = scopedKpiDataRows(rows);
+      count.className = `status-pill ${dataRows.length ? "green" : rows.length ? "amber" : "gray"}`;
+      count.textContent = dataRows.length
+        ? `${dataRows.length}/${rows.length} KPI calcule${dataRows.length > 1 ? "s" : ""}`
+        : `${rows.length} KPI en attente`;
     }
     if (!rows.length) {
       table.innerHTML = `<tr><td colspan="8">Aucun KPI disponible pour le pole selectionne.</td></tr>`;
@@ -1618,6 +1722,7 @@
         const { greenCount, amberCount, redCount } = getPoleKpiStatus(pole.id);
         const cadenceProfile = cadenceProfileForPole(pole);
         const primaryCadence = cadenceProfile.primary || normalizeCadence(cadenceProfile.cadence);
+        const hasData = hasPoleData(pole);
         return `
           <tr>
             <td>${escapeHtml(pole.category || "Non classe")}</td>
@@ -1627,14 +1732,14 @@
               <br><small>${escapeHtml(cadenceProfile.cadence)}</small>
             </td>
             <td>${escapeHtml(pole.owner)}</td>
-            <td><strong>${pole.score}</strong></td>
+            <td><strong>${escapeHtml(metricValueOrPending(pole, pole.score))}</strong></td>
             <td>
               <span class="mini-rag-count"><i class="green"></i>${greenCount}</span>
               <span class="mini-rag-count"><i class="amber"></i>${amberCount}</span>
               <span class="mini-rag-count"><i class="red"></i>${redCount}</span>
             </td>
-            <td>${pole.quality}%</td>
-            <td>${statusPill(pole.status, reportStatusClass(pole.status))}</td>
+            <td>${escapeHtml(metricValueOrPending(pole, pole.quality, "%"))}</td>
+            <td>${statusPill(metricStatusOrPending(pole), hasData ? reportStatusClass(pole.status) : "gray")}</td>
             <td><button class="ghost-action" data-open-pole="${escapeHtml(pole.id)}">Voir</button></td>
           </tr>
         `;
@@ -1675,6 +1780,7 @@
 
   function renderDashboardPoleCard(pole) {
     const { kpis, greenCount, amberCount, redCount, totalShown } = getPoleKpiStatus(pole.id);
+    const hasData = hasPoleData(pole);
     const priorityKpis = [...kpis]
       .sort((left, right) => {
         const order = { red: 0, amber: 1, gray: 2, green: 3 };
@@ -1690,20 +1796,20 @@
             <h4>${escapeHtml(pole.name)}</h4>
             <p>${escapeHtml(pole.owner)}${pole.note ? ` - ${escapeHtml(pole.note)}` : ""}</p>
           </div>
-          ${statusPill(ragLabel(pole.rag), pole.rag)}
+          ${statusPill(hasData ? ragLabel(pole.rag) : "En attente Kobo", hasData ? pole.rag : "gray")}
         </div>
         <div class="pole-score-row">
           <div>
             <span>Score pole</span>
-            <strong>${pole.score}</strong>
+            <strong>${escapeHtml(metricValueOrPending(pole, pole.score))}</strong>
           </div>
           <div>
             <span>Qualite Kobo</span>
-            <strong>${pole.quality}%</strong>
+            <strong>${escapeHtml(metricValueOrPending(pole, pole.quality, "%"))}</strong>
           </div>
           <div>
             <span>Rapport pret</span>
-            <strong>${pole.readiness}%</strong>
+            <strong>${escapeHtml(metricValueOrPending(pole, pole.readiness, "%"))}</strong>
           </div>
         </div>
         <div class="rag-stack" aria-label="Repartition RAG ${escapeHtml(pole.name)}">
@@ -1730,14 +1836,14 @@
             .join("")}
         </div>
         <div class="pole-card-actions">
-          <span>${pole.lateSubmissions} retard(s) Kobo - ${pole.actionCount} action(s)</span>
+          <span>${hasData ? `${pole.lateSubmissions} retard(s) Kobo - ${pole.actionCount} action(s)` : "Donnees Kobo attendues"}</span>
           <button class="ghost-action" data-open-pole="${escapeHtml(pole.id)}">Voir le pole</button>
         </div>
       </article>
     `;
   }
 
-  function renderKoboTable(filter = "", submissions = PMS_DATA.koboSubmissions, countryFilter = "Groupe") {
+  function renderKoboTable(filter = "", submissions = [], countryFilter = "Groupe") {
     const table = $("#kobo-table");
     if (!table) return;
     const activeCountry = findCountryByValue(countryFilter);
@@ -1799,10 +1905,52 @@
       .join("");
   }
 
-  function renderKoboPipeline() {
+  function renderKoboPipeline(state = {}) {
     const container = $("#kobo-pipeline");
     if (!container) return;
-    container.innerHTML = PMS_DATA.koboPipeline
+    const submissions = Array.isArray(state.koboSubmissions) ? state.koboSubmissions : [];
+    const calculated = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const referenceCount = Number(state.kpiCalculationQuality?.referenceCount || 0);
+    const validationCount = Array.isArray(state.validationQueue) ? state.validationQueue.length : 0;
+    const reportsCount = Array.isArray(state.reportHistory) ? state.reportHistory.length : 0;
+    const steps = [
+      {
+        title: "Reception Kobo",
+        detail: "Soumissions recues depuis les formulaires connectes.",
+        count: submissions.length,
+        status: submissions.length ? "Actif" : "En attente",
+        className: submissions.length ? "green" : "gray",
+      },
+      {
+        title: "Zone de controle",
+        detail: "Anomalies et validations issues des donnees recues.",
+        count: validationCount,
+        status: validationCount ? "A traiter" : "RAS",
+        className: validationCount ? "amber" : "green",
+      },
+      {
+        title: "Mapping KPI",
+        detail: "Rattachement formulaire, pole, filiale, periode et code KPI.",
+        count: referenceCount,
+        status: referenceCount ? "Reference" : "En attente",
+        className: referenceCount ? "green" : "gray",
+      },
+      {
+        title: "Calcul PMS",
+        detail: "Application des formules et seuils RAG du catalogue.",
+        count: calculated.length,
+        status: calculated.length ? "Calcule" : "En attente",
+        className: calculated.length ? "green" : "gray",
+      },
+      {
+        title: "Publication",
+        detail: "Rapports generes depuis les KPI calcules.",
+        count: reportsCount,
+        status: reportsCount ? "Publie" : "Aucun",
+        className: reportsCount ? "green" : "gray",
+      },
+    ];
+    container.innerHTML = steps
       .map(
         (step, index) => `
           <article class="pipeline-step">
@@ -1821,12 +1969,13 @@
       .join("");
   }
 
-  function renderValidationQueue(queue = PMS_DATA.validationQueue) {
+  function renderValidationQueue(queue = []) {
     const table = $("#validation-queue-table");
     if (!table) return;
-    table.innerHTML = queue
-      .map(
-        (item) => `
+    table.innerHTML = queue.length
+      ? queue
+          .map(
+            (item) => `
           <tr>
             <td><strong>${escapeHtml(item.id)}</strong></td>
             <td>${escapeHtml(item.form)}</td>
@@ -1837,8 +1986,9 @@
             <td><button class="ghost-action" data-validate-id="${escapeHtml(item.id)}">Marquer OK</button></td>
           </tr>
         `
-      )
-      .join("");
+          )
+          .join("")
+      : `<tr><td colspan="7">Aucune anomalie de validation issue des donnees pour le moment.</td></tr>`;
   }
 
   function renderKpiTable(filter = "") {
@@ -1877,124 +2027,156 @@
       .join("");
   }
 
-  function renderAlertBoard() {
-    $("#alert-board").innerHTML = PMS_DATA.alerts
-      .map(
-        (alert) => `
-          <article class="alert-card ${alert.level === "red" ? "critical" : alert.level === "amber" ? "warning" : ""}">
-            ${statusPill(alert.level === "red" ? "Critique" : alert.level === "amber" ? "Vigilance" : "Donnee manquante", alert.level)}
-            <h3>${escapeHtml(alert.title)}</h3>
-            <strong>${escapeHtml(alert.scope)}</strong>
-            <p>${escapeHtml(alert.detail)}</p>
-          </article>
-        `
-      )
-      .join("");
+  function renderAlertBoard(state = {}) {
+    const target = $("#alert-board");
+    if (!target) return;
+    const context = getDashboardContext(state);
+    const rows = dashboardCriticalRows(context, 8).filter((row) => hasKpiData(row.kpi));
+    target.innerHTML = rows.length
+      ? rows
+          .map(
+            (row) => `
+              <article class="alert-card ${row.kpi.status === "red" ? "critical" : row.kpi.status === "amber" ? "warning" : ""}">
+                ${statusPill(row.kpi.status === "red" ? "Critique" : "Vigilance", row.kpi.status)}
+                <h3>${escapeHtml(row.kpi.name)}</h3>
+                <strong>${escapeHtml(row.pole.name)} - ${escapeHtml(row.kpi.period || "Periode Kobo")}</strong>
+                <p>Valeur ${escapeHtml(row.kpi.value)} pour une cible ${escapeHtml(row.kpi.target)}. Source: ${escapeHtml(row.kpi.source || "KoboCollect")}.</p>
+              </article>
+            `
+          )
+          .join("")
+      : `<div class="empty-kpi-state">Aucune notification de performance tant que les KPI ne sont pas calcules depuis Kobo.</div>`;
   }
 
-  function renderActions() {
-    $("#action-grid").innerHTML = PMS_DATA.actionPlans
-      .map(
-        (plan) => `
-          <article class="action-card">
-            <p class="eyebrow">${escapeHtml(plan.owner)}</p>
-            <h3>${escapeHtml(plan.title)}</h3>
-            <p>${escapeHtml(plan.detail)}</p>
-            <p><strong>Echeance:</strong> ${escapeHtml(plan.due)}</p>
-            <div class="progress" aria-label="Avancement ${plan.progress}%">
-              <span style="width:${plan.progress}%"></span>
-            </div>
-          </article>
-        `
-      )
-      .join("");
+  function renderActions(state = {}) {
+    const target = $("#action-grid");
+    if (!target) return;
+    const context = getDashboardContext(state);
+    const rows = dashboardCriticalRows(context, 6).filter((row) => hasKpiData(row.kpi));
+    target.innerHTML = rows.length
+      ? rows
+          .map(
+            (row) => `
+              <article class="action-card">
+                <p class="eyebrow">${escapeHtml(row.pole.owner)}</p>
+                <h3>Plan d'action - ${escapeHtml(row.kpi.name)}</h3>
+                <p>${escapeHtml(row.pole.name)} : ecart detecte sur la valeur ${escapeHtml(row.kpi.value)} vs cible ${escapeHtml(row.kpi.target)}.</p>
+                <p><strong>Echeance:</strong> ${escapeHtml(cadenceProfileForPole(row.pole).expectedDelay || "Prochaine validation")}</p>
+                <div class="progress" aria-label="Avancement 0%">
+                  <span style="width:0%"></span>
+                </div>
+              </article>
+            `
+          )
+          .join("")
+      : `<div class="empty-kpi-state">Les plans d'action seront proposes automatiquement apres detection d'ecarts reels.</div>`;
   }
 
-  function renderImprovement() {
-    const directions = ["Finance", "WFM", "BPO", "RH", "DSI", "Qualite"];
-    const states = ["AC+", "AC=", "AC-", "ACV", "AC+", "AC="];
-    const classes = ["cell-green", "cell-amber", "cell-red", "cell-gray", "cell-green", "cell-amber"];
-    const months = ["P-5", "P-4", "P-3", "P-2", "P-1", "P"];
-    const header = `<div class="heat-row"><span></span>${months.map((m) => `<strong class="heat-label">${m}</strong>`).join("")}</div>`;
-    const rows = directions
-      .map((direction, index) => {
-        const cells = months
-          .map((_, cellIndex) => {
-            const pick = (index + cellIndex) % states.length;
-            return `<div class="heat-cell ${classes[pick]}">${states[pick]}</div>`;
-          })
-          .join("");
-        return `<div class="heat-row"><strong class="heat-label">${escapeHtml(direction)}</strong>${cells}</div>`;
-      })
-      .join("");
-    $("#improvement-heatmap").innerHTML = header + rows;
+  function renderImprovement(state = {}) {
+    const target = $("#improvement-heatmap");
+    if (!target) return;
+    const context = getDashboardContext(state);
+    const rows = scopedKpiDataRows(context.kpiRows).filter((row) => Array.isArray(row.kpi.trendHistory) && row.kpi.trendHistory.length);
+    if (!rows.length) {
+      target.innerHTML = `<div class="empty-kpi-state">La matrice d'amelioration sera alimentee par l'historique Kobo des KPI.</div>`;
+      return;
+    }
+    const periods = [...new Set(rows.flatMap((row) => row.kpi.trendHistory.map((point) => point.period).filter(Boolean)))].slice(-6);
+    const header = `<div class="heat-row"><span></span>${periods.map((period) => `<strong class="heat-label">${escapeHtml(period)}</strong>`).join("")}</div>`;
+    const body = rows.slice(0, 8).map((row) => {
+      const byPeriod = new Map(row.kpi.trendHistory.map((point) => [point.period, point.status || row.kpi.status]));
+      const cells = periods
+        .map((period) => {
+          const status = byPeriod.get(period) || "gray";
+          return `<div class="heat-cell cell-${escapeHtml(status)}">${escapeHtml(status === "green" ? "OK" : status === "red" ? "KO" : status === "amber" ? "Vig." : "--")}</div>`;
+        })
+        .join("");
+      return `<div class="heat-row"><strong class="heat-label">${escapeHtml(row.pole.id)}</strong>${cells}</div>`;
+    }).join("");
+    target.innerHTML = header + body;
   }
 
-  function renderHourChart() {
-    const values = [[72, 80], [75, 82], [68, 80], [83, 85], [88, 86], [79, 84], [71, 82], [66, 80], [77, 84], [82, 86], [74, 82], [69, 80]];
-    $("#hour-chart").innerHTML = values
-      .map(
-        ([actual, target]) => `
-          <div class="hour-bar" title="CA/h ${actual} vs cible ${target}">
-            <span class="target" style="height:${target}%"></span>
+  function renderHourChart(state = {}) {
+    const target = $("#hour-chart");
+    if (!target) return;
+    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const hourlyResults = results.filter((item) => normalizeLookup(item.collectionFrequency || item.reportingFrequency || "").includes("horaire"));
+    if (!hourlyResults.length) {
+      target.innerHTML = `<div class="empty-kpi-state">Analyse horaire disponible apres collecte horaire Kobo.</div>`;
+      return;
+    }
+    target.innerHTML = hourlyResults.slice(0, 12)
+      .map((item) => {
+        const actual = Math.max(0, Math.min(100, Number(item.value) || 0));
+        const targetValue = Math.max(0, Math.min(100, Number(item.target) || actual));
+        return `
+          <div class="hour-bar" title="${escapeHtml(item.kpiName)} ${actual} vs cible ${targetValue}">
+            <span class="target" style="height:${targetValue}%"></span>
             <span class="actual" style="height:${actual}%"></span>
           </div>
-        `
-      )
-      .join("");
-  }
-
-  function renderLosses() {
-    const losses = [
-      ["Occupation insuffisante", 36],
-      ["Performance horaire", 28],
-      ["Appels non facturables", 22],
-      ["Absenteisme", 14],
-    ];
-    $("#loss-stack").innerHTML = losses
-      .map(
-        ([label, value]) => `
-          <div class="loss-row">
-            <strong>${escapeHtml(label)} - ${value}%</strong>
-            <div><span style="width:${value}%"></span></div>
-          </div>
-        `
-      )
-      .join("");
-  }
-
-  function renderTimeHeatmap() {
-    const slots = ["00", "02", "04", "06", "08", "10", "12", "14", "16", "18", "20", "22"];
-    const days = ["Lun", "Mar", "Mer", "Jeu", "Ven"];
-    const header = `<div class="time-row"><span></span>${slots.map((slot) => `<strong class="time-label">${slot}h</strong>`).join("")}</div>`;
-    const rows = days
-      .map((day, dayIndex) => {
-        const cells = slots
-          .map((_, slotIndex) => {
-            const value = 68 + ((dayIndex * 7 + slotIndex * 4) % 24);
-            const status = value < 72 ? "cell-red" : value < 80 ? "cell-amber" : "cell-green";
-            return `<div class="time-cell ${status}">${value}%</div>`;
-          })
-          .join("");
-        return `<div class="time-row"><strong class="time-label">${day}</strong>${cells}</div>`;
+        `;
       })
       .join("");
-    $("#time-heatmap").innerHTML = header + rows;
   }
 
-  function renderReports() {
-    $("#report-grid").innerHTML = PMS_DATA.reports
-      .map(
-        (report) => `
-          <article class="report-card">
-            <p class="eyebrow">${escapeHtml(report.format)}</p>
-            <h3>${escapeHtml(report.title)}</h3>
-            <p>${escapeHtml(report.detail)}</p>
-            <button class="ghost-action">Preparer</button>
-          </article>
-        `
-      )
+  function renderLosses(state = {}) {
+    const target = $("#loss-stack");
+    if (!target) return;
+    const context = getDashboardContext(state);
+    const rows = scopedKpiDataRows(context.kpiRows)
+      .map((row) => ({ row, metric: metricFromTarget(row.kpi) }))
+      .filter((item) => item.metric.className === "negative")
+      .slice(0, 5);
+    target.innerHTML = rows.length
+      ? rows
+          .map(
+            ({ row, metric }) => `
+              <div class="loss-row">
+                <strong>${escapeHtml(row.pole.id)} - ${escapeHtml(row.kpi.name)} - ${escapeHtml(metric.display)}</strong>
+                <div><span style="width:${Math.min(100, Math.abs(parseNumber(metric.display) || 0))}%"></span></div>
+              </div>
+            `
+          )
+          .join("")
+      : `<div class="empty-kpi-state">Les pertes et ecarts seront calcules depuis les donnees Kobo validees.</div>`;
+  }
+
+  function renderTimeHeatmap(state = {}) {
+    const target = $("#time-heatmap");
+    if (!target) return;
+    const dates = Array.isArray(state.kpiDailyDates) ? state.kpiDailyDates : [];
+    if (!dates.length) {
+      target.innerHTML = `<div class="empty-kpi-state">La heatmap temps sera disponible apres reception de donnees journalieres Kobo.</div>`;
+      return;
+    }
+    const grouped = dates.slice(0, 25).map((item) => ({
+      label: `${item.date || "Date"} / ${item.poleId || "Pole"}`,
+      status: Number(item.count || 0) > 3 ? "cell-green" : Number(item.count || 0) > 0 ? "cell-amber" : "cell-gray",
+      count: item.count || 0,
+    }));
+    target.innerHTML = grouped
+      .map((item) => `<div class="time-cell ${escapeHtml(item.status)}" title="${escapeHtml(item.label)}">${escapeHtml(item.count)}</div>`)
       .join("");
+  }
+
+  function renderReports(state = {}) {
+    const target = $("#report-grid");
+    if (!target) return;
+    const reports = Array.isArray(state.reportHistory) ? state.reportHistory : [];
+    target.innerHTML = reports.length
+      ? reports.slice(0, 6)
+          .map(
+            (report) => `
+              <article class="report-card">
+                <p class="eyebrow">${escapeHtml(report.format || "Rapport")}</p>
+                <h3>${escapeHtml(report.cycle)} - ${escapeHtml(report.pole)}</h3>
+                <p>${escapeHtml(report.period)} - ${escapeHtml(report.status)}</p>
+                <button class="ghost-action">Consulter</button>
+              </article>
+            `
+          )
+          .join("")
+      : `<div class="empty-kpi-state">Aucun rapport genere dans la base pour le moment.</div>`;
   }
 
   function renderPoleControls(state) {
@@ -2070,7 +2252,7 @@
   function kpiStatusText(status) {
     if (status === "green") return "Vert";
     if (status === "red") return "Rouge";
-    if (status === "gray") return "A verifier";
+    if (status === "gray") return "En attente Kobo";
     return "Orange";
   }
 
@@ -2168,10 +2350,11 @@
       .map((pole) => {
         const rawKpis = reporting.kpisByPole[pole.id] || [];
         const kpis = filteredKpisByCadence(rawKpis, pole, selectedFrequency);
-        const greenCount = kpis.filter((item) => item.status === "green").length;
-        const amberCount = kpis.filter((item) => item.status === "amber").length;
-        const redCount = kpis.filter((item) => item.status === "red").length;
-        const poleStatus = redCount ? "red" : amberCount ? "amber" : "green";
+        const dataKpis = kpis.filter(hasKpiData);
+        const greenCount = dataKpis.filter((item) => item.status === "green").length;
+        const amberCount = dataKpis.filter((item) => item.status === "amber").length;
+        const redCount = dataKpis.filter((item) => item.status === "red").length;
+        const poleStatus = dataKpis.length ? (redCount ? "red" : amberCount ? "amber" : "green") : "gray";
         const cadenceProfile = cadenceProfileForPole(pole);
         const cadenceLabel = selectedFrequency === "Tous"
           ? cadenceProfile.primary || normalizeCadence(cadenceProfile.cadence)
@@ -2245,15 +2428,17 @@
     const cycle = reporting.cycles.find((item) => item.value === state.currentPoleCycle) || reporting.cycles[0];
     const rawKpis = reporting.kpisByPole[pole.id] || [];
     const kpis = filteredKpisByCadence(rawKpis, pole, state.currentPoleFrequency || "Tous");
-    const redCount = kpis.filter((item) => item.status === "red").length;
-    const amberCount = kpis.filter((item) => item.status === "amber").length;
-    const greenCount = kpis.filter((item) => item.status === "green").length;
+    const dataKpis = kpis.filter(hasKpiData);
+    const redCount = dataKpis.filter((item) => item.status === "red").length;
+    const amberCount = dataKpis.filter((item) => item.status === "amber").length;
+    const greenCount = dataKpis.filter((item) => item.status === "green").length;
+    const hasData = hasPoleData(pole);
 
     const selectedHeading = $("#selected-pole-heading");
     if (!selectedHeading) return;
 
     selectedHeading.textContent = `${pole.name} - KPIs ${cycle.value.toLowerCase()}`;
-    $("#selected-pole-kpi-count").className = `status-pill ${redCount ? "red" : amberCount ? "amber" : "green"}`;
+    $("#selected-pole-kpi-count").className = `status-pill ${hasData ? (redCount ? "red" : amberCount ? "amber" : "green") : "gray"}`;
     $("#selected-pole-kpi-count").textContent = `${kpis.length} KPI`;
     $("#selected-pole-summary").innerHTML = `
       <div>
@@ -2270,7 +2455,7 @@
       </div>
       <div>
         <span>Rapport</span>
-        <strong>${escapeHtml(pole.lastReport)} - ${escapeHtml(pole.status)}</strong>
+        <strong>${escapeHtml(hasData ? `${pole.lastReport} - ${pole.status}` : "En attente donnees Kobo")}</strong>
       </div>
     `;
     $("#selected-kpi-cards").innerHTML = kpis.length
@@ -2303,18 +2488,18 @@
     $("#pole-scorecards").innerHTML = `
       <article class="metric-card">
         <span class="metric-label">Score performance</span>
-        <strong>${pole.score}</strong>
-        <span class="trend ${pole.rag === "red" ? "negative" : "positive"}">${statusPill(ragLabel(pole.rag), pole.rag)}</span>
+        <strong>${escapeHtml(metricValueOrPending(pole, pole.score))}</strong>
+        <span class="trend ${pole.rag === "red" ? "negative" : "positive"}">${statusPill(hasData ? ragLabel(pole.rag) : "En attente Kobo", hasData ? pole.rag : "gray")}</span>
       </article>
       <article class="metric-card">
         <span class="metric-label">Qualite Kobo</span>
-        <strong>${pole.quality}%</strong>
-        <span class="trend positive">Controle completude</span>
+        <strong>${escapeHtml(metricValueOrPending(pole, pole.quality, "%"))}</strong>
+        <span class="trend ${hasData ? "positive" : "neutral"}">${hasData ? "Controle completude" : "Donnees attendues"}</span>
       </article>
       <article class="metric-card">
         <span class="metric-label">Rapport pret</span>
-        <strong>${pole.readiness}%</strong>
-        <span class="trend ${pole.readiness < 70 ? "negative" : "positive"}">${escapeHtml(pole.status)}</span>
+        <strong>${escapeHtml(metricValueOrPending(pole, pole.readiness, "%"))}</strong>
+        <span class="trend ${hasData && pole.readiness < 70 ? "negative" : "positive"}">${escapeHtml(metricStatusOrPending(pole))}</span>
       </article>
       <article class="metric-card">
         <span class="metric-label">Points a traiter</span>
@@ -2357,29 +2542,36 @@
       .join("");
   }
 
-  function renderReportCalendar() {
+  function renderReportCalendar(state = {}) {
     const table = $("#report-calendar-table");
     if (!table) return;
-    table.innerHTML = PMS_DATA.reporting.calendar
-      .map(
-        (item) => `
+    const reports = Array.isArray(state.reportHistory) ? state.reportHistory : [];
+    table.innerHTML = reports.length
+      ? reports
+          .slice(0, 8)
+          .map((item) => {
+            const pole = PMS_DATA.reporting.poles.find((candidate) => candidate.id === item.pole);
+            return `
           <tr>
             <td><strong>${escapeHtml(item.pole)}</strong></td>
             <td>${escapeHtml(item.cycle)}</td>
             <td>${escapeHtml(item.period)}</td>
-            <td>${escapeHtml(item.due)}</td>
-            <td>${escapeHtml(item.owner)}</td>
+            <td>${escapeHtml(item.generatedAt || "Genere")}</td>
+            <td>${escapeHtml(pole?.owner || "Responsable pole")}</td>
             <td>${statusPill(item.status, reportStatusClass(item.status))}</td>
           </tr>
-        `
-      )
-      .join("");
+        `;
+          })
+          .join("")
+      : `<tr><td colspan="6">Aucun rapport planifie ou genere depuis les donnees pour le moment.</td></tr>`;
   }
 
   function renderReportHistory(state) {
-    $("#report-history-table").innerHTML = state.reportHistory
-      .map(
-        (item) => `
+    const reports = Array.isArray(state.reportHistory) ? state.reportHistory : [];
+    $("#report-history-table").innerHTML = reports.length
+      ? reports
+          .map(
+            (item) => `
           <tr>
             <td><strong>${escapeHtml(item.id)}</strong></td>
             <td>${escapeHtml(item.pole)}</td>
@@ -2390,14 +2582,19 @@
             <td>${escapeHtml(item.generatedAt)}</td>
           </tr>
         `
-      )
-      .join("");
+          )
+          .join("")
+      : `<tr><td colspan="7">Aucun rapport genere depuis les donnees pour le moment.</td></tr>`;
   }
 
-  function renderDistributionList() {
-    $("#distribution-list").innerHTML = PMS_DATA.reporting.distribution
-      .map(
-        (item) => `
+  function renderDistributionList(state = {}) {
+    const target = $("#distribution-list");
+    if (!target) return;
+    const reports = Array.isArray(state.reportHistory) ? state.reportHistory : [];
+    target.innerHTML = reports.length
+      ? PMS_DATA.reporting.distribution
+          .map(
+            (item) => `
           <article class="distribution-item">
             <div>
               <strong>${escapeHtml(item.audience)}</strong>
@@ -2406,8 +2603,9 @@
             ${statusPill(item.status, item.className)}
           </article>
         `
-      )
-      .join("");
+          )
+          .join("")
+      : `<div class="empty-kpi-state">La diffusion sera disponible apres generation d'un rapport base sur les donnees Kobo.</div>`;
   }
 
   function reportStatusClass(status) {
@@ -2481,21 +2679,23 @@
     const pole = authorizedPoles.find((item) => item.id === state.currentReportPole) || authorizedPoles[0] || reporting.poles[0];
     const cycle = reporting.cycles.find((item) => item.value === state.currentReportCycle) || reporting.cycles[0];
     const kpis = reporting.kpisByPole[pole.id] || [];
-    const statusClass = reportStatusClass(pole.status);
-    const redCount = kpis.filter((item) => item.status === "red").length;
-    const amberCount = kpis.filter((item) => item.status === "amber").length;
-    const greenCount = kpis.filter((item) => item.status === "green").length;
+    const dataKpis = kpis.filter(hasKpiData);
+    const hasData = hasPoleData(pole);
+    const statusClass = hasData ? reportStatusClass(pole.status) : "gray";
+    const redCount = dataKpis.filter((item) => item.status === "red").length;
+    const amberCount = dataKpis.filter((item) => item.status === "amber").length;
+    const greenCount = dataKpis.filter((item) => item.status === "green").length;
     const activePeriod = state.calendar?.label || $("#period-filter")?.value || cycle.value;
 
     $("#report-preview-title").textContent = `${cycle.value} - ${pole.name}`;
     $("#report-status-pill").className = `status-pill ${statusClass}`;
-    $("#report-status-pill").textContent = pole.status;
+    $("#report-status-pill").textContent = metricStatusOrPending(pole);
 
     $("#report-summary").innerHTML = `
       <article class="report-kpi-card">
         <span>Score pole</span>
-        <strong>${pole.score}</strong>
-        ${statusPill(ragLabel(pole.rag), pole.rag)}
+        <strong>${escapeHtml(metricValueOrPending(pole, pole.score))}</strong>
+        ${statusPill(hasData ? ragLabel(pole.rag) : "En attente Kobo", hasData ? pole.rag : "gray")}
       </article>
       <article class="report-kpi-card">
         <span>KPIs suivis</span>
@@ -2504,8 +2704,8 @@
       </article>
       <article class="report-kpi-card">
         <span>Qualite Kobo</span>
-        <strong>${pole.quality}%</strong>
-        <small>Completude et controles</small>
+        <strong>${escapeHtml(metricValueOrPending(pole, pole.quality, "%"))}</strong>
+        <small>${hasData ? "Completude et controles" : "Aucune donnee calculee"}</small>
       </article>
       <article class="report-kpi-card">
         <span>Periode</span>
@@ -2519,7 +2719,7 @@
         <div>
           <p class="eyebrow">Rapport ${escapeHtml(cycle.value)}</p>
           <h4>${escapeHtml(pole.name)}</h4>
-          <p>Periode: ${escapeHtml(activePeriod)} | Responsable: ${escapeHtml(pole.owner)} | Dernier rapport: ${escapeHtml(pole.lastReport)}</p>
+          <p>Periode: ${escapeHtml(activePeriod)} | Responsable: ${escapeHtml(pole.owner)} | Donnees: ${escapeHtml(hasData ? pole.lastReport : "en attente Kobo")}</p>
         </div>
         <button class="ghost-action" id="submit-report">Soumettre validation</button>
       </div>
@@ -2556,9 +2756,11 @@
       <div class="report-narrative">
         <strong>Synthese automatique</strong>
         <p>
-          Le rapport ${escapeHtml(cycle.value.toLowerCase())} du ${escapeHtml(pole.name)} sur ${escapeHtml(activePeriod)} consolide les donnees Kobo,
-          les ecarts aux objectifs, les alertes RAG et les plans d'action. Les KPI rouges doivent obligatoirement
-          etre commentes avant validation N+1.
+          ${
+            hasData
+              ? `Le rapport ${escapeHtml(cycle.value.toLowerCase())} du ${escapeHtml(pole.name)} sur ${escapeHtml(activePeriod)} consolide les donnees Kobo, les ecarts aux objectifs, les alertes RAG et les plans d'action. Les KPI rouges doivent obligatoirement etre commentes avant validation N+1.`
+              : `Le rapport ${escapeHtml(cycle.value.toLowerCase())} du ${escapeHtml(pole.name)} est pret a recevoir les donnees Kobo. Les indicateurs de performance seront generes automatiquement des que des soumissions seront importees.`
+          }
         </p>
       </div>
     `;
@@ -3340,8 +3542,8 @@
 
   function renderAll(state) {
     renderBranches();
-    renderExecutiveAlerts();
-    renderSparkline();
+    renderExecutiveAlerts(state);
+    renderSparkline(state);
     renderCatalogStats();
     renderCalendarSlicer(state);
     renderCountryDashboard(state);
@@ -3349,24 +3551,24 @@
     renderPoleSummaryTables(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
-    renderReportCalendar();
+    renderReportCalendar(state);
     renderKoboTable("", state.koboSubmissions, state.calendarBranchFilter);
     renderCollectionForms();
     renderMethodologyControls();
-    renderKoboPipeline();
+    renderKoboPipeline(state);
     renderValidationQueue(state.validationQueue);
     renderKpiTable();
     renderGroups();
-    renderAlertBoard();
-    renderActions();
-    renderImprovement();
-    renderHourChart();
-    renderLosses();
-    renderTimeHeatmap();
-    renderReports();
+    renderAlertBoard(state);
+    renderActions(state);
+    renderImprovement(state);
+    renderHourChart(state);
+    renderLosses(state);
+    renderTimeHeatmap(state);
+    renderReports(state);
     renderReportControls(state);
     renderReportWorkspace(state);
-    renderDistributionList();
+    renderDistributionList(state);
     renderReportHistory(state);
     renderAdmin(state);
   }
