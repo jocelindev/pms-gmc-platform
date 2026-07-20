@@ -2189,6 +2189,9 @@
         if (Array.isArray(result.kpiDailyDates)) {
           state.kpiDailyDates = result.kpiDailyDates;
         }
+        if (Array.isArray(result.koboSubmissions)) {
+          state.koboSubmissions = result.koboSubmissions.filter((item) => OPERATIONAL_KOBO_ROLES.has(item.sourceRole));
+        }
         if (result.kpiCalculationQuality) {
           state.kpiCalculationQuality = result.kpiCalculationQuality;
         }
