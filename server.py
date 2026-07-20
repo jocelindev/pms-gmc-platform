@@ -90,7 +90,7 @@ DATABASE_TABLE_LABELS = {
 }
 KOBO_FIELD_ALIASES = {
     "pole_id": ["pole_id", "pole", "id_pole", "pole_name", "pole_responsable"],
-    "branch": ["branch_id", "branch", "filiale", "pays", "bu", "business_unit"],
+    "branch": ["pays_filiale", "branch_id", "branch", "filiale", "pays", "bu", "business_unit"],
     "kpi_name": ["kpi_id", "id_kpi", "kpi", "kpi_name", "nom_kpi", "indicateur"],
     "collector": ["_submitted_by", "submitted_by", "collector", "collecteur", "username", "responsable"],
     "submitted_at": ["_submission_time", "_date_submitted", "submission_time", "submitted_at", "end", "today"],
@@ -153,6 +153,26 @@ CATALOG_POLE_ALIASES = {
     "consolide": "PAC",
     "consolidee": "PAC",
     "performance globale": "PAC",
+}
+COUNTRY_ALIASES = {
+    "groupe": "groupe",
+    "groupe consolide": "groupe",
+    "global": "groupe",
+    "ci": "ci",
+    "cote ivoire": "ci",
+    "cote d ivoire": "ci",
+    "bj": "bj",
+    "benin": "bj",
+    "cm": "cm",
+    "cameroun": "cm",
+    "cg": "cg",
+    "congo": "cg",
+    "gn": "gn",
+    "guinee conakry": "gn",
+    "gw": "gw",
+    "guinee bissau": "gw",
+    "nig": "nig",
+    "niger": "nig",
 }
 LOWER_IS_BETTER_TERMS = {
     "abandon",
@@ -1747,6 +1767,23 @@ def normalize_match_key(value) -> str:
     return re.sub(r"[^a-z0-9]+", " ", ascii_value.lower()).strip()
 
 
+def branch_lookup_key(value) -> str:
+    normalized = normalize_match_key(value)
+    if not normalized:
+        return "groupe"
+    alias = COUNTRY_ALIASES.get(normalized)
+    if alias:
+        return alias
+    for raw_alias, country_key in COUNTRY_ALIASES.items():
+        if raw_alias and (raw_alias in normalized or normalized in raw_alias):
+            return country_key
+    return normalized
+
+
+def branch_is_group(value) -> bool:
+    return branch_lookup_key(value) == "groupe"
+
+
 def resolve_catalog_pole_id(conn: sqlite3.Connection, value) -> str | None:
     if value in (None, ""):
         return None
@@ -2309,11 +2346,20 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         quality["warnings"].append("Aucune soumission trouvee pour le formulaire donnees de calcul.")
 
     references: list[dict] = []
-    reference_lookup: dict[tuple[str, str], dict] = {}
+    reference_lookup: dict[tuple[str, str, str], dict] = {}
+    reference_by_pole_kpi: dict[tuple[str, str], dict | None] = {}
     reference_by_kpi: dict[str, dict | None] = {}
 
     for row in reference_rows:
         payload = parse_raw_payload(row)
+        branch_raw = mapped_submission_value(
+            reference_source,
+            payload,
+            "branch",
+            ["pays_filiale", "filiale", "pays", "branch", "country"],
+        )
+        branch = text_or_empty(branch_raw or row["branch"] or "Groupe") or "Groupe"
+        branch_key = branch_lookup_key(branch)
         pole_raw = mapped_submission_value(
             reference_source,
             payload,
@@ -2330,6 +2376,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             continue
 
         record = {
+            "branch": branch,
+            "branchKey": branch_key,
             "poleId": pole_id,
             "kpiId": kpi_code or normalize_match_key(kpi_name).upper(),
             "kpiName": kpi_name or kpi_code,
@@ -2358,13 +2406,29 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             key = normalize_match_key(key_value)
             if not key:
                 continue
-            reference_lookup[(pole_id, key)] = record
+            reference_lookup[(record["branchKey"], pole_id, key)] = record
+            pole_kpi_key = (pole_id, key)
+            if pole_kpi_key not in reference_by_pole_kpi:
+                reference_by_pole_kpi[pole_kpi_key] = record
+            else:
+                existing = reference_by_pole_kpi[pole_kpi_key]
+                if existing is None:
+                    pass
+                elif branch_is_group(existing["branch"]):
+                    pass
+                elif branch_is_group(record["branch"]):
+                    reference_by_pole_kpi[pole_kpi_key] = record
+                elif existing["branchKey"] != record["branchKey"]:
+                    reference_by_pole_kpi[pole_kpi_key] = None
             if key not in reference_by_kpi:
                 reference_by_kpi[key] = record
-            elif reference_by_kpi[key] and reference_by_kpi[key]["poleId"] != pole_id:
+            elif reference_by_kpi[key] and (
+                reference_by_kpi[key]["poleId"] != pole_id
+                or reference_by_kpi[key]["branchKey"] != record["branchKey"]
+            ):
                 reference_by_kpi[key] = None
 
-    groups: dict[tuple[str, str, str], dict] = {}
+    groups: dict[tuple[str, str, str, str], dict] = {}
     calculation_entries: list[dict] = []
 
     def add_calculation_group(
@@ -2374,15 +2438,20 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         period_label: str,
         element: dict,
         *,
+        branch: str = "Groupe",
         group_period_key: str | None = None,
         period_start: str = "",
         period_end: str = "",
         period_type: str = "period",
     ) -> None:
-        group_key = (pole_id, kpi_key, normalize_match_key(group_period_key or period_label))
+        branch = text_or_empty(branch or element.get("branch") or "Groupe") or "Groupe"
+        branch_key = branch_lookup_key(branch)
+        group_key = (branch_key, pole_id, kpi_key, normalize_match_key(group_period_key or period_label))
         group = groups.setdefault(
             group_key,
             {
+                "branch": branch,
+                "branchKey": branch_key,
                 "poleId": pole_id,
                 "kpiKey": kpi_key,
                 "kpiRaw": kpi_raw,
@@ -2428,7 +2497,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "value",
             ["valeur_element", "value", "valeur", "valeur_j", "valeur_du_jour_j", "score", "resultat"],
         )
-        branch_raw = mapped_submission_value(calculation_source, payload, "branch", ["filiale", "branch", "pays"])
+        branch_raw = mapped_submission_value(calculation_source, payload, "branch", ["pays_filiale", "filiale", "branch", "pays"])
         validation_raw = mapped_submission_value(
             calculation_source,
             payload,
@@ -2444,14 +2513,17 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
 
         period_date = parse_daily_period_date(period_label)
         kpi_raw_text = text_or_empty(kpi_raw or row["kpi_name"])
+        branch = text_or_empty(branch_raw or row["branch"] or "Groupe") or "Groupe"
         element = {
             "label": text_or_empty(element_raw or "valeur"),
             "value": value_raw if value_raw not in (None, "") else row["value"],
-            "branch": text_or_empty(branch_raw or row["branch"]),
+            "branch": branch,
             "validation": text_or_empty(validation_raw or row["validation_status"]),
         }
         calculation_entries.append(
             {
+                "branch": branch,
+                "branchKey": branch_lookup_key(branch),
                 "poleId": pole_id,
                 "kpiKey": kpi_key,
                 "kpiRaw": kpi_raw_text,
@@ -2464,7 +2536,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 conn,
                 data_date=period_date,
                 pole_id=pole_id,
-                branch=text_or_empty(branch_raw or row["branch"]),
+                branch=branch,
                 kpi_key=kpi_key,
                 kpi_raw=kpi_raw_text,
                 element_label=element["label"],
@@ -2484,6 +2556,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             kpi_raw_text,
             period_label,
             element,
+            branch=branch,
             period_type="period",
         )
 
@@ -2513,14 +2586,17 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         period_date = parse_daily_period_date(row["data_date"])
         if not period_date:
             continue
+        branch = text_or_empty(row["branch"] or "Groupe") or "Groupe"
         element = {
             "label": text_or_empty(row["element_label"] or row["element_key"] or "valeur"),
             "value": row["raw_value"] if row["raw_value"] not in (None, "") else row["numeric_value"],
-            "branch": text_or_empty(row["branch"]),
+            "branch": branch,
             "validation": text_or_empty(row["validation_status"]),
         }
         calculation_entries.append(
             {
+                "branch": branch,
+                "branchKey": branch_lookup_key(branch),
                 "poleId": row["pole_id"],
                 "kpiKey": row["kpi_key"],
                 "kpiRaw": text_or_empty(row["kpi_raw"]),
@@ -2534,6 +2610,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             text_or_empty(row["kpi_raw"]),
             row["data_date"],
             element,
+            branch=branch,
             period_start=period_date.isoformat(),
             period_end=period_date.isoformat(),
             period_type="day",
@@ -2543,15 +2620,15 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     quality["calculationGroups"] = len(groups)
 
     dated_entries = [entry for entry in calculation_entries if entry["periodDate"]]
-    scope_dates: dict[tuple[str, str], set[dt.date]] = {}
+    scope_dates: dict[tuple[str, str, str], set[dt.date]] = {}
     for entry in dated_entries:
-        scope_dates.setdefault((entry["poleId"], entry["kpiKey"]), set()).add(entry["periodDate"])
+        scope_dates.setdefault((entry["branchKey"], entry["poleId"], entry["kpiKey"]), set()).add(entry["periodDate"])
 
-    for (pole_id, kpi_key), target_dates in scope_dates.items():
+    for (branch_key, pole_id, kpi_key), target_dates in scope_dates.items():
         scoped_entries = [
             entry
             for entry in dated_entries
-            if entry["poleId"] == pole_id and entry["kpiKey"] == kpi_key
+            if entry["branchKey"] == branch_key and entry["poleId"] == pole_id and entry["kpiKey"] == kpi_key
         ]
         for target_date in sorted(target_dates):
             start_date = target_date.replace(day=1)
@@ -2572,6 +2649,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     sample["kpiRaw"],
                     month_to_date_label(target_date),
                     entry["element"],
+                    branch=sample["branch"],
                     group_period_key=f"month-to-date-{target_date.isoformat()}",
                     period_start=start_date.isoformat(),
                     period_end=target_date.isoformat(),
@@ -2580,10 +2658,23 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
 
     results: list[dict] = []
     pole_names = {row["id"]: row["name"] for row in conn.execute("SELECT id, name FROM poles").fetchall()}
+
+    def reference_for_group(group: dict) -> dict | None:
+        group_branch_key = group.get("branchKey") or "groupe"
+        exact_reference = reference_lookup.get((group_branch_key, group["poleId"], group["kpiKey"]))
+        if exact_reference:
+            return exact_reference
+        group_reference = reference_lookup.get(("groupe", group["poleId"], group["kpiKey"]))
+        if group_reference:
+            return group_reference
+        return reference_by_pole_kpi.get((group["poleId"], group["kpiKey"])) or reference_by_kpi.get(group["kpiKey"])
+
     quality["referenceKpis"] = sorted(
         [
             {
-                "id": f"{record['poleId']}:{record['kpiId']}",
+                "id": f"{record['branchKey']}:{record['poleId']}:{record['kpiId']}",
+                "branch": record["branch"],
+                "branchKey": record["branchKey"],
                 "poleId": record["poleId"],
                 "poleName": pole_names.get(record["poleId"], record["poleId"]),
                 "kpiId": record["kpiId"],
@@ -2602,12 +2693,12 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             }
             for record in references
         ],
-        key=lambda item: (item["poleName"], item["kpiName"]),
+        key=lambda item: (item["branch"], item["poleName"], item["kpiName"]),
     )
 
     for group in groups.values():
         is_month_to_date = group.get("periodType") == "monthToDate"
-        reference = reference_lookup.get((group["poleId"], group["kpiKey"])) or reference_by_kpi.get(group["kpiKey"])
+        reference = reference_for_group(group)
         if not reference:
             if not is_month_to_date:
                 quality["unmatchedCalculationCount"] += 1
@@ -2624,7 +2715,9 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
 
         status = rag_status(value, reference["target"], reference["kpiName"], reference["formula"])
         result = {
-            "id": f"{group['poleId']}:{reference['kpiId']}:{normalize_submission_key(group['period'])}",
+            "id": f"{group.get('branchKey') or 'groupe'}:{group['poleId']}:{reference['kpiId']}:{normalize_submission_key(group['period'])}",
+            "branch": group.get("branch") or "Groupe",
+            "branchKey": group.get("branchKey") or "groupe",
             "poleId": group["poleId"],
             "poleName": pole_names.get(group["poleId"], group["poleId"]),
             "kpiId": reference["kpiId"],
@@ -2665,7 +2758,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
 
     if quality["unmatchedCalculationCount"]:
         quality["proposals"].append(
-            "Uniformiser les champs pole_id, id_kpi et periode_reporting dans les deux formulaires pour supprimer les ecarts."
+            "Uniformiser les champs pays_filiale/filiale, pole_id, id_kpi et periode_reporting dans les deux formulaires pour supprimer les ecarts."
         )
     if quality["missingTargetCount"]:
         quality["proposals"].append("Completer les valeurs cibles dans le formulaire KPI/formules pour fiabiliser le statut vert/orange/rouge.")
@@ -2676,7 +2769,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     if not results and quality["configured"]:
         quality["proposals"].append("Synchroniser le formulaire donnees de calcul pour remplacer les valeurs en attente.")
     if not quality["proposals"]:
-        quality["proposals"].append("Maintenir le meme id_kpi dans les deux formulaires pour garder le calcul automatique stable.")
+        quality["proposals"].append("Maintenir le meme pays / filiale, pole et id_kpi dans les deux formulaires pour garder le calcul automatique stable.")
 
     unique_warnings = []
     for warning in quality["warnings"]:

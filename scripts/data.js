@@ -102,6 +102,7 @@
       },
       requiredFields: [
         { key: "id_kpi", label: "ID KPI", source: "ID KPI", block: "Identification" },
+        { key: "pays_filiale", label: "Pays / Filiale", source: "Pays / Filiale", block: "Rattachement" },
         { key: "categorie_organisationnelle", label: "Categorie organisationnelle", source: "Categorie organisationnelle", block: "Rattachement" },
         { key: "entite_direction", label: "Entite / Direction", source: "Entite / Direction", block: "Rattachement" },
         { key: "sous_entite_pole_filiale", label: "Sous-entite / Pole / Filiale", source: "Sous-entite / Pole / Filiale", block: "Rattachement" },
@@ -141,9 +142,9 @@
         { key: "validation_hierarchique", label: "Validation", source: "Controle avant calcul PMS", block: "Tracabilite" },
       ],
       koboLogicSteps: [
-        "Formulaire 1 : declare les KPI, poles, objectifs et formules de calcul.",
+        "Formulaire 1 : declare les KPI, pays / filiales, poles, objectifs et formules de calcul.",
         "Formulaire 2 : collecte les elements bruts necessaires a ces formules.",
-        "La plateforme rapproche les deux formulaires par pole, KPI et periode.",
+        "La plateforme rapproche les deux formulaires par pays / filiale, pole, KPI et periode.",
         "Le PMS calcule ensuite les valeurs KPI et alimente les tableaux de bord par pole.",
       ],
       referentials: {
@@ -338,9 +339,10 @@
         title: "PMS GMC - Formulaire 1 - Referentiel KPI et formules",
         mode: "KoboCollect Referentiel KPI",
         status: "Actif",
-        detail: "KPI, objectifs et formules de calcul par pole.",
+        detail: "KPI, objectifs et formules de calcul par pays / filiale et par pole.",
         mappedFields: {
           id: "id_kpi",
+          branch: "pays_filiale",
           category: "categorie_organisationnelle",
           entity: "entite_direction",
           subEntity: "sous_entite_pole_filiale",
@@ -392,13 +394,17 @@
     countries: [
       { id: "Groupe", code: "GROUPE", name: "Groupe", score: 82, quality: 88, readiness: 74, kpiCount: 74, activePoles: 15, lateSubmissions: 0, status: "Consolide", className: "green" },
       { id: "CI", code: "CI", name: "Cote d'Ivoire", score: 88, quality: 92, readiness: 84, kpiCount: 74, activePoles: 15, lateSubmissions: 0, status: "Valide", className: "green" },
-      { id: "BJ", code: "BJ", name: "Benin", score: 84, quality: 89, readiness: 80, kpiCount: 44, activePoles: 15, lateSubmissions: 0, status: "Valide", className: "green" },
-      { id: "CM", code: "CM", name: "Cameroun", score: 79, quality: 86, readiness: 76, kpiCount: 44, activePoles: 15, lateSubmissions: 1, status: "A surveiller", className: "amber" },
-      { id: "CG", code: "CG", name: "Congo", score: 73, quality: 81, readiness: 69, kpiCount: 44, activePoles: 15, lateSubmissions: 2, status: "A surveiller", className: "amber" },
-      { id: "GN", code: "GN", name: "Guinee Conakry", score: 69, quality: 78, readiness: 64, kpiCount: 44, activePoles: 15, lateSubmissions: 2, status: "Plan requis", className: "red" },
-      { id: "GW", code: "GW", name: "Guinee-Bissau", score: 62, quality: 74, readiness: 58, kpiCount: 44, activePoles: 15, lateSubmissions: 3, status: "Plan requis", className: "red" },
-      { id: "NIG", code: "NIG", name: "Niger", score: 71, quality: 79, readiness: 66, kpiCount: 4, activePoles: 1, lateSubmissions: 1, status: "A surveiller", className: "amber", poleIds: ["BRD"] },
+      { id: "BJ", code: "BJ", name: "Benin", score: 84, quality: 89, readiness: 80, kpiCount: 66, activePoles: 14, lateSubmissions: 0, status: "Valide", className: "green" },
+      { id: "CM", code: "CM", name: "Cameroun", score: 79, quality: 86, readiness: 76, kpiCount: 66, activePoles: 14, lateSubmissions: 1, status: "A surveiller", className: "amber" },
+      { id: "CG", code: "CG", name: "Congo", score: 73, quality: 81, readiness: 69, kpiCount: 66, activePoles: 14, lateSubmissions: 2, status: "A surveiller", className: "amber" },
+      { id: "GN", code: "GN", name: "Guinee Conakry", score: 69, quality: 78, readiness: 64, kpiCount: 66, activePoles: 14, lateSubmissions: 2, status: "Plan requis", className: "red" },
+      { id: "GW", code: "GW", name: "Guinee-Bissau", score: 62, quality: 74, readiness: 58, kpiCount: 66, activePoles: 14, lateSubmissions: 3, status: "Plan requis", className: "red" },
+      { id: "NIG", code: "NIG", name: "Niger", score: 71, quality: 79, readiness: 66, kpiCount: 74, activePoles: 15, lateSubmissions: 1, status: "A surveiller", className: "amber" },
     ],
+
+    poleCountryScopes: {
+      BRD: ["Cote d'Ivoire", "Niger"],
+    },
 
     branchScores: [
       { name: "Cote d'Ivoire", score: 88 },

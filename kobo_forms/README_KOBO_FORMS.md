@@ -4,12 +4,13 @@ Ce dossier contient les deux modeles XLSForm a importer dans KoboToolbox.
 
 ## 1. Formulaire KPI et formules
 
-Fichier : `PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026.xlsx`
+Fichier corrige a importer : `PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026_corrige_pays_20260720.xlsx`
 
 UID Kobo publie : `auGyH8vhCsK9KKtG2fu2u5`
 
 Ce formulaire sert a declarer le referentiel KPI :
 
+- pays / filiale d'application ;
 - pole rattache ;
 - ID KPI ;
 - intitule et definition ;
@@ -35,7 +36,7 @@ Ce formulaire sert a collecter les donnees brutes necessaires au calcul :
 - valeur collectee ;
 - validation et preuve optionnelle.
 
-La plateforme rapproche ces donnees avec le referentiel par `pole + ID KPI + date`.
+La plateforme rapproche ces donnees avec le referentiel par `pays / filiale + pole + ID KPI + date`.
 Pour chaque mois, le PMS calcule aussi le cumul du 1er jour du mois jusqu'a la date selectionnee.
 
 ## Utilisation dans KoboToolbox
@@ -49,4 +50,4 @@ Pour chaque mois, le PMS calcule aussi le cumul du 1er jour du mois jusqu'a la d
 7. Pour automatiser, configurer le token API Kobo dans Render avec la variable secrete `PMS_KOBO_API_TOKEN`.
 8. Sinon, renseigner le token dans l'interface et cliquer sur `Synchroniser depuis Kobo`.
 
-Important : dans le formulaire 2, l'`ID KPI` doit etre identique a celui du formulaire 1. L'`element de calcul` doit reprendre le meme libelle que celui utilise dans la formule.
+Important : dans le formulaire 1, choisir `Groupe` quand un KPI est commun a toutes les filiales. Dans le formulaire 2, le `pays / filiale`, l'`ID KPI` et le `pole` doivent correspondre au formulaire 1. L'`element de calcul` doit reprendre le meme libelle que celui utilise dans la formule.

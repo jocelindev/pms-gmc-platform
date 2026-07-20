@@ -146,14 +146,17 @@
     });
   }
 
+  function poleAvailableForCountry(pole = {}, country = {}) {
+    if (isGroupCountry(country)) return true;
+    const scopes = PMS_DATA.poleCountryScopes?.[pole.id];
+    if (!Array.isArray(scopes) || !scopes.length) return true;
+    return scopes.some((scopeCountry) => matchesCountryScope(scopeCountry, country));
+  }
+
   function getCountryScopedPoles(state = {}, poles = []) {
     const country = getActiveCountry(state);
     const sourcePoles = arguments.length >= 2 ? poles : PMS_DATA.reporting.poles;
-    if (isGroupCountry(country) || !Array.isArray(country.poleIds) || !country.poleIds.length) {
-      return sourcePoles;
-    }
-    const countryPoleIds = new Set(country.poleIds);
-    return sourcePoles.filter((pole) => countryPoleIds.has(pole.id));
+    return sourcePoles.filter((pole) => poleAvailableForCountry(pole, country));
   }
 
   function filterRowsByCountry(rows = [], country = {}) {
@@ -560,9 +563,7 @@
 
   function countryPoleScope(country = {}) {
     const poles = PMS_DATA.reporting?.poles || [];
-    if (isGroupCountry(country) || !Array.isArray(country.poleIds) || !country.poleIds.length) return poles;
-    const poleIds = new Set(country.poleIds);
-    return poles.filter((pole) => poleIds.has(pole.id));
+    return poles.filter((pole) => poleAvailableForCountry(pole, country));
   }
 
   function countryDataProfile(country = {}) {
@@ -1215,7 +1216,7 @@
   }
 
   function dashboardCellScore(pole = {}, country = {}) {
-    if (Array.isArray(country.poleIds) && country.poleIds.length && !country.poleIds.includes(pole.id)) {
+    if (!poleAvailableForCountry(pole, country)) {
       return null;
     }
     if (!hasPoleData(pole)) return null;
@@ -3053,6 +3054,7 @@
       form: "#admin-kobo-reference-form-id",
       fields: {
         id: "#admin-kobo-reference-id-field",
+        branch: "#admin-kobo-reference-branch-field",
         category: "#admin-kobo-reference-category-field",
         entity: "#admin-kobo-reference-entity-field",
         subEntity: "#admin-kobo-reference-subentity-field",

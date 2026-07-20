@@ -270,7 +270,7 @@
   }
 
   function kpiHistoryKey(item = {}) {
-    return `${item.poleId || ""}:${normalizeLookup(item.kpiId || item.kpiName || item.name)}`;
+    return `${normalizeLookup(item.branch || item.country || item.filiale || "Groupe")}:${item.poleId || ""}:${normalizeLookup(item.kpiId || item.kpiName || item.name)}`;
   }
 
   function toIsoDate(date) {
@@ -311,10 +311,9 @@
     const country = countryOptions().find(
       (item) => normalizeLookup(item.name || item.id || item.code) === normalizeLookup(ensureAllowedCountry(countryValue))
     );
-    if (!country || isGroupCountryValue(country.name) || !Array.isArray(country.poleIds) || !country.poleIds.length) {
-      return PMS_DATA.reporting.poles.map((pole) => pole.id);
-    }
-    return country.poleIds;
+    return PMS_DATA.reporting.poles
+      .filter((pole) => poleAvailableForCountry(pole.id, country?.name || countryValue))
+      .map((pole) => pole.id);
   }
 
   function calendarDateScopePoleIds() {
@@ -357,6 +356,7 @@
 
     results.forEach((result) => {
       if (allowedPoleIds.size && result.poleId && !allowedPoleIds.has(result.poleId)) return;
+      if (!resultMatchesCountry(result, activeCountry)) return;
       const iso = resultCalendarDateIso(result);
       if (!iso) return;
       const date = fromIsoDate(iso);
@@ -564,9 +564,12 @@
     const sortedResults = [...results].sort(
       (left, right) => periodSortValue(left.periodEnd || left.periodStart || left.period) - periodSortValue(right.periodEnd || right.periodStart || right.period)
     );
-    const scopedResults = calendarScopedResults(sortedResults, state.calendar);
+    const activeCountry = ensureAllowedCountry(state.calendarBranchFilter);
+    const countryScopedResults = sortedResults.filter((result) => resultMatchesCountry(result, activeCountry));
+    const countryScopedReferences = referenceKpis.filter((kpi) => referenceKpiMatchesCountry(kpi, activeCountry));
+    const scopedResults = calendarScopedResults(countryScopedResults, state.calendar);
     const historyByKpi = new Map();
-    sortedResults.forEach((result) => {
+    countryScopedResults.forEach((result) => {
       const key = kpiHistoryKey(result);
       if (!key || key === ":") return;
       const history = historyByKpi.get(key) || [];
@@ -584,13 +587,14 @@
       PMS_DATA.reporting.poles.map((pole) => [pole.id, [...(PMS_DATA.reporting.kpisByPole[pole.id] || [])]])
     );
     const calculatedKeys = new Set(scopedResults.map((result) => `${result.poleId}:${result.kpiId}`));
-    referenceKpis
+    countryScopedReferences
       .filter((kpi) => !calculatedKeys.has(`${kpi.poleId}:${kpi.kpiId}`))
       .forEach((kpi) => {
         if (!kpi.poleId) return;
         upsertKpiItem(byPole, kpi.poleId, {
           id: kpi.kpiId,
           name: kpi.kpiName,
+          branch: kpi.branch || activeCountry || "Groupe",
           value: kpi.valueLabel || "En attente calcul",
           target: kpi.target || "A completer",
           trend: "Reference Kobo",
@@ -617,6 +621,7 @@
       upsertKpiItem(byPole, result.poleId, {
         id: result.kpiId,
         name: result.kpiName,
+        branch: result.branch || activeCountry || "Groupe",
         value: result.valueLabel,
         target: result.target || "A completer",
         trend: result.trend || "Calcul Kobo",
@@ -1010,6 +1015,30 @@
     if (isGroupCountryValue(ruleName)) return true;
     if (isGroupCountryValue(activeName)) return false;
     return normalizeLookup(ruleName) === normalizeLookup(activeName);
+  }
+
+  function poleAvailableForCountry(poleId, countryValue = state.calendarBranchFilter) {
+    const activeCountry = findCountryName(countryValue || "Groupe");
+    if (isGroupCountryValue(activeCountry)) return true;
+    const scopes = PMS_DATA.poleCountryScopes?.[poleId];
+    if (!Array.isArray(scopes) || !scopes.length) return true;
+    return scopes.some((country) => countryMatches(country, activeCountry));
+  }
+
+  function resultMatchesCountry(result = {}, countryValue = state.calendarBranchFilter) {
+    const activeCountry = ensureAllowedCountry(countryValue || "Groupe");
+    const resultCountry = result.branch || result.country || result.filiale || result.pays || "Groupe";
+    if (isGroupCountryValue(activeCountry)) return true;
+    if (isGroupCountryValue(resultCountry)) return false;
+    return countryMatches(resultCountry, activeCountry);
+  }
+
+  function referenceKpiMatchesCountry(kpi = {}, countryValue = state.calendarBranchFilter) {
+    const activeCountry = ensureAllowedCountry(countryValue || "Groupe");
+    const referenceCountry = kpi.branch || kpi.country || kpi.filiale || kpi.pays || "Groupe";
+    if (isGroupCountryValue(activeCountry)) return true;
+    if (isGroupCountryValue(referenceCountry)) return true;
+    return countryMatches(referenceCountry, activeCountry);
   }
 
   function getAuthorizedCountries() {
@@ -2053,6 +2082,7 @@
 
     const referenceKoboFields = [
       { mappedTo: "id", inputId: "#admin-kobo-reference-id-field", defaultValue: "id_kpi" },
+      { mappedTo: "branch", inputId: "#admin-kobo-reference-branch-field", defaultValue: "pays_filiale" },
       { mappedTo: "category", inputId: "#admin-kobo-reference-category-field", defaultValue: "categorie_organisationnelle" },
       { mappedTo: "entity", inputId: "#admin-kobo-reference-entity-field", defaultValue: "entite_direction" },
       { mappedTo: "subEntity", inputId: "#admin-kobo-reference-subentity-field", defaultValue: "sous_entite_pole_filiale" },

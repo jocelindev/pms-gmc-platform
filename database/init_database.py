@@ -30,6 +30,7 @@ DEFAULT_KOBO_SOURCES = [
         "cadence": "Selon periode",
         "fields": {
             "id": "id_kpi",
+            "branch": "pays_filiale",
             "category": "categorie_organisationnelle",
             "entity": "entite_direction",
             "subEntity": "sous_entite_pole_filiale",
