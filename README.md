@@ -81,9 +81,11 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
 - Le serveur lit les metadonnees du formulaire Kobo et enregistre les champs detectes dans SQLite.
 - Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.
 - Le jeton API sert uniquement a la synchronisation courante : il n'est pas renvoye a l'interface ni affiche comme formulaire actif.
+- Les trois formulaires utilisent maintenant le meme champ `ID KPI officiel`, propose en liste recherchable `KPI-001` a `KPI-074`. Les responsables choisissent l'ID au lieu de le saisir librement.
 - Dans Administration > KoboCollecte, la logique PMS distingue trois sources : `KPI et formules`, `Objectifs mensuels` et `Elements de calcul`.
 - Le formulaire `KPI et formules` reste compatible avec `Copie de Catalogu.xlsx` et exploite aussi `GMC_FICHE_COLLECTE_V2.xlsx`, notamment la feuille `FORMULE` : 44 KPI/formules metier et 7 onglets de collecte.
-- Le moteur PMS rapproche automatiquement les trois formulaires par `pays / filiale + pole + KPI + periode`, applique la formule du catalogue, calcule l'objectif a date a partir de l'objectif mensuel, puis alimente le tableau de bord et l'onglet `Suivi par pole`.
+- Le moteur PMS rapproche automatiquement les trois formulaires par `pays / filiale + pole + ID KPI officiel + periode`, applique la formule du catalogue, calcule l'objectif a date a partir de l'objectif mensuel, puis alimente le tableau de bord et l'onglet `Suivi par pole`.
+- Les objectifs mensuels et les donnees de calcul dont l'ID KPI n'existe pas dans le Formulaire 1 sont signales comme ecarts de rapprochement.
 - Sans soumission du formulaire 1, aucun KPI n'est affiche dans les vues metier. Quand le formulaire 1 est alimente mais que les donnees de calcul ne sont pas encore synchronisees, les KPI apparaissent avec le statut `En attente calcul`.
 - Si les donnees de calcul existent mais que l'objectif mensuel Kobo manque, le KPI reste calcule mais son statut reste `Objectif Kobo manquant` / attente au lieu d'etre classe rouge a tort.
 - Dans l'administration, `Enregistrer` conserve l'UID et le mapping des champs; `Synchroniser depuis Kobo` utilise le token API pour importer les soumissions et rendre les KPI visibles.

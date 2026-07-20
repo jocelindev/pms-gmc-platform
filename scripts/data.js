@@ -101,7 +101,7 @@
         ],
       },
       requiredFields: [
-        { key: "id_kpi", label: "ID KPI", source: "ID KPI", block: "Identification" },
+        { key: "id_kpi", label: "ID KPI officiel", source: "Liste partagee KPI-001, KPI-002...", block: "Identification" },
         { key: "pays_filiale", label: "Pays / Filiale", source: "Pays / Filiale", block: "Rattachement" },
         { key: "categorie_organisationnelle", label: "Categorie organisationnelle", source: "Categorie organisationnelle", block: "Rattachement" },
         { key: "entite_direction", label: "Entite / Direction", source: "Entite / Direction", block: "Rattachement" },
@@ -132,7 +132,7 @@
       objectiveFields: [
         { key: "pays_filiale", label: "Pays / Filiale", source: "Perimetre de l'objectif", block: "Rattachement" },
         { key: "pole_id", label: "Pole concerne", source: "Pole responsable", block: "Rattachement" },
-        { key: "id_kpi", label: "ID KPI", source: "Lien avec le referentiel KPI", block: "Rattachement" },
+        { key: "id_kpi", label: "ID KPI officiel", source: "Lien obligatoire avec le Formulaire 1", block: "Rattachement" },
         { key: "periode_objectif", label: "Mois objectif", source: "AAAA-MM ou mois/annee", block: "Periode" },
         { key: "objectif_mensuel", label: "Objectif mensuel", source: "Cible officielle du mois", block: "Objectif" },
         { key: "unite_mesure", label: "Unite de mesure", source: "Pourcentage, montant, nombre, minutes", block: "Objectif" },
@@ -144,7 +144,7 @@
       ],
       calculationFields: [
         { key: "pole_id", label: "Pole concerne", source: "Pole responsable de la donnee", block: "Rattachement" },
-        { key: "id_kpi", label: "KPI a calculer", source: "Lien avec le formulaire KPI", block: "Rattachement" },
+        { key: "id_kpi", label: "KPI a calculer", source: "ID KPI officiel issu du Formulaire 1", block: "Rattachement" },
         { key: "periode_reporting", label: "Periode de reporting", source: "Mois, semaine ou trimestre", block: "Temps" },
         { key: "element_id", label: "Element de calcul", source: "Variable utilisee dans la formule", block: "Calcul" },
         { key: "valeur_element", label: "Valeur collectee", source: "Numerateur, denominateur ou valeur brute", block: "Calcul" },

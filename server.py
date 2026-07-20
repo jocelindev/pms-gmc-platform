@@ -2673,6 +2673,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         "matchedCalculationGroups": 0,
         "calculatedCount": 0,
         "unmatchedCalculationCount": 0,
+        "unmatchedObjectiveCount": 0,
         "uncalculatedCount": 0,
         "missingTargetCount": 0,
         "missingMonthlyObjectiveCount": 0,
@@ -2813,6 +2814,25 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 or reference_by_kpi[key]["branchKey"] != record["branchKey"]
             ):
                 reference_by_kpi[key] = None
+
+    def objective_has_reference(objective: dict) -> bool:
+        key_candidates = [
+            objective.get("kpiKey"),
+            normalize_match_key(objective.get("kpiRaw")),
+            normalize_match_key(objective.get("kpiName")),
+        ]
+        for key in [candidate for candidate in key_candidates if candidate]:
+            if reference_lookup.get((objective["branchKey"], objective["poleId"], key)):
+                return True
+            if reference_lookup.get(("groupe", objective["poleId"], key)):
+                return True
+            if reference_by_pole_kpi.get((objective["poleId"], key)):
+                return True
+            if reference_by_kpi.get(key):
+                return True
+        return False
+
+    quality["unmatchedObjectiveCount"] = sum(1 for objective in objective_records if not objective_has_reference(objective))
 
     groups: dict[tuple[str, str, str, str], dict] = {}
     calculation_entries: list[dict] = []
@@ -3207,6 +3227,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         quality["proposals"].append(
             "Uniformiser les champs pays_filiale/filiale, pole_id, id_kpi et periode_reporting dans les formulaires pour supprimer les ecarts."
         )
+    if quality["unmatchedObjectiveCount"]:
+        quality["proposals"].append("Corriger les objectifs mensuels dont l'ID KPI n'existe pas dans le referentiel du Formulaire 1.")
     if quality["missingMonthlyObjectiveCount"]:
         quality["proposals"].append("Renseigner les objectifs mensuels Kobo pour calculer le Vs Target et le statut vert/orange/rouge.")
     if quality["missingFormulaCount"]:

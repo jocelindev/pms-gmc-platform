@@ -2298,7 +2298,7 @@
         { label: "KPI du pole", value: selectedPoleResults.length, hint: "filtre actif" },
         { label: "Collecte attendue", value: cadenceProfile.primary || normalizeCadence(cadenceProfile.cadence), hint: cadenceProfile.expectedDelay || cadenceProfile.cadence },
         { label: "Rapprochement", value: `${matchRate}%`, hint: `${quality.matchedCalculationGroups || 0}/${calculationGroups} groupes` },
-        { label: "Ecarts", value: quality.unmatchedCalculationCount || 0, hint: "pole, KPI ou periode" },
+        { label: "Ecarts", value: (quality.unmatchedCalculationCount || 0) + (quality.unmatchedObjectiveCount || 0), hint: "objectif, pole, KPI ou periode" },
       ];
       summary.innerHTML = cards
         .map(
