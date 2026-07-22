@@ -3164,6 +3164,7 @@
     const auditGrid = $("#admin-kobo-audit-grid");
     const auditNotes = $("#admin-kobo-audit-notes");
     const formatInteger = (value) => new Intl.NumberFormat("fr-FR").format(Number(value) || 0);
+    const referenceCount = Number(state.kpiCalculationQuality?.referenceCount || 0);
     const fallbackAuditForms = [
       {
         role: "referentielKpi",
