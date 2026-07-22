@@ -47,7 +47,8 @@ SESSION_SIGNING_SECRET = os.environ.get(
 MIN_PASSWORD_LENGTH = 8
 KOBO_REQUEST_TIMEOUT = 15
 KOBO_SUBMISSION_LIMIT = 500
-KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT = 15 * 60
+KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT = 5 * 60
+KOBO_AUTO_SYNC_INTERVAL_SECONDS_MAX = 5 * 60
 KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS_DEFAULT = 8
 KOBO_AUTO_SYNC_ROLES = ("referentielKpi", "objectifsMensuels", "donneesCalcul")
 KOBO_TOKEN_ENV_KEYS = ("PMS_KOBO_API_TOKEN", "KOBO_API_TOKEN")
@@ -1827,7 +1828,8 @@ def env_int(name: str, default: int) -> int:
 
 
 def get_kobo_auto_sync_interval_seconds() -> int:
-    return max(0, env_int("PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS", KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT))
+    interval = max(0, env_int("PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS", KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT))
+    return min(interval, KOBO_AUTO_SYNC_INTERVAL_SECONDS_MAX) if interval else 0
 
 
 def get_kobo_auto_sync_startup_delay_seconds() -> int:
