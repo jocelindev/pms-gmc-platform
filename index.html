@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=management-no-pole-filter-20260722" />
+    <link rel="stylesheet" href="styles.css?v=login-refresh-20260722" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -16,12 +16,19 @@
             <span>GMC Group</span>
           </div>
         </div>
-        <p class="eyebrow">Acces securise</p>
-        <h1 id="login-title">Connexion a la plateforme de performance</h1>
+        <div class="login-heading">
+          <p class="eyebrow">Acces securise</p>
+          <h1 id="login-title">Bienvenue sur la plateforme PMS</h1>
+        </div>
         <p class="login-copy">
-          Connectez-vous pour acceder au tableau de bord, au suivi KPI par pole,
-          aux rapports et aux formulaires KoboCollect.
+          Connectez-vous avec votre compte pour consulter les KPI, les rapports
+          et les donnees KoboCollect selon votre profil et votre perimetre.
         </p>
+        <div class="login-assurance" aria-label="Garanties d'acces">
+          <span>Acces par profil</span>
+          <span>Donnees Kobo</span>
+          <span>Vue par pole</span>
+        </div>
         <form class="login-form" id="login-form">
           <label>
             Identifiant
@@ -50,22 +57,44 @@
             Utilisez le mot de passe fourni par l'administrateur.
           </div>
         </form>
+        <div class="login-security-note">
+          <strong>Confidentialite</strong>
+          <span>Chaque responsable accede uniquement aux tableaux de bord autorises par l'administration PMS.</span>
+        </div>
       </div>
       <aside class="login-side-panel" aria-label="Resume plateforme">
-        <span class="eyebrow">PMS GMC Group</span>
-        <h2>Suivi KPI par pole et reporting periodique</h2>
-        <div class="login-highlights">
+        <div class="login-side-brand">
+          <div class="brand-mark">P</div>
           <div>
-            <strong>16</strong>
-            <span>poles pilotes</span>
+            <strong>PMS GMC</strong>
+            <span>Palladium Afrique</span>
           </div>
-          <div>
-            <strong>Kobo</strong>
-            <span>source primaire</span>
+        </div>
+        <div class="login-side-content">
+          <span class="eyebrow">PMS GMC Group</span>
+          <h2>Suivi KPI par pole et pilotage management</h2>
+          <p>
+            Les donnees collectees dans Kobo alimentent automatiquement les indicateurs,
+            les tendances et les priorites de decision.
+          </p>
+          <div class="login-highlights">
+            <div>
+              <strong>16</strong>
+              <span>poles suivis</span>
+            </div>
+            <div>
+              <strong>Kobo</strong>
+              <span>source primaire</span>
+            </div>
+            <div>
+              <strong>PDG</strong>
+              <span>vue consolidee</span>
+            </div>
           </div>
-          <div>
-            <strong>RBAC</strong>
-            <span>droits par profil</span>
+          <div class="login-flow">
+            <div><span>1</span><strong>Collecte</strong><small>Formulaires KoboCollect</small></div>
+            <div><span>2</span><strong>Calcul</strong><small>KPI, objectifs et tendances</small></div>
+            <div><span>3</span><strong>Pilotage</strong><small>Dashboard et decisions</small></div>
           </div>
         </div>
       </aside>
@@ -1469,9 +1498,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=management-no-pole-filter-20260722"></script>
-    <script src="scripts/renderers.js?v=management-no-pole-filter-20260722"></script>
-    <script src="scripts/api.js?v=management-no-pole-filter-20260722"></script>
-    <script src="app.js?v=management-no-pole-filter-20260722"></script>
+    <script src="scripts/data.js?v=login-refresh-20260722"></script>
+    <script src="scripts/renderers.js?v=login-refresh-20260722"></script>
+    <script src="scripts/api.js?v=login-refresh-20260722"></script>
+    <script src="app.js?v=login-refresh-20260722"></script>
   </body>
 </html>
