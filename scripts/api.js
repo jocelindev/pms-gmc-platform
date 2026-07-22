@@ -12,7 +12,7 @@
 
   async function request(path, options = {}) {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), options.timeout || 2500);
+    const timeout = window.setTimeout(() => controller.abort(), options.timeout || 10000);
     try {
       const response = await fetch(`${API_BASE}${path}`, {
         method: options.method || "GET",
@@ -29,6 +29,11 @@
         throw new Error(payload.error || `Erreur API ${response.status}`);
       }
       return payload.data;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw new Error("Le serveur met plus de temps que prevu. Patientez quelques secondes puis reessayez.");
+      }
+      throw error;
     } finally {
       window.clearTimeout(timeout);
     }
@@ -40,6 +45,7 @@
       return request("/auth/login", {
         method: "POST",
         body: { identifier, password },
+        timeout: 20000,
       });
     },
     createUser(user) {
@@ -49,7 +55,7 @@
       });
     },
     bootstrap() {
-      return request("/bootstrap", { timeout: 3500 });
+      return request("/bootstrap", { timeout: 15000 });
     },
     saveProfilePermissions(profile, permissions) {
       return request("/access/profile-permissions", {
