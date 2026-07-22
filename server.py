@@ -3829,38 +3829,61 @@ def get_kobo_auto_sync_status() -> dict:
 def auto_kobo_sync_worker(token: str, reason: str) -> None:
     global AUTO_KOBO_LAST_SYNC_TS
     results = []
+    errors = []
     error = ""
     synced_at = ""
     try:
-        with db_connect() as conn:
-            sources = [
-                source
-                for source in list_kobo_sources(conn)
-                if source.get("role") in KOBO_AUTO_SYNC_ROLES and source.get("serverUrl") and source.get("formId")
-            ]
-        sources.sort(key=lambda source: KOBO_AUTO_SYNC_ROLES.index(source["role"]))
-        for source in sources:
-            result = sync_kobo_form(
-                {
-                    "serverUrl": source["serverUrl"],
-                    "formUid": source["formId"],
-                    "token": token,
-                }
-            )
-            synced_at = result.get("lastSyncAt") or synced_at
-            results.append(
-                {
-                    "role": source["role"],
-                    "formId": source["formId"],
-                    "fieldsDetected": result.get("fieldsDetected", 0),
-                    "submissionsImported": result.get("submissionsImported", 0),
-                    "warning": result.get("syncWarning", ""),
-                    "lastSyncAt": result.get("lastSyncAt", ""),
-                }
-            )
-        AUTO_KOBO_LAST_SYNC_TS = time.time()
-    except Exception as exc:
-        error = str(exc)
+        try:
+            with db_connect() as conn:
+                sources = [
+                    source
+                    for source in list_kobo_sources(conn)
+                    if source.get("role") in KOBO_AUTO_SYNC_ROLES and source.get("serverUrl") and source.get("formId")
+                ]
+            sources.sort(key=lambda source: KOBO_AUTO_SYNC_ROLES.index(source["role"]))
+        except Exception as exc:
+            sources = []
+            error = str(exc)
+
+        if not error:
+            for source in sources:
+                try:
+                    result = sync_kobo_form(
+                        {
+                            "serverUrl": source["serverUrl"],
+                            "formUid": source["formId"],
+                            "token": token,
+                        }
+                    )
+                    synced_at = result.get("lastSyncAt") or synced_at
+                    results.append(
+                        {
+                            "role": source["role"],
+                            "formId": source["formId"],
+                            "fieldsDetected": result.get("fieldsDetected", 0),
+                            "submissionsImported": result.get("submissionsImported", 0),
+                            "warning": result.get("syncWarning", ""),
+                            "lastSyncAt": result.get("lastSyncAt", ""),
+                            "status": "ok",
+                        }
+                    )
+                except Exception as exc:
+                    source_error = str(exc)
+                    errors.append(f"{source['role']} ({source['formId']}): {source_error}")
+                    results.append(
+                        {
+                            "role": source["role"],
+                            "formId": source["formId"],
+                            "fieldsDetected": 0,
+                            "submissionsImported": 0,
+                            "warning": source_error,
+                            "lastSyncAt": "",
+                            "status": "error",
+                        }
+                    )
+            AUTO_KOBO_LAST_SYNC_TS = time.time()
+            if errors:
+                error = " | ".join(errors[:3])
     finally:
         with AUTO_KOBO_LOCK:
             AUTO_KOBO_STATE["running"] = False
