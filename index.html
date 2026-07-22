@@ -4,71 +4,72 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=login-clean-20260722" />
+    <link rel="stylesheet" href="styles.css?v=login-right-panel-20260722" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
-      <div class="login-card">
-        <div class="login-brand">
-          <div class="brand-mark">P</div>
-          <div>
-            <strong>Palladium PMS</strong>
-            <span>GMC Group</span>
+      <div class="login-auth-panel">
+        <div class="login-card">
+          <div class="login-card-head">
+            <div class="login-card-icon">P</div>
+            <div>
+              <h1 id="login-title">RAPPORT</h1>
+              <span>Espace securise - collaborateurs GMC</span>
+            </div>
           </div>
-        </div>
-        <div class="login-heading">
-          <p class="eyebrow">Acces securise</p>
-          <h1 id="login-title">Bienvenue sur la plateforme PMS</h1>
-        </div>
-        <div class="login-access-panel">
-          <span>Acces collaborateur</span>
-          <strong>Un espace adapte a votre role</strong>
-          <p>Vos tableaux de bord, poles et actions disponibles sont appliques automatiquement apres connexion.</p>
-        </div>
-        <form class="login-form" id="login-form">
-          <label>
-            Identifiant
-            <input
-              id="login-identifier"
-              type="text"
-              autocomplete="username"
-              placeholder="admin ou email utilisateur"
-              required
-            />
-          </label>
-          <label>
-            Mot de passe
-            <span class="password-input-wrap">
+          <form class="login-form" id="login-form">
+            <label>
+              Identifiant
               <input
-                id="login-password"
-                type="password"
-                autocomplete="current-password"
-                placeholder="Mot de passe utilisateur"
+                id="login-identifier"
+                type="text"
+                autocomplete="username"
+                placeholder="Matricule ou nom d'utilisateur"
                 required
               />
-              <button
-                class="password-toggle"
-                id="login-password-toggle"
-                type="button"
-                aria-controls="login-password"
-                aria-label="Afficher le mot de passe"
-                aria-pressed="false"
-              >
-                Afficher
-              </button>
-            </span>
-          </label>
-          <button class="primary-action login-submit" id="login-submit" type="submit">
-            Se connecter
-          </button>
-          <div class="login-feedback" id="login-feedback" role="status" aria-live="polite">
-            Utilisez le mot de passe fourni par l'administrateur.
+            </label>
+            <label>
+              Mot de passe
+              <span class="password-input-wrap">
+                <input
+                  id="login-password"
+                  type="password"
+                  autocomplete="current-password"
+                  placeholder="Mot de passe"
+                  required
+                />
+                <button
+                  class="password-toggle"
+                  id="login-password-toggle"
+                  type="button"
+                  aria-controls="login-password"
+                  aria-label="Afficher le mot de passe"
+                  aria-pressed="false"
+                >
+                  Voir
+                </button>
+              </span>
+            </label>
+            <button class="primary-action login-submit" id="login-submit" type="submit">
+              Se connecter
+            </button>
+            <button class="login-forgot-link" id="login-forgot-link" type="button">
+              Mot de passe oublie ?
+            </button>
+            <div class="login-feedback" id="login-feedback" role="status" aria-live="polite">
+              Utilisez le mot de passe fourni par l'administrateur.
+            </div>
+          </form>
+        </div>
+        <div class="login-feature-section" aria-label="Fonctionnalites incluses">
+          <div class="login-feature-title"><span>Fonctionnalites incluses</span></div>
+          <div class="login-feature-list">
+            <div><span class="feature-icon blue">KPI</span><strong>Suivi des performances par pole</strong></div>
+            <div><span class="feature-icon cyan">BI</span><strong>Tableaux de bord et tendances KPI</strong></div>
+            <div><span class="feature-icon gold">KO</span><strong>Synchronisation KoboCollect</strong></div>
+            <div><span class="feature-icon green">MG</span><strong>Brief PDG, priorites et reporting</strong></div>
           </div>
-          <p class="login-help-line">Acces non cree ou mot de passe perdu ? Contactez l'administrateur PMS.</p>
-        </form>
-        <div class="login-security-note">
-          <strong>Confidentialite</strong>
-          <span>Chaque responsable accede uniquement aux tableaux de bord autorises par l'administration PMS.</span>
+          <p>Acces strictement reserve aux collaborateurs autorises du Groupe GMC.</p>
         </div>
       </div>
       <aside class="login-side-panel" aria-label="Resume plateforme">
@@ -1507,9 +1508,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=login-clean-20260722"></script>
-    <script src="scripts/renderers.js?v=login-clean-20260722"></script>
-    <script src="scripts/api.js?v=login-clean-20260722"></script>
-    <script src="app.js?v=login-clean-20260722"></script>
+    <script src="scripts/data.js?v=login-right-panel-20260722"></script>
+    <script src="scripts/renderers.js?v=login-right-panel-20260722"></script>
+    <script src="scripts/api.js?v=login-right-panel-20260722"></script>
+    <script src="app.js?v=login-right-panel-20260722"></script>
   </body>
 </html>

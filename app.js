@@ -1237,15 +1237,22 @@
     const logout = $("#logout-button");
     const passwordInput = $("#login-password");
     const passwordToggle = $("#login-password-toggle");
+    const forgotLink = $("#login-forgot-link");
 
     if (passwordInput && passwordToggle) {
       passwordToggle.addEventListener("click", () => {
         const showPassword = passwordInput.type === "password";
         passwordInput.type = showPassword ? "text" : "password";
-        passwordToggle.textContent = showPassword ? "Masquer" : "Afficher";
+        passwordToggle.textContent = showPassword ? "Masquer" : "Voir";
         passwordToggle.setAttribute("aria-label", showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe");
         passwordToggle.setAttribute("aria-pressed", String(showPassword));
         passwordInput.focus();
+      });
+    }
+
+    if (forgotLink) {
+      forgotLink.addEventListener("click", () => {
+        setLoginFeedback("Pour reinitialiser votre mot de passe, contactez l'administrateur PMS.", "info");
       });
     }
 
@@ -1260,7 +1267,7 @@
         }
 
         $("#login-submit").disabled = true;
-        setLoginFeedback("Verification de l'acces en cours...", "");
+        setLoginFeedback("Verification de l'acces en cours...", "info");
         try {
           if (!api?.login) {
             throw new Error("Serveur local indisponible. Lancez la plateforme sur http://127.0.0.1:5184/.");
