@@ -3274,6 +3274,81 @@
       `;
     }
 
+    const anomalies = Array.isArray(state.koboAnomalies) && state.koboAnomalies.length
+      ? state.koboAnomalies
+      : Array.isArray(state.kpiCalculationQuality?.anomalies)
+        ? state.kpiCalculationQuality.anomalies
+        : [];
+    const anomalyCount = $("#admin-kobo-anomaly-count");
+    const anomalySummary = $("#admin-kobo-anomaly-summary");
+    const anomalyTable = $("#admin-kobo-anomaly-table");
+    const blockingAnomalies = anomalies.filter((item) => item.severity === "Bloquant");
+    const warningAnomalies = anomalies.filter((item) => item.severity === "A corriger");
+    const anomalyStatusClass = blockingAnomalies.length ? "red" : warningAnomalies.length ? "amber" : "green";
+    if (anomalyCount) {
+      anomalyCount.className = `status-pill ${anomalyStatusClass}`;
+      anomalyCount.textContent = `${anomalies.length} anomalie${anomalies.length > 1 ? "s" : ""}`;
+    }
+    if (anomalySummary) {
+      const forms = ["referentielKpi", "objectifsMensuels", "donneesCalcul"].map((role) => {
+        const count = anomalies.filter((item) => item.sourceRole === role).length;
+        return {
+          label: role === "referentielKpi" ? "Referentiel" : role === "objectifsMensuels" ? "Objectifs" : "Donnees",
+          count,
+        };
+      });
+      anomalySummary.innerHTML = `
+        <div class="admin-kobo-anomaly-stat status-${escapeHtml(blockingAnomalies.length ? "red" : "green")}">
+          <span>Bloquantes</span>
+          <strong>${escapeHtml(blockingAnomalies.length)}</strong>
+          <small>empechent le calcul ou le rapprochement</small>
+        </div>
+        <div class="admin-kobo-anomaly-stat status-${escapeHtml(warningAnomalies.length ? "amber" : "green")}">
+          <span>A corriger</span>
+          <strong>${escapeHtml(warningAnomalies.length)}</strong>
+          <small>reduisent la qualite du dashboard</small>
+        </div>
+        ${forms
+          .map(
+            (form) => `
+              <div class="admin-kobo-anomaly-stat">
+                <span>${escapeHtml(form.label)}</span>
+                <strong>${escapeHtml(form.count)}</strong>
+                <small>anomalie${form.count > 1 ? "s" : ""}</small>
+              </div>
+            `
+          )
+          .join("")}
+      `;
+    }
+    if (anomalyTable) {
+      anomalyTable.innerHTML = anomalies.length
+        ? anomalies
+            .slice(0, 30)
+            .map(
+              (item) => `
+                <tr>
+                  <td>${statusPill(item.severity || "Info", item.statusClass || "gray")}</td>
+                  <td>
+                    <strong>${escapeHtml(item.form || "KoboCollect")}</strong>
+                    <small>${escapeHtml(item.sourceForm || item.submissionUid || "")}</small>
+                  </td>
+                  <td>
+                    <strong>${escapeHtml(item.poleName || item.poleId || "Pole a verifier")}</strong>
+                    <small>${escapeHtml(item.kpi || "KPI a verifier")} - ${escapeHtml(item.period || "Periode a verifier")}</small>
+                  </td>
+                  <td>
+                    <strong>${escapeHtml(item.issue || "Anomalie a verifier")}</strong>
+                    ${item.detail ? `<small>${escapeHtml(item.detail)}</small>` : ""}
+                  </td>
+                  <td>${escapeHtml(item.action || "Corriger la ligne Kobo puis synchroniser.")}</td>
+                </tr>
+              `
+            )
+            .join("")
+        : `<tr><td colspan="5">Aucune anomalie Kobo detectee. Les trois formulaires sont prets pour le calcul.</td></tr>`;
+    }
+
     const fillKoboSourceForm = (source, config) => {
       if (!source) return;
       const setValue = (selector, value) => {

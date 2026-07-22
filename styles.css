@@ -2494,6 +2494,86 @@ textarea {
   line-height: 1.4;
 }
 
+.admin-kobo-anomalies-panel {
+  grid-column: 1 / -1;
+}
+
+.admin-kobo-anomaly-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.admin-kobo-anomaly-stat {
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 12px;
+}
+
+.admin-kobo-anomaly-stat.status-red {
+  border-color: rgba(220, 38, 38, 0.3);
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.admin-kobo-anomaly-stat.status-amber {
+  border-color: rgba(217, 163, 38, 0.34);
+  background: rgba(217, 163, 38, 0.09);
+}
+
+.admin-kobo-anomaly-stat.status-green {
+  border-color: rgba(35, 197, 94, 0.26);
+  background: rgba(35, 197, 94, 0.06);
+}
+
+.admin-kobo-anomaly-stat span,
+.admin-kobo-anomaly-stat small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.admin-kobo-anomaly-stat strong {
+  display: block;
+  color: var(--palladium-blue);
+  font-size: 1.45rem;
+  margin: 4px 0;
+}
+
+.admin-kobo-anomaly-wrap {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.admin-kobo-anomaly-table {
+  min-width: 940px;
+}
+
+.admin-kobo-anomaly-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.admin-kobo-anomaly-table td {
+  vertical-align: top;
+}
+
+.admin-kobo-anomaly-table strong,
+.admin-kobo-anomaly-table small {
+  display: block;
+}
+
+.admin-kobo-anomaly-table small {
+  color: var(--muted);
+  line-height: 1.35;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
 .admin-kobo-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

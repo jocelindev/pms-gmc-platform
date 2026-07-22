@@ -774,6 +774,7 @@
     calculationKoboSource: defaultCalculationKoboSource ? clone(defaultCalculationKoboSource) : null,
     koboAutoSync: null,
     koboDataAudit: null,
+    koboAnomalies: [],
     databaseOverview: null,
     databaseTablePreview: null,
     currentDatabaseTable: "",
@@ -857,6 +858,11 @@
     }
     if (payload.kpiCalculationQuality) {
       state.kpiCalculationQuality = payload.kpiCalculationQuality;
+    }
+    if (Array.isArray(payload.koboAnomalies)) {
+      state.koboAnomalies = payload.koboAnomalies;
+    } else if (Array.isArray(payload.kpiCalculationQuality?.anomalies)) {
+      state.koboAnomalies = payload.kpiCalculationQuality.anomalies;
     }
     if (payload.activeKoboForm) {
       state.koboActiveForm = payload.activeKoboForm;
@@ -1377,6 +1383,11 @@
         }
         if (result.kpiCalculationQuality) {
           state.kpiCalculationQuality = result.kpiCalculationQuality;
+        }
+        if (Array.isArray(result.koboAnomalies)) {
+          state.koboAnomalies = result.koboAnomalies;
+        } else if (Array.isArray(result.kpiCalculationQuality?.anomalies)) {
+          state.koboAnomalies = result.kpiCalculationQuality.anomalies;
         }
         mergeKoboSources(result.koboSources);
         if (result.koboDataAudit) {
@@ -2285,6 +2296,11 @@
         }
         if (result.kpiCalculationQuality) {
           state.kpiCalculationQuality = result.kpiCalculationQuality;
+        }
+        if (Array.isArray(result.koboAnomalies)) {
+          state.koboAnomalies = result.koboAnomalies;
+        } else if (Array.isArray(result.kpiCalculationQuality?.anomalies)) {
+          state.koboAnomalies = result.kpiCalculationQuality.anomalies;
         }
         mergeKoboSources(result.koboSources);
         if (result.koboDataAudit) {

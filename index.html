@@ -838,6 +838,31 @@
                 </div>
               </section>
 
+              <section class="panel span-3 admin-kobo-anomalies-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Anomalies Kobo</p>
+                    <h3>Lignes a corriger avant calcul complet</h3>
+                  </div>
+                  <span class="status-pill gray" id="admin-kobo-anomaly-count">0 anomalie</span>
+                </div>
+                <div class="admin-kobo-anomaly-summary" id="admin-kobo-anomaly-summary"></div>
+                <div class="table-wrap admin-kobo-anomaly-wrap">
+                  <table class="admin-kobo-anomaly-table">
+                    <thead>
+                      <tr>
+                        <th>Gravite</th>
+                        <th>Formulaire</th>
+                        <th>Pole / KPI / periode</th>
+                        <th>Anomalie</th>
+                        <th>Action proposee</th>
+                      </tr>
+                    </thead>
+                    <tbody id="admin-kobo-anomaly-table"></tbody>
+                  </table>
+                </div>
+              </section>
+
               <section class="panel span-3 admin-kobo-source-panel">
                 <div class="panel-header">
                   <div>
@@ -1360,9 +1385,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=login-fix-20260722b"></script>
-    <script src="scripts/renderers.js?v=login-fix-20260722b"></script>
-    <script src="scripts/api.js?v=login-fix-20260722b"></script>
-    <script src="app.js?v=login-fix-20260722b"></script>
+    <script src="scripts/data.js?v=kobo-anomalies-20260722"></script>
+    <script src="scripts/renderers.js?v=kobo-anomalies-20260722"></script>
+    <script src="scripts/api.js?v=kobo-anomalies-20260722"></script>
+    <script src="app.js?v=kobo-anomalies-20260722"></script>
   </body>
 </html>

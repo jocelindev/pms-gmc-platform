@@ -1276,6 +1276,11 @@ def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = Non
     calculation_rate = float(quality.get("calculationRate") or 0)
     reference_count = int(quality.get("referenceCount") or 0)
     objective_count = int(quality.get("objectiveCount") or quality.get("objectiveRecords") or 0)
+    anomaly_count = int(quality.get("anomalyCount") or len(quality.get("anomalies") or []))
+    blocking_anomaly_count = int(
+        quality.get("blockingAnomalyCount")
+        or sum(1 for item in quality.get("anomalies") or [] if item.get("severity") == "Bloquant")
+    )
 
     readiness_score = round(
         (connected_count / len(KOBO_AUTO_SYNC_ROLES)) * 25
@@ -1284,7 +1289,13 @@ def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = Non
         + (min(calculation_rate, 100) / 100) * 25
     )
     if connected_count == len(KOBO_AUTO_SYNC_ROLES) and mapped_ready_count == len(KOBO_AUTO_SYNC_ROLES):
-        if calculated_count:
+        if blocking_anomaly_count:
+            global_status = "Anomalies bloquantes"
+            global_class = "red"
+        elif anomaly_count:
+            global_status = "A fiabiliser"
+            global_class = "amber"
+        elif calculated_count:
             global_status = "Pret pour dashboard"
             global_class = "green"
         elif total_submission_count:
@@ -1323,6 +1334,8 @@ def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = Non
         "objectiveCount": objective_count,
         "calculationGroups": calculation_groups,
         "calculatedCount": calculated_count,
+        "anomalyCount": anomaly_count,
+        "blockingAnomalyCount": blocking_anomaly_count,
         "matchRate": round(match_rate),
         "calculationRate": round(calculation_rate),
         "forms": form_audits,
@@ -1397,6 +1410,7 @@ def get_bootstrap_payload() -> dict:
             "kpiDailyDates": list_kpi_daily_dates(conn),
             "kpiCalculationResults": kpi_results,
             "kpiCalculationQuality": kpi_quality,
+            "koboAnomalies": kpi_quality.get("anomalies", []),
             "koboDataAudit": kobo_data_audit,
             "koboAutoSync": get_kobo_auto_sync_status(),
         }
@@ -3347,6 +3361,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     reference_source = source_by_role.get("referentielKpi")
     objective_source = source_by_role.get("objectifsMensuels")
     calculation_source = source_by_role.get("donneesCalcul")
+    pole_names = {row["id"]: row["name"] for row in conn.execute("SELECT id, name FROM poles").fetchall()}
     quality = {
         "configured": bool(reference_source),
         "objectiveFormConfigured": bool(objective_source),
@@ -3369,14 +3384,99 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         "calculationRate": 0,
         "referenceKpis": [],
         "monthlyObjectives": [],
+        "anomalies": [],
+        "anomalyCount": 0,
+        "blockingAnomalyCount": 0,
         "warnings": [],
         "proposals": [],
     }
+
+    anomaly_sequence = 0
+
+    def add_anomaly(
+        category: str,
+        severity: str,
+        issue: str,
+        action: str,
+        *,
+        role: str = "",
+        source: dict | None = None,
+        row: sqlite3.Row | None = None,
+        branch: str = "",
+        pole_id: str = "",
+        kpi: str = "",
+        period: str = "",
+        detail: str = "",
+    ) -> None:
+        nonlocal anomaly_sequence
+        if len(quality["anomalies"]) >= 200:
+            return
+        anomaly_sequence += 1
+        status_class = "red" if severity == "Bloquant" else "amber" if severity == "A corriger" else "gray"
+        row_keys = row.keys() if row else []
+        source_role = role or (source.get("role") if source else "")
+        source_form = (source.get("formId") if source else "") or (row["form_uid"] if row and "form_uid" in row_keys else "")
+        row_branch = branch or (text_or_empty(row["branch"]) if row and "branch" in row_keys else "")
+        row_pole_id = pole_id or (text_or_empty(row["pole_id"]) if row and "pole_id" in row_keys else "")
+        row_kpi = kpi or (text_or_empty(row["kpi_name"]) if row and "kpi_name" in row_keys else "")
+        row_period = period or (text_or_empty(row["period"]) if row and "period" in row_keys else "")
+        submission_uid = ""
+        if row:
+            submission_uid = text_or_empty(row["submission_uid"] if "submission_uid" in row_keys else "") or text_or_empty(row["id"] if "id" in row_keys else "")
+        quality["anomalies"].append(
+            {
+                "id": f"ANOM-{anomaly_sequence:03d}",
+                "category": category,
+                "severity": severity,
+                "statusClass": status_class,
+                "sourceRole": source_role,
+                "form": KOBO_AUDIT_ROLE_LABELS.get(source_role, source_role or "KoboCollect"),
+                "sourceForm": source_form,
+                "submissionUid": submission_uid,
+                "branch": row_branch or "Groupe",
+                "poleId": row_pole_id,
+                "poleName": pole_names.get(row_pole_id, row_pole_id or ""),
+                "kpi": row_kpi,
+                "period": row_period,
+                "issue": issue,
+                "action": action,
+                "detail": detail,
+                "createdAt": text_or_empty(row["created_at"] if row and "created_at" in row_keys else ""),
+            }
+        )
+
+    for role in KOBO_AUTO_SYNC_ROLES:
+        source = source_by_role.get(role)
+        if not source:
+            add_anomaly(
+                "Configuration",
+                "Bloquant",
+                f"{KOBO_AUDIT_ROLE_LABELS.get(role, role)} non connecte.",
+                "Renseigner l'UID du formulaire dans Administration > KoboCollecte.",
+                role=role,
+            )
+            continue
+        missing_fields = [
+            label
+            for mapped_to, label in KOBO_AUDIT_REQUIRED_FIELDS.get(role, ())
+            if not (source.get("mappedFields") or {}).get(mapped_to)
+        ]
+        if missing_fields:
+            add_anomaly(
+                "Mapping",
+                "Bloquant",
+                f"Mapping incomplet: {', '.join(missing_fields[:5])}.",
+                "Completer les champs attendus dans le mapping avance.",
+                role=role,
+                source=source,
+            )
 
     if not reference_source:
         quality["proposals"].append(
             "Configurer le formulaire KPI/formules dans Administration > KoboCollecte pour afficher les KPI par pole."
         )
+        quality["anomalyCount"] = len(quality["anomalies"])
+        quality["blockingAnomalyCount"] = sum(1 for item in quality["anomalies"] if item.get("severity") == "Bloquant")
         return [], quality
 
     reference_rows = conn.execute(
@@ -3410,15 +3510,39 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     quality["calculationRecords"] = len(calculation_rows)
     if not reference_rows:
         quality["warnings"].append("Aucune soumission trouvee pour le formulaire KPI/formules.")
+        add_anomaly(
+            "Soumissions",
+            "Bloquant",
+            "Aucune soumission dans le formulaire KPI/formules.",
+            "Publier au moins un KPI dans Kobo puis synchroniser.",
+            role="referentielKpi",
+            source=reference_source,
+        )
     if not objective_source:
         quality["warnings"].append("Formulaire objectifs mensuels non configure.")
     elif not objective_records:
         quality["warnings"].append("Aucune soumission trouvee pour le formulaire objectifs mensuels.")
+        add_anomaly(
+            "Soumissions",
+            "A corriger",
+            "Aucune soumission objectif mensuel exploitable.",
+            "Publier les objectifs mensuels par pays, pole, KPI et mois.",
+            role="objectifsMensuels",
+            source=objective_source,
+        )
     quality["warnings"].extend(objective_warnings)
     if not calculation_source:
         quality["warnings"].append("Formulaire donnees de calcul non configure.")
     elif not calculation_rows:
         quality["warnings"].append("Aucune soumission trouvee pour le formulaire donnees de calcul.")
+        add_anomaly(
+            "Soumissions",
+            "Bloquant",
+            "Aucune soumission dans le formulaire donnees de calcul.",
+            "Publier les donnees journalieres de calcul puis synchroniser.",
+            role="donneesCalcul",
+            source=calculation_source,
+        )
 
     references: list[dict] = []
     reference_lookup: dict[tuple[str, str, str], dict] = {}
@@ -3448,6 +3572,23 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         )
         if not pole_id or not (kpi_code or kpi_name):
             quality["warnings"].append("Reference KPI ignoree: pole ou KPI non reconnu.")
+            missing_parts = []
+            if not pole_id:
+                missing_parts.append("pole")
+            if not (kpi_code or kpi_name):
+                missing_parts.append("KPI")
+            add_anomaly(
+                "Referentiel",
+                "Bloquant",
+                f"Reference KPI ignoree: {', '.join(missing_parts)} non reconnu.",
+                "Verifier groupe_de_rattachement, id_kpi et intitule_du_kpi dans Kobo.",
+                role="referentielKpi",
+                source=reference_source,
+                row=row,
+                branch=branch,
+                pole_id=text_or_empty(pole_raw or row["pole_id"]),
+                kpi=kpi_code or kpi_name,
+            )
             continue
 
         formula = text_or_empty(mapped_submission_value(reference_source, payload, "formula", ["formule_de_calcul", "formule"]))
@@ -3485,6 +3626,19 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         references.append(record)
         if not record["formula"]:
             quality["missingFormulaCount"] += 1
+            add_anomaly(
+                "Referentiel",
+                "A corriger",
+                "Formule de calcul absente pour ce KPI.",
+                "Completer formule_de_calcul dans le formulaire referentiel KPI.",
+                role="referentielKpi",
+                source=reference_source,
+                row=row,
+                branch=branch,
+                pole_id=pole_id,
+                kpi=record["kpiId"],
+                detail=record["kpiName"],
+            )
 
         keys = [record["kpiId"], record["kpiName"]]
         for key_value in keys:
@@ -3530,7 +3684,23 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 return True
         return False
 
-    quality["unmatchedObjectiveCount"] = sum(1 for objective in objective_records if not objective_has_reference(objective))
+    for objective in objective_records:
+        if objective_has_reference(objective):
+            continue
+        quality["unmatchedObjectiveCount"] += 1
+        add_anomaly(
+            "Objectif",
+            "A corriger",
+            "Objectif mensuel sans KPI correspondant dans le referentiel.",
+            "Utiliser le meme id_kpi dans le formulaire objectif et le formulaire referentiel.",
+            role="objectifsMensuels",
+            source=objective_source,
+            branch=objective.get("branch", "Groupe"),
+            pole_id=objective.get("poleId", ""),
+            kpi=objective.get("kpiRaw") or objective.get("kpiKey", ""),
+            period=objective.get("period") or objective.get("periodMonth", ""),
+            detail=objective.get("target", ""),
+        )
 
     groups: dict[tuple[str, str, str, str], dict] = {}
     calculation_entries: list[dict] = []
@@ -3613,14 +3783,62 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         period_label = text_or_empty(period_raw or row["period"] or "Periode non renseignee")
         if not pole_id or not kpi_key:
             quality["warnings"].append("Ligne de donnees ignoree: pole ou KPI non reconnu.")
+            missing_parts = []
+            if not pole_id:
+                missing_parts.append("pole")
+            if not kpi_key:
+                missing_parts.append("KPI")
+            add_anomaly(
+                "Donnees calcul",
+                "Bloquant",
+                f"Ligne de donnees ignoree: {', '.join(missing_parts)} non reconnu.",
+                "Verifier pole_id et id_kpi dans le formulaire donnees de calcul.",
+                role="donneesCalcul",
+                source=calculation_source,
+                row=row,
+                branch=text_or_empty(branch_raw or row["branch"] or "Groupe") or "Groupe",
+                pole_id=text_or_empty(pole_raw or row["pole_id"]),
+                kpi=text_or_empty(kpi_raw or row["kpi_name"]),
+                period=period_label,
+            )
             continue
 
         period_date = parse_daily_period_date(period_label)
         kpi_raw_text = text_or_empty(kpi_raw or row["kpi_name"])
         branch = text_or_empty(branch_raw or row["branch"] or "Groupe") or "Groupe"
+        raw_calculation_value = value_raw if value_raw not in (None, "") else row["value"]
+        if parse_number(raw_calculation_value) is None:
+            add_anomaly(
+                "Donnees calcul",
+                "Bloquant",
+                "Valeur de calcul non numerique.",
+                "Renseigner une valeur numerique dans valeur_element.",
+                role="donneesCalcul",
+                source=calculation_source,
+                row=row,
+                branch=branch,
+                pole_id=pole_id,
+                kpi=kpi_raw_text,
+                period=period_label,
+                detail=text_or_empty(raw_calculation_value),
+            )
+        if not period_date:
+            add_anomaly(
+                "Donnees calcul",
+                "A corriger",
+                "Date de collecte non reconnue pour le cumul journalier.",
+                "Renseigner date_collecte au format AAAA-MM-JJ, JJ/MM/AAAA ou AAAAMMJJ.",
+                role="donneesCalcul",
+                source=calculation_source,
+                row=row,
+                branch=branch,
+                pole_id=pole_id,
+                kpi=kpi_raw_text,
+                period=period_label,
+            )
         element = {
             "label": text_or_empty(element_raw or "valeur"),
-            "value": value_raw if value_raw not in (None, "") else row["value"],
+            "value": raw_calculation_value,
             "branch": branch,
             "validation": text_or_empty(validation_raw or row["validation_status"]),
         }
@@ -3864,6 +4082,19 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         if not reference:
             if not is_month_to_date:
                 quality["unmatchedCalculationCount"] += 1
+                add_anomaly(
+                    "Rapprochement",
+                    "Bloquant",
+                    "Donnee de calcul sans KPI correspondant dans le referentiel.",
+                    "Utiliser le meme id_kpi, pole et pays/filiale entre le formulaire donnees et le formulaire referentiel.",
+                    role="donneesCalcul",
+                    source=calculation_source,
+                    branch=group.get("branch") or "Groupe",
+                    pole_id=group.get("poleId", ""),
+                    kpi=group.get("kpiRaw") or group.get("kpiKey", ""),
+                    period=group.get("period", ""),
+                    detail=f"{len(group.get('elements') or [])} element(s) de calcul.",
+                )
             continue
 
         if not is_month_to_date:
@@ -3924,10 +4155,36 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             if not is_month_to_date:
                 quality["uncalculatedCount"] += 1
                 quality["warnings"].extend(formula_warnings[:1])
+                add_anomaly(
+                    "Calcul",
+                    "Bloquant",
+                    "Formule Kobo non appliquee pour ce KPI.",
+                    "Aligner les libelles element_id avec les termes utilises dans formule_de_calcul.",
+                    role="donneesCalcul",
+                    source=calculation_source,
+                    branch=group.get("branch") or "Groupe",
+                    pole_id=group.get("poleId", ""),
+                    kpi=reference.get("kpiId") or group.get("kpiRaw") or group.get("kpiKey", ""),
+                    period=group.get("period", ""),
+                    detail=" ".join(formula_warnings[:2]) or reference.get("formula", ""),
+                )
             continue
 
         if not objective and not is_month_to_date:
             quality["missingMonthlyObjectiveCount"] += 1
+            add_anomaly(
+                "Objectif",
+                "A corriger",
+                "Objectif mensuel absent pour ce KPI et cette periode.",
+                "Ajouter l'objectif mensuel avec le meme pays/filiale, pole, id_kpi et mois.",
+                role="objectifsMensuels",
+                source=objective_source,
+                branch=group.get("branch") or "Groupe",
+                pole_id=group.get("poleId", ""),
+                kpi=reference.get("kpiId") or group.get("kpiRaw") or group.get("kpiKey", ""),
+                period=group.get("period", ""),
+                detail=reference.get("kpiName", ""),
+            )
         status = (
             rag_status(
                 value,
@@ -4037,6 +4294,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         if warning and warning not in unique_warnings:
             unique_warnings.append(warning)
     quality["warnings"] = unique_warnings[:8]
+    quality["anomalyCount"] = len(quality["anomalies"])
+    quality["blockingAnomalyCount"] = sum(1 for item in quality["anomalies"] if item.get("severity") == "Bloquant")
     return sorted(results, key=lambda item: (item["poleName"], item["kpiName"], item["period"])), quality
 
 
@@ -4199,6 +4458,7 @@ def sync_kobo_form(payload: dict) -> dict:
         "kpiDailyDates": kpi_daily_dates,
         "kpiCalculationResults": kpi_results,
         "kpiCalculationQuality": kpi_quality,
+        "koboAnomalies": kpi_quality.get("anomalies", []),
         "koboSources": kobo_sources,
         "koboDataAudit": kobo_data_audit,
         "objectives": objectives,
