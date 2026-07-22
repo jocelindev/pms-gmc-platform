@@ -984,21 +984,28 @@
     if (poleFilter) {
       const accessContext = getPoleAccessContext(state);
       const authorizedPoles = accessContext.isRestricted ? accessContext.poles : PMS_DATA.reporting.poles;
+      const canSelectAllPoles = !accessContext.isRestricted || authorizedPoles.length > 1;
       const selectedPoleId =
-        authorizedPoles.find((pole) => pole.id === state.calendarPoleFilter)?.id ||
-        authorizedPoles.find((pole) => pole.id === state.currentPoleMonitor)?.id ||
-        authorizedPoles[0]?.id ||
-        "";
+        canSelectAllPoles && state.calendarPoleFilter === "Tous"
+          ? "Tous"
+          : authorizedPoles.find((pole) => pole.id === state.calendarPoleFilter)?.id ||
+            authorizedPoles.find((pole) => pole.id === state.currentPoleMonitor)?.id ||
+            authorizedPoles[0]?.id ||
+            "";
       if (selectedPoleId) {
         state.calendarPoleFilter = selectedPoleId;
-        state.currentPoleMonitor = selectedPoleId;
+        if (selectedPoleId !== "Tous") {
+          state.currentPoleMonitor = selectedPoleId;
+        }
       }
+      const poleOptions = [
+        ...(canSelectAllPoles ? [`<option value="Tous" ${selectedPoleId === "Tous" ? "selected" : ""}>Tous les poles</option>`] : []),
+        ...authorizedPoles.map(
+          (pole) => `<option value="${escapeHtml(pole.id)}" ${pole.id === selectedPoleId ? "selected" : ""}>${escapeHtml(pole.name)}</option>`
+        ),
+      ];
       poleFilter.innerHTML = authorizedPoles.length
-        ? authorizedPoles
-            .map(
-              (pole) => `<option value="${escapeHtml(pole.id)}" ${pole.id === selectedPoleId ? "selected" : ""}>${escapeHtml(pole.name)}</option>`
-            )
-            .join("")
+        ? poleOptions.join("")
         : `<option>Aucun pole autorise</option>`;
       poleFilter.disabled = accessContext.isRestricted && !authorizedPoles.length;
       if (authorizedPoles.length) {
@@ -2050,7 +2057,7 @@
     const score = managementScoreFromRows(dataRows);
     const lateSubmissions = Number(state.kpiCalculationQuality?.unmatchedCalculationCount || 0);
     const anomalyCount = Number(state.koboDataAudit?.anomalyCount ?? state.koboAnomalies?.length ?? 0);
-    const objectiveRows = dataRows.length ? dataRows : context.kpiRows || [];
+    const objectiveRows = dataRows;
     const knownTargets = dataRows.filter(targetKnown);
     const reachedTargets = knownTargets.filter(targetReached);
     const lateTargets = knownTargets.filter((row) => !targetReached(row));
@@ -2060,6 +2067,9 @@
     const globalClass = !dataRows.length ? "gray" : redRows.length ? "red" : amberRows.length ? "amber" : score === null ? "gray" : scoreClass(score);
     const activeScope = context.isGroup ? "Groupe consolide" : context.activeCountry.name;
     const period = state.calendar?.label || $("#period-filter")?.value || "Periode active";
+    const scoreBreakdown = dataRows.length
+      ? `${greenRows.length} vert / ${amberRows.length} orange / ${redRows.length} rouge`
+      : "donnees Kobo attendues";
     const priorityRows = managementCriticalRows(dataRows, 5);
 
     const actionRecommendation = (row) => {
@@ -2092,7 +2102,7 @@
     }
 
     const periodBadge = $("#management-period-badge");
-    if (periodBadge) periodBadge.textContent = `${period} - ${activeScope}`;
+    if (periodBadge) periodBadge.textContent = `${period} - ${scoreBreakdown}`;
 
     const hero = $("#management-hero-score");
     if (hero) {
@@ -2160,7 +2170,7 @@
         {
           label: "Score consolide",
           value: score === null ? "--" : `${score}/100`,
-          hint: dataRows.length ? `${dataRows.length} resultat(s) Kobo calcule(s)` : "donnees Kobo attendues",
+          hint: dataRows.length ? scoreBreakdown : "donnees Kobo attendues",
           className: globalClass,
         },
         {

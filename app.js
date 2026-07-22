@@ -688,7 +688,7 @@
     calendar: buildMonthToDateSelection(new Date()),
     calendarDateDropdownOpen: false,
     actorScope: "responsable",
-    calendarPoleFilter: PMS_DATA.reporting.defaultPole,
+    calendarPoleFilter: "Tous",
     calendarBranchFilter: "Groupe",
     calendarStatusFilter: "Tous",
     platformUsers: buildSeedUsers(),
@@ -1831,13 +1831,19 @@
 
     poleFilter?.addEventListener("change", () => {
       state.calendarPoleFilter = poleFilter.value;
-      const allowedPole = getAllowedPoleFromScope(poleFilter.value);
-      state.currentPoleMonitor = allowedPole;
-      state.currentReportPole = allowedPole;
+      const allowedPole =
+        poleFilter.value === "Tous"
+          ? getAllowedPoleFromScope(state.currentPoleMonitor || PMS_DATA.reporting.defaultPole)
+          : getAllowedPoleFromScope(poleFilter.value);
+      if (poleFilter.value !== "Tous") {
+        state.currentPoleMonitor = allowedPole;
+        state.currentReportPole = allowedPole;
+      }
       ensureCalendarDateFromAvailableData();
       applyCalculatedKpisToReporting();
       renderCalendarSlicer(state);
       renderAdvancedDashboard(state);
+      renderManagementDashboard(state);
       renderPoleSummaryTables(state);
       renderPoleControls(state);
       renderPoleMonitor(state);
