@@ -2425,11 +2425,11 @@ def should_prorate_monthly_target(reference: dict, objective: dict | None = None
 
 def infer_performance_direction(raw_direction: str = "", kpi_name: str = "", formula: str = "", target: str = "") -> str:
     normalized_direction = normalize_match_key(raw_direction)
-    if any(term in normalized_direction for term in ("baisse favorable", "baisse", "plus bas mieux", "moins mieux", "lower better", "lower is better")):
+    if any(term in normalized_direction for term in ("baisse favorable", "baisse", "plus bas mieux", "moins mieux", "lowerbetter", "lower better", "lower is better")):
         return "lowerBetter"
     if any(term in normalized_direction for term in ("zone cible", "zone", "intervalle", "range", "entre")):
         return "targetRange"
-    if any(term in normalized_direction for term in ("hausse favorable", "hausse", "plus haut mieux", "higher better", "higher is better")):
+    if any(term in normalized_direction for term in ("hausse favorable", "hausse", "plus haut mieux", "higherbetter", "higher better", "higher is better")):
         return "higherBetter"
 
     target_text = str(target or "")
@@ -2492,6 +2492,74 @@ def effective_target_for_group(reference: dict, objective: dict | None, group: d
         "statusReady": True,
         "mode": mode,
     }
+
+
+def actual_aggregation_mode(reference: dict, objective: dict | None = None) -> str:
+    explicit = normalize_match_key(
+        reference.get("aggregationMode")
+        or reference.get("aggregation")
+        or (objective or {}).get("actualAggregationMode")
+        or (objective or {}).get("aggregationMode")
+        or ""
+    )
+    if any(term in explicit for term in ("moyenne", "average", "avg", "non cumul", "taux", "ratio")):
+        return "average"
+    if any(term in explicit for term in ("somme", "sum", "cumul", "volume", "montant", "nombre")):
+        return "sum"
+
+    raw_text = " ".join(
+        str(value or "")
+        for value in (
+            reference.get("kpiName"),
+            reference.get("unit"),
+            reference.get("formula"),
+            reference.get("type"),
+            reference.get("collectionFrequency"),
+        )
+    )
+    normalized = normalize_match_key(raw_text)
+    average_terms = (
+        "taux",
+        "ratio",
+        "moyenne",
+        "score",
+        "indice",
+        "qualite",
+        "satisfaction",
+        "sla",
+        " sl ",
+        "oos",
+        "dmt",
+        "mttr",
+        "delai",
+        "duree",
+        "temps",
+        "pourcentage",
+    )
+    if "%" in raw_text or any(term.strip() in normalized for term in average_terms):
+        return "average"
+    return "sum"
+
+
+def target_achievement_percent(value: float | None, target_value: float | None, performance_direction: str = "") -> float | None:
+    if value is None or target_value is None:
+        return None
+    realized = float(value)
+    target = float(target_value)
+    direction = infer_performance_direction(performance_direction)
+    if direction == "lowerBetter":
+        if realized == 0:
+            return 100.0 if target >= 0 else None
+        return (target / realized) * 100
+    if target == 0:
+        return 100.0 if realized == 0 else None
+    return (realized / target) * 100
+
+
+def format_target_achievement(value: float | None) -> str:
+    if value is None:
+        return "--"
+    return f"{format_number(float(value), 2)}%"
 
 
 def format_number(value: float, decimals: int = 1) -> str:
@@ -2675,6 +2743,30 @@ def direct_value_from_elements(element_values: dict[str, float]) -> tuple[float 
     return None, "Calcul a verifier"
 
 
+def realized_value_from_elements(element_values: dict[str, float]) -> tuple[float | None, str]:
+    for preferred in (
+        "realise",
+        "realisation",
+        "valeur realisee",
+        "valeur du jour",
+        "valeur jour",
+        "realise jour",
+        "actual",
+    ):
+        preferred_key = normalize_match_key(preferred)
+        for label, value in element_values.items():
+            if preferred_key in label:
+                return value, "Realise Kobo direct"
+    return direct_value_from_elements(element_values)
+
+
+def formula_compares_realized_to_target(formula: str) -> bool:
+    normalized = normalize_match_key(formula)
+    target_terms = ("objectif", "cible", "target")
+    realized_terms = ("realise", "realisation", "valeur realisee", "valeur du jour", "actual")
+    return any(term in normalized for term in target_terms) and any(term in normalized for term in realized_terms)
+
+
 def missing_formula_tokens(expression: str) -> list[str]:
     tokens = re.findall(r"\b(?!v\d+\b)[a-z_][a-z0-9_]*\b", expression)
     ignored = {"if", "and", "or"}
@@ -2713,6 +2805,11 @@ def evaluate_kpi_formula(
             single_value = raw_numbers[0]
             for alias in ("realise", "realisation", "valeur realisee", "valeur du jour"):
                 element_values.setdefault(normalize_match_key(alias), single_value)
+
+        if formula_compares_realized_to_target(formula):
+            realized_value, realized_method = realized_value_from_elements(element_values)
+            if realized_value is not None:
+                return realized_value, f"{realized_method}; Vs Target calcule separement", warnings
 
         expression = normalize_formula_expression(formula)
         variables: dict[str, float] = {}
@@ -3524,6 +3621,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         key=lambda item: (item["branch"], item["poleName"], item["kpiName"]),
     )
 
+    daily_actual_points: dict[tuple[str, str, str], list[dict]] = {}
+
     for group in groups.values():
         is_month_to_date = group.get("periodType") == "monthToDate"
         reference = reference_for_group(group)
@@ -3536,6 +3635,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             quality["matchedCalculationGroups"] += 1
         objective = objective_for_group(reference, group)
         target_info = effective_target_for_group(reference, objective, group)
+        aggregation_mode = actual_aggregation_mode(reference, objective)
+        result_unit = (objective.get("unit") or reference["unit"]) if objective else reference["unit"]
         formula_context = {}
         if target_info["numeric"] is not None:
             formula_context = {
@@ -3546,12 +3647,44 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "cible": target_info["numeric"],
                 "target": target_info["numeric"],
             }
-        value, method, formula_warnings = evaluate_kpi_formula(
-            reference["formula"],
-            group["elements"],
-            context_values=formula_context,
-            unit=objective.get("unit") or reference["unit"] if objective else reference["unit"],
-        )
+        day_point = None
+        if is_month_to_date:
+            point_key = (group.get("branchKey") or "groupe", group["poleId"], group["kpiKey"])
+            period_start_date = parse_daily_period_date(group.get("periodStart") or "")
+            period_end_date = parse_daily_period_date(group.get("periodEnd") or "")
+            points = [
+                point
+                for point in daily_actual_points.get(point_key, [])
+                if period_start_date
+                and period_end_date
+                and period_start_date <= point["date"] <= period_end_date
+            ]
+            if points:
+                actual_values = [point["value"] for point in points if point.get("value") is not None]
+                if aggregation_mode == "average":
+                    value = sum(actual_values) / len(actual_values) if actual_values else None
+                    method = "Cumul mensuel a date: moyenne des realises journaliers"
+                else:
+                    value = sum(actual_values) if actual_values else None
+                    method = "Cumul mensuel a date: somme des realises journaliers"
+                formula_warnings = []
+                day_point = next((point for point in points if period_end_date and point["date"] == period_end_date), None)
+                if not day_point and points:
+                    day_point = sorted(points, key=lambda point: point["date"]).pop()
+            else:
+                value, method, formula_warnings = evaluate_kpi_formula(
+                    reference["formula"],
+                    group["elements"],
+                    context_values=formula_context,
+                    unit=result_unit,
+                )
+        else:
+            value, method, formula_warnings = evaluate_kpi_formula(
+                reference["formula"],
+                group["elements"],
+                context_values=formula_context,
+                unit=result_unit,
+            )
         if value is None:
             if not is_month_to_date:
                 quality["uncalculatedCount"] += 1
@@ -3571,6 +3704,14 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             if target_info["statusReady"]
             else "gray"
         )
+        achievement = target_achievement_percent(value, target_info["numeric"], reference.get("performanceDirection", ""))
+        achievement_label = format_target_achievement(achievement)
+        achievement_class = "positive" if achievement is not None and achievement >= 100 else "negative" if achievement is not None else "empty"
+        value_label = format_calculated_value(value, result_unit)
+        day_value = day_point.get("value") if day_point else value if group.get("periodType") == "day" else None
+        day_value_label = day_point.get("valueLabel") if day_point else value_label if group.get("periodType") == "day" else ""
+        month_to_date_value = value if is_month_to_date else None
+        month_to_date_value_label = value_label if is_month_to_date else ""
         result = {
             "id": f"{group.get('branchKey') or 'groupe'}:{group['poleId']}:{reference['kpiId']}:{normalize_submission_key(group['period'])}",
             "branch": group.get("branch") or "Groupe",
@@ -3584,13 +3725,23 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "periodEnd": group.get("periodEnd") or "",
             "periodType": group.get("periodType") or "period",
             "value": round(value, 4),
-            "valueLabel": format_calculated_value(value, reference["unit"]),
+            "valueLabel": value_label,
+            "actualValue": round(value, 4),
+            "actualValueLabel": value_label,
+            "dayValue": round(day_value, 4) if day_value is not None else None,
+            "dayValueLabel": day_value_label,
+            "monthToDateValue": round(month_to_date_value, 4) if month_to_date_value is not None else None,
+            "monthToDateValueLabel": month_to_date_value_label,
             "target": target_info["label"],
             "monthlyTarget": target_info["monthlyLabel"],
             "targetValue": round(target_info["numeric"], 4) if target_info["numeric"] is not None else None,
             "targetMode": target_info["mode"],
+            "vsTargetValue": round(achievement, 4) if achievement is not None else None,
+            "vsTargetLabel": achievement_label,
+            "vsTargetClass": achievement_class,
+            "aggregationMode": aggregation_mode,
             "performanceDirection": reference.get("performanceDirection", "higherBetter"),
-            "unit": objective.get("unit") or reference["unit"] if objective else reference["unit"],
+            "unit": result_unit,
             "status": status,
             "trend": "Calcul Kobo",
             "source": calculation_source["formId"] if calculation_source else reference_source["formId"],
@@ -3602,6 +3753,17 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "warnings": formula_warnings,
         }
         results.append(result)
+        if group.get("periodType") == "day":
+            day_date = parse_daily_period_date(group.get("periodEnd") or group.get("period") or "")
+            if day_date:
+                point_key = (result["branchKey"], group["poleId"], group["kpiKey"])
+                daily_actual_points.setdefault(point_key, []).append(
+                    {
+                        "date": day_date,
+                        "value": value,
+                        "valueLabel": value_label,
+                    }
+                )
 
     exact_results = [result for result in results if result.get("periodType") != "monthToDate"]
     quality["calculatedCount"] = len(exact_results)

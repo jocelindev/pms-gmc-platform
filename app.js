@@ -568,18 +568,22 @@
     const countryScopedReferences = referenceKpis.filter((kpi) => referenceKpiMatchesCountry(kpi, activeCountry));
     const scopedResults = calendarScopedResults(countryScopedResults, state.calendar);
     const historyByKpi = new Map();
-    countryScopedResults.forEach((result) => {
+    const trendResults = countryScopedResults.filter((result) => result.periodType !== "monthToDate");
+    (trendResults.length ? trendResults : countryScopedResults).forEach((result) => {
       const key = kpiHistoryKey(result);
       if (!key || key === ":") return;
       const history = historyByKpi.get(key) || [];
       history.push({
         period: result.periodEnd || result.period,
-        value: result.value,
-        valueLabel: result.valueLabel,
+        value: result.actualValue ?? result.value,
+        valueLabel: result.actualValueLabel || result.valueLabel,
         target: result.target,
         monthlyTarget: result.monthlyTarget,
         targetValue: result.targetValue,
         targetMode: result.targetMode,
+        vsTargetValue: result.vsTargetValue,
+        vsTargetLabel: result.vsTargetLabel,
+        vsTargetClass: result.vsTargetClass,
         performanceDirection: result.performanceDirection || "",
         status: result.status,
       });
@@ -627,11 +631,20 @@
         id: result.kpiId,
         name: result.kpiName,
         branch: result.branch || activeCountry || "Groupe",
-        value: result.valueLabel,
+        value: result.monthToDateValueLabel || result.actualValueLabel || result.valueLabel,
+        numericValue: result.monthToDateValue ?? result.actualValue ?? result.value,
+        dayValue: result.dayValue ?? result.actualValue ?? result.value,
+        dayValueLabel: result.dayValueLabel || result.actualValueLabel || result.valueLabel,
+        monthToDateValue: result.monthToDateValue ?? result.actualValue ?? result.value,
+        monthToDateValueLabel: result.monthToDateValueLabel || result.actualValueLabel || result.valueLabel,
         target: result.target || "A completer",
         monthlyTarget: result.monthlyTarget || "",
         targetValue: result.targetValue,
         targetMode: result.targetMode || "",
+        vsTargetValue: result.vsTargetValue,
+        vsTargetLabel: result.vsTargetLabel,
+        vsTargetClass: result.vsTargetClass,
+        aggregationMode: result.aggregationMode || "",
         objectiveSource: result.objectiveSource || "",
         trend: result.trend || "Calcul Kobo",
         status: result.status || "gray",

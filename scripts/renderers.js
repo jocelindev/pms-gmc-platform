@@ -314,6 +314,14 @@
     return `${value > 0 ? "+" : "-"}${absolute}%`;
   }
 
+  function formatRatioPercent(value) {
+    if (!Number.isFinite(value)) return "--";
+    return `${value.toLocaleString("fr-FR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}%`;
+  }
+
   function formatSignedNumber(value) {
     if (!Number.isFinite(value)) return "--";
     const absolute = Math.abs(value).toLocaleString("fr-FR", {
@@ -406,18 +414,38 @@
   }
 
   function metricFromTarget(kpi = {}) {
-    const current = currentMetricValue(kpi);
+    if (kpi.vsTargetLabel && kpi.vsTargetLabel !== "--") {
+      const ratio = Number(kpi.vsTargetValue);
+      return {
+        label: "Vs Target",
+        display: kpi.vsTargetLabel,
+        className: kpi.vsTargetClass || (Number.isFinite(ratio) ? (ratio >= 100 ? "positive" : "negative") : "empty"),
+      };
+    }
+    const current = Number.isFinite(Number(kpi.monthToDateValue))
+      ? Number(kpi.monthToDateValue)
+      : Number.isFinite(Number(kpi.numericValue))
+        ? Number(kpi.numericValue)
+        : currentMetricValue(kpi);
     const target = Number.isFinite(Number(kpi.targetValue)) ? Number(kpi.targetValue) : targetValueForKpi(kpi);
     if (!Number.isFinite(current) || !Number.isFinite(target)) {
       return { label: "Vs Target", display: "--", className: "empty" };
     }
     const lowerBetter = isLowerBetterKpi(kpi);
-    const performanceGap = lowerBetter ? target - current : current - target;
-    const displayValue = target === 0 ? formatSignedNumber(performanceGap) : formatDeltaPercent((performanceGap / Math.abs(target)) * 100);
+    const ratio = lowerBetter
+      ? current === 0
+        ? target >= 0 ? 100 : null
+        : (target / current) * 100
+      : target === 0
+        ? current === 0 ? 100 : null
+        : (current / target) * 100;
+    if (!Number.isFinite(ratio)) {
+      return { label: "Vs Target", display: "--", className: "empty" };
+    }
     return {
       label: "Vs Target",
-      display: displayValue,
-      className: performanceGap >= 0 ? "positive" : "negative",
+      display: formatRatioPercent(ratio),
+      className: ratio >= 100 ? "positive" : "negative",
     };
   }
 
@@ -1193,6 +1221,8 @@
   }
 
   function dayValueLabel(kpi = {}) {
+    if (kpi.dayValueLabel) return kpi.dayValueLabel;
+    if (Number.isFinite(Number(kpi.dayValue))) return String(kpi.dayValue);
     const latest = latestTrendPoint(kpi);
     if (latest?.valueLabel) return latest.valueLabel;
     if (Number.isFinite(Number(latest?.value))) return String(latest.value);
@@ -1200,6 +1230,8 @@
   }
 
   function monthToDateValueLabel(kpi = {}) {
+    if (kpi.monthToDateValueLabel) return kpi.monthToDateValueLabel;
+    if (Number.isFinite(Number(kpi.monthToDateValue))) return String(kpi.monthToDateValue);
     return kpi.value || dayValueLabel(kpi);
   }
 
