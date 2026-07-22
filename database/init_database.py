@@ -24,7 +24,7 @@ DEFAULT_USER_PASSWORD = os.environ.get("PMS_DEFAULT_USER_PASSWORD", "Palladium@2
 DEFAULT_KOBO_SERVER_URL = "https://kf.kobotoolbox.org"
 DEFAULT_KOBO_SOURCES = [
     {
-        "uid": "agJCJ2VqwMGNk586NHJ39W",
+        "uid": "ay5PAFNfJ8mzMUEnQELEsp",
         "title": "PMS GMC - Formulaire 1 - Referentiel KPI et formules",
         "source_type": "KoboCollect Referentiel KPI",
         "cadence": "Selon periode",
@@ -61,7 +61,27 @@ DEFAULT_KOBO_SOURCES = [
         "field_type": "Champ referentiel KPI",
     },
     {
-        "uid": "aZ5JcFjcL9YvnQozqHWrqN",
+        "uid": "ae7vJ2AjmXXHQtbFhE2uy3",
+        "title": "PMS GMC - Formulaire Objectifs mensuels",
+        "source_type": "KoboCollect Objectifs mensuels",
+        "cadence": "Mensuel",
+        "fields": {
+            "branch": "pays_filiale",
+            "pole": "pole_id",
+            "kpi": "id_kpi",
+            "period": "periode_objectif",
+            "target": "objectif_mensuel",
+            "unit": "unite_mesure",
+            "frequency": "frequence_objectif",
+            "distributionMode": "mode_repartition",
+            "sourceData": "source_objectif",
+            "responsible": "responsable_objectif",
+            "validation": "validation_hierarchique",
+        },
+        "field_type": "Champ objectifs mensuels",
+    },
+    {
+        "uid": "aWSxs5BEweHPnubKNb7a3g",
         "title": "PMS GMC - Formulaire 2 - Donnees de calcul journalieres",
         "source_type": "KoboCollect Donnees de calcul",
         "cadence": "Journalier",

@@ -71,9 +71,9 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
   - `PMS_GMC_Formulaire_Objectifs_Mensuels_2026.xlsx` pour les objectifs mensuels officiels par pays / filiale, pole, KPI et mois.
   - `PMS_GMC_Formulaire_2_Donnees_Calcul_Journalieres_2026.xlsx` pour les donnees brutes journalieres de calcul.
 - Les formulaires publies dans KoboToolbox sont preconfigures quand leur UID est connu :
-  - Formulaire 1 UID `agJCJ2VqwMGNk586NHJ39W`.
-  - Formulaire Objectifs mensuels : UID a renseigner apres import KoboToolbox.
-  - Formulaire 2 UID `aZ5JcFjcL9YvnQozqHWrqN`.
+  - Formulaire 1 UID `ay5PAFNfJ8mzMUEnQELEsp`.
+  - Formulaire Objectifs mensuels UID `ae7vJ2AjmXXHQtbFhE2uy3`.
+  - Formulaire 2 UID `aWSxs5BEweHPnubKNb7a3g`.
 - Pour une synchronisation automatique, ajouter le token dans Render comme variable d'environnement secrete `PMS_KOBO_API_TOKEN`.
 - Sur Render gratuit, la base SQLite locale peut etre recreee apres redeploiement ou redemarrage. La plateforme reconstruit donc automatiquement la connexion Kobo au demarrage depuis les variables Render :
   - `PMS_KOBO_SERVER_URL` : serveur Kobo, par defaut `https://kf.kobotoolbox.org`.

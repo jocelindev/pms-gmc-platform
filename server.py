@@ -52,12 +52,18 @@ KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS_DEFAULT = 8
 KOBO_AUTO_SYNC_ROLES = ("referentielKpi", "objectifsMensuels", "donneesCalcul")
 KOBO_TOKEN_ENV_KEYS = ("PMS_KOBO_API_TOKEN", "KOBO_API_TOKEN")
 KOBO_SERVER_ENV_KEYS = ("PMS_KOBO_SERVER_URL", "KOBO_SERVER_URL")
-REFERENCE_KOBO_CURRENT_UID = "agJCJ2VqwMGNk586NHJ39W"
-REFERENCE_KOBO_OLD_UIDS = ("auGyH8vhCsK9KKtG2fu2u5",)
+REFERENCE_KOBO_CURRENT_UID = "ay5PAFNfJ8mzMUEnQELEsp"
+REFERENCE_KOBO_OLD_UIDS = ("agJCJ2VqwMGNk586NHJ39W", "auGyH8vhCsK9KKtG2fu2u5")
 REFERENCE_KOBO_TITLE = "PMS GMC - Formulaire 1 - Referentiel KPI et formules"
 REFERENCE_KOBO_SOURCE_TYPE = "KoboCollect Referentiel KPI"
 REFERENCE_KOBO_DEFAULT_SERVER = "https://kf.kobotoolbox.org"
-CALCULATION_KOBO_DEFAULT_UID = "aZ5JcFjcL9YvnQozqHWrqN"
+OBJECTIVES_KOBO_DEFAULT_UID = "ae7vJ2AjmXXHQtbFhE2uy3"
+CALCULATION_KOBO_DEFAULT_UID = "aWSxs5BEweHPnubKNb7a3g"
+KOBO_UID_REPLACEMENTS = {
+    "agJCJ2VqwMGNk586NHJ39W": REFERENCE_KOBO_CURRENT_UID,
+    "auGyH8vhCsK9KKtG2fu2u5": REFERENCE_KOBO_CURRENT_UID,
+    "aZ5JcFjcL9YvnQozqHWrqN": CALCULATION_KOBO_DEFAULT_UID,
+}
 ENV_KOBO_SOURCE_DEFINITIONS = (
     {
         "role": "referentielKpi",
@@ -103,7 +109,7 @@ ENV_KOBO_SOURCE_DEFINITIONS = (
         "role": "objectifsMensuels",
         "env_keys": ("PMS_KOBO_OBJECTIVES_FORM_UID", "PMS_KOBO_OBJECTIVE_FORM_UID", "KOBO_OBJECTIVES_FORM_UID"),
         "server_env_keys": ("PMS_KOBO_OBJECTIVES_SERVER_URL", "PMS_KOBO_OBJECTIVE_SERVER_URL"),
-        "default_uid": "",
+        "default_uid": OBJECTIVES_KOBO_DEFAULT_UID,
         "title": "PMS GMC - Formulaire Objectifs mensuels",
         "source_type": "KoboCollect Objectifs mensuels",
         "cadence": "Mensuel",
@@ -1851,6 +1857,7 @@ def configured_kobo_sources_from_env() -> list[dict]:
     for definition in ENV_KOBO_SOURCE_DEFINITIONS:
         form_uid, uid_env = first_env_value(definition["env_keys"])
         form_uid = form_uid or definition.get("default_uid", "")
+        form_uid = KOBO_UID_REPLACEMENTS.get(form_uid, form_uid)
         if not form_uid:
             continue
         role_server, _role_server_env = first_env_value(definition.get("server_env_keys", ()))
