@@ -1015,6 +1015,24 @@
     feedback.className = `login-feedback ${type}`.trim();
   }
 
+  function normalizeLoginErrorMessage(error) {
+    const message = error?.message || "";
+    const lowerMessage = message.toLowerCase();
+    if (lowerMessage.includes("utilisateur introuvable")) {
+      return "Identifiant introuvable. Verifiez l'email, le nom utilisateur ou demandez la creation du compte.";
+    }
+    if (lowerMessage.includes("mot de passe incorrect")) {
+      return "Mot de passe incorrect. Verifiez la saisie ou demandez une reinitialisation a l'administrateur PMS.";
+    }
+    if (lowerMessage.includes("inactif")) {
+      return "Compte inactif. Contactez l'administrateur PMS pour reactiver l'acces.";
+    }
+    if (lowerMessage.includes("failed to fetch") || lowerMessage.includes("load failed")) {
+      return "Serveur indisponible pour le moment. Patientez quelques secondes puis reessayez.";
+    }
+    return message || "Connexion impossible. Verifiez vos informations puis reessayez.";
+  }
+
   function loadSavedSession() {
     try {
       return JSON.parse(window.sessionStorage.getItem("pmsSession") || "null");
@@ -1217,6 +1235,19 @@
   function bindAuthActions() {
     const form = $("#login-form");
     const logout = $("#logout-button");
+    const passwordInput = $("#login-password");
+    const passwordToggle = $("#login-password-toggle");
+
+    if (passwordInput && passwordToggle) {
+      passwordToggle.addEventListener("click", () => {
+        const showPassword = passwordInput.type === "password";
+        passwordInput.type = showPassword ? "text" : "password";
+        passwordToggle.textContent = showPassword ? "Masquer" : "Afficher";
+        passwordToggle.setAttribute("aria-label", showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe");
+        passwordToggle.setAttribute("aria-pressed", String(showPassword));
+        passwordInput.focus();
+      });
+    }
 
     if (form) {
       form.addEventListener("submit", async (event) => {
@@ -1245,7 +1276,7 @@
           applyAuthenticatedSession(session);
         } catch (error) {
           console.warn("Connexion refusee.", error);
-          setLoginFeedback(error.message || "Connexion impossible.", "error");
+          setLoginFeedback(normalizeLoginErrorMessage(error), "error");
         } finally {
           $("#login-submit").disabled = false;
         }

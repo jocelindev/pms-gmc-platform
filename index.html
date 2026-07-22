@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=login-refresh-20260722" />
+    <link rel="stylesheet" href="styles.css?v=login-polish-20260722" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -29,6 +29,11 @@
           <span>Donnees Kobo</span>
           <span>Vue par pole</span>
         </div>
+        <div class="login-access-panel">
+          <span>Acces collaborateur</span>
+          <strong>Un espace adapte a votre role</strong>
+          <p>Vos tableaux de bord, poles et actions disponibles sont appliques automatiquement apres connexion.</p>
+        </div>
         <form class="login-form" id="login-form">
           <label>
             Identifiant
@@ -42,13 +47,25 @@
           </label>
           <label>
             Mot de passe
-            <input
-              id="login-password"
-              type="password"
-              autocomplete="current-password"
-              placeholder="Mot de passe utilisateur"
-              required
-            />
+            <span class="password-input-wrap">
+              <input
+                id="login-password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="Mot de passe utilisateur"
+                required
+              />
+              <button
+                class="password-toggle"
+                id="login-password-toggle"
+                type="button"
+                aria-controls="login-password"
+                aria-label="Afficher le mot de passe"
+                aria-pressed="false"
+              >
+                Afficher
+              </button>
+            </span>
           </label>
           <button class="primary-action login-submit" id="login-submit" type="submit">
             Se connecter
@@ -56,6 +73,7 @@
           <div class="login-feedback" id="login-feedback" role="status" aria-live="polite">
             Utilisez le mot de passe fourni par l'administrateur.
           </div>
+          <p class="login-help-line">Acces non cree ou mot de passe perdu ? Contactez l'administrateur PMS.</p>
         </form>
         <div class="login-security-note">
           <strong>Confidentialite</strong>
@@ -1498,9 +1516,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=login-refresh-20260722"></script>
-    <script src="scripts/renderers.js?v=login-refresh-20260722"></script>
-    <script src="scripts/api.js?v=login-refresh-20260722"></script>
-    <script src="app.js?v=login-refresh-20260722"></script>
+    <script src="scripts/data.js?v=login-polish-20260722"></script>
+    <script src="scripts/renderers.js?v=login-polish-20260722"></script>
+    <script src="scripts/api.js?v=login-polish-20260722"></script>
+    <script src="app.js?v=login-polish-20260722"></script>
   </body>
 </html>

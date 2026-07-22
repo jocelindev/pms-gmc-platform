@@ -150,6 +150,41 @@ button {
   padding: 7px 10px;
 }
 
+.login-access-panel {
+  background: linear-gradient(135deg, rgba(31, 56, 100, 0.06), rgba(214, 168, 56, 0.1));
+  border: 1px solid rgba(31, 56, 100, 0.13);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 13px;
+}
+
+.login-access-panel span,
+.login-access-panel strong,
+.login-access-panel p {
+  display: block;
+}
+
+.login-access-panel span {
+  color: var(--palladium-gold);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.login-access-panel strong {
+  color: var(--palladium-blue);
+  font-size: 14px;
+}
+
+.login-access-panel p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
 .login-form {
   display: grid;
   gap: 16px;
@@ -179,6 +214,38 @@ button {
   outline: none;
 }
 
+.password-input-wrap {
+  display: block;
+  position: relative;
+}
+
+.password-input-wrap input {
+  padding-right: 96px;
+  width: 100%;
+}
+
+.password-toggle {
+  background: rgba(31, 56, 100, 0.06);
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-radius: 999px;
+  color: var(--palladium-blue);
+  font-size: 12px;
+  font-weight: 900;
+  min-height: 30px;
+  padding: 0 10px;
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  background: rgba(214, 168, 56, 0.16);
+  border-color: rgba(214, 168, 56, 0.45);
+  outline: none;
+}
+
 .login-submit {
   width: 100%;
   margin-top: 4px;
@@ -196,6 +263,14 @@ button {
   padding: 10px 12px;
   font-size: 13px;
   line-height: 1.35;
+}
+
+.login-help-line {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: -4px 0 0;
+  text-align: center;
 }
 
 .login-feedback.error {
