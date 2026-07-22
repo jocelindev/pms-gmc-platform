@@ -1258,6 +1258,19 @@
     return metric.className === "positive" || metric.className === "neutral";
   }
 
+  function averageTargetAchievement(rows = []) {
+    const values = rows
+      .map((row) => {
+        const explicit = Number(row.kpi.vsTargetValue);
+        if (Number.isFinite(explicit)) return explicit;
+        const metric = metricFromTarget(row.kpi);
+        return parseMetricNumber(metric.display);
+      })
+      .filter((value) => Number.isFinite(value));
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  }
+
   function dashboardCellScore(pole = {}, country = {}) {
     if (!poleAvailableForCountry(pole, country)) {
       return null;
@@ -1288,6 +1301,14 @@
     const knownTargets = context.kpiRows.filter(targetKnown);
     const reachedTargets = knownTargets.filter(targetReached).length;
     const objectiveRate = knownTargets.length ? Math.round((reachedTargets / knownTargets.length) * 100) : 0;
+    const targetAchievement = averageTargetAchievement(knownTargets);
+    const targetAchievementClass = !Number.isFinite(targetAchievement)
+      ? "gray"
+      : targetAchievement >= 100
+        ? "green"
+        : targetAchievement >= 90
+          ? "amber"
+          : "red";
     const hasData = selectedPole ? hasPoleData(selectedPole) : false;
     const score = hasData ? Number(selectedPole.score || 0) : null;
     const quality = hasData ? Number(selectedPole.quality || 0) : null;
@@ -1302,10 +1323,16 @@
       { label: "KPI suivis", value: totalKpis, hint: `${pendingCount} en attente Kobo`, className: pendingCount ? "amber" : "green" },
       { label: "KPI critiques", value: redCount, hint: `${amberCount} KPI orange`, className: redCount ? "red" : amberCount ? "amber" : "green" },
       {
-        label: "Vs objectifs",
-        value: hasData ? `${objectiveRate}%` : "--",
-        hint: hasData ? `${reachedTargets}/${knownTargets.length || 0} cibles atteintes` : "calcul apres collecte",
+        label: "Cibles atteintes",
+        value: hasData ? `${reachedTargets}/${knownTargets.length || 0}` : "--",
+        hint: hasData ? `${objectiveRate}% des KPI avec cible` : "calcul apres collecte",
         className: hasData ? (objectiveRate >= 80 ? "green" : objectiveRate >= 65 ? "amber" : "red") : "gray",
+      },
+      {
+        label: "Atteinte moyenne",
+        value: hasData && Number.isFinite(targetAchievement) ? formatRatioPercent(targetAchievement) : "--",
+        hint: hasData ? "moyenne des Vs Target" : "calcul apres collecte",
+        className: hasData ? targetAchievementClass : "gray",
       },
       {
         label: "Qualite Kobo",
