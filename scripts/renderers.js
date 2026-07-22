@@ -244,14 +244,18 @@
     "anomalie",
     "creance",
     "cout",
+    "defaut",
     "delai",
     "dmt",
     "duree",
     "erreur",
+    "escalade",
     "incident",
     "indisponibilite",
     "malus",
     "mttr",
+    "oos",
+    "out of stock",
     "perte",
     "retard",
     "risque",
@@ -276,9 +280,16 @@
   }
 
   function isLowerBetterKpi(kpi = {}) {
+    const direction = normalizeLookup(kpi.performanceDirection || kpi.sensPerformance || kpi.orientationPerformance || "");
+    if (direction.includes("lowerbetter") || direction.includes("baisse") || direction.includes("plus bas") || direction.includes("moins mieux")) {
+      return true;
+    }
+    if (direction.includes("higherbetter") || direction.includes("hausse") || direction.includes("plus haut")) {
+      return false;
+    }
     const target = String(kpi.target || "");
     const normalized = normalizeLookup(`${kpi.name || ""} ${kpi.category || ""} ${kpi.formula || ""} ${target}`);
-    return target.includes("<") || LOWER_BETTER_TERMS.some((term) => normalized.includes(term));
+    return target.includes("<") || target.includes("≤") || LOWER_BETTER_TERMS.some((term) => normalized.includes(term));
   }
 
   function targetValueForKpi(kpi = {}) {
@@ -3118,6 +3129,7 @@
         unit: "#admin-kobo-reference-unit-field",
         formula: "#admin-kobo-reference-formula-field",
         target: "#admin-kobo-reference-target-field",
+        performanceDirection: "#admin-kobo-reference-performance-direction-field",
         collectionFrequency: "#admin-kobo-reference-collection-frequency-field",
         reportingFrequency: "#admin-kobo-reference-reporting-frequency-field",
         sourceData: "#admin-kobo-reference-source-field",

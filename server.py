@@ -189,15 +189,24 @@ LOWER_IS_BETTER_TERMS = {
     "absenteisme",
     "anomalie",
     "creance",
+    "cout",
+    "defaut",
     "delai",
+    "dmt",
     "duree",
     "erreur",
+    "escalade",
     "incident",
     "indisponibilite",
+    "malus",
+    "mttr",
+    "oos",
+    "out of stock",
     "perte",
     "retard",
     "risque",
     "rupture",
+    "turnover",
 }
 
 
@@ -2133,9 +2142,9 @@ def month_key_from_date(value: dt.date | None) -> str:
 
 def target_comparator(target: str) -> str:
     text = str(target or "")
-    if "<=" in text:
+    if "<=" in text or "≤" in text:
         return "<="
-    if ">=" in text:
+    if ">=" in text or "≥" in text:
         return ">="
     if "<" in text:
         return "<"
@@ -2162,6 +2171,30 @@ def should_prorate_monthly_target(reference: dict, objective: dict | None = None
     if "%" in raw_text or any(term in normalized for term in ("taux", "ratio", "sla", "csat", "score", "qualite", "satisfaction", "dmt", "delai", "mttr")):
         return False
     return any(term in normalized for term in ("montant", "fcfa", "xof", "chiffre affaires", " ca ", "vente", "sales", "nombre", "nb", "quantite", "volume", "production", "appel", "ticket", "contrat", "livrable", "dossier"))
+
+
+def infer_performance_direction(raw_direction: str = "", kpi_name: str = "", formula: str = "", target: str = "") -> str:
+    normalized_direction = normalize_match_key(raw_direction)
+    if any(term in normalized_direction for term in ("baisse favorable", "baisse", "plus bas mieux", "moins mieux", "lower better", "lower is better")):
+        return "lowerBetter"
+    if any(term in normalized_direction for term in ("zone cible", "zone", "intervalle", "range", "entre")):
+        return "targetRange"
+    if any(term in normalized_direction for term in ("hausse favorable", "hausse", "plus haut mieux", "higher better", "higher is better")):
+        return "higherBetter"
+
+    target_text = str(target or "")
+    normalized_target = normalize_match_key(target_text)
+    if any(operator in target_text for operator in ("<", "≤")) or any(term in normalized_target for term in ("maximum", "max", "inferieur")):
+        return "lowerBetter"
+    if any(operator in target_text for operator in (">", "≥")) or any(term in normalized_target for term in ("minimum", "min", "superieur")):
+        return "higherBetter"
+    if re.search(r"\d\s*[-–]\s*\d", target_text):
+        return "targetRange"
+
+    context = normalize_match_key(f"{kpi_name} {formula}")
+    if any(term in context for term in LOWER_IS_BETTER_TERMS):
+        return "lowerBetter"
+    return "higherBetter"
 
 
 def effective_target_for_group(reference: dict, objective: dict | None, group: dict) -> dict:
@@ -2232,28 +2265,29 @@ def format_calculated_value(value: float, unit: str) -> str:
     return format_number(value)
 
 
-def parse_target_rule(target: str, kpi_name: str = "", formula: str = "") -> dict:
+def parse_target_rule(target: str, kpi_name: str = "", formula: str = "", performance_direction: str = "") -> dict:
     target_text = str(target or "")
     normalized = normalize_match_key(target_text)
     numbers = [parse_number(match) for match in re.findall(r"[-+]?\d+(?:[,.]\d+)?", target_text)]
     numbers = [number for number in numbers if number is not None]
-    lower_better = "<" in target_text or any(term in normalize_match_key(f"{kpi_name} {formula}") for term in LOWER_IS_BETTER_TERMS)
+    direction = infer_performance_direction(performance_direction, kpi_name, formula, target_text)
+    lower_better = direction == "lowerBetter"
 
     if not numbers:
-        return {"mode": "none", "value": None, "lowerBetter": lower_better}
-    if "<" in target_text or "maximum" in normalized or "max" in normalized:
-        return {"mode": "max", "value": numbers[0], "lowerBetter": True}
-    if ">" in target_text or "minimum" in normalized or "min" in normalized:
-        return {"mode": "min", "value": numbers[0], "lowerBetter": False}
+        return {"mode": "none", "value": None, "lowerBetter": lower_better, "direction": direction}
+    if "<" in target_text or "≤" in target_text or "maximum" in normalized or "max" in normalized:
+        return {"mode": "max", "value": numbers[0], "lowerBetter": True, "direction": "lowerBetter"}
+    if ">" in target_text or "≥" in target_text or "minimum" in normalized or "min" in normalized:
+        return {"mode": "min", "value": numbers[0], "lowerBetter": False, "direction": "higherBetter"}
     if len(numbers) >= 2 and re.search(r"\d\s*[-–]\s*\d", target_text):
-        return {"mode": "range", "min": min(numbers[:2]), "max": max(numbers[:2]), "lowerBetter": False}
-    return {"mode": "max" if lower_better else "min", "value": numbers[0], "lowerBetter": lower_better}
+        return {"mode": "range", "min": min(numbers[:2]), "max": max(numbers[:2]), "lowerBetter": False, "direction": "targetRange"}
+    return {"mode": "max" if lower_better else "min", "value": numbers[0], "lowerBetter": lower_better, "direction": direction}
 
 
-def rag_status(value: float | None, target: str, kpi_name: str = "", formula: str = "") -> str:
+def rag_status(value: float | None, target: str, kpi_name: str = "", formula: str = "", performance_direction: str = "") -> str:
     if value is None:
         return "gray"
-    rule = parse_target_rule(target, kpi_name, formula)
+    rule = parse_target_rule(target, kpi_name, formula, performance_direction)
     mode = rule.get("mode")
     if mode == "none":
         return "gray"
@@ -2285,14 +2319,22 @@ def rag_status(value: float | None, target: str, kpi_name: str = "", formula: st
 
 
 def normalize_formula_expression(formula: str) -> str:
-    normalized = unicodedata.normalize("NFD", str(formula or ""))
+    raw_formula = str(formula or "").replace("×", " * ").replace("÷", " / ")
+    normalized = unicodedata.normalize("NFD", raw_formula)
     text = normalized.encode("ascii", "ignore").decode("ascii").lower()
-    text = text.replace("×", "*").replace("÷", "/")
+    if "=" in text:
+        text = text.split("=", 1)[1]
+    text = re.sub(r"\(\s*(?:%|pourcentage|percent|fcfa|xof|montant|minutes?|mins?|jours?|jour|nombre|quantite)\s*\)", "", text)
     text = re.sub(r"(?<=\d),(?=\d)", ".", text)
+    text = re.sub(r"\bdivise(?:e)?\s+par\b", " / ", text)
+    text = re.sub(r"\bmultiplie(?:e)?\s+par\b", " * ", text)
+    text = re.sub(r"\bmoins\b", " - ", text)
+    text = re.sub(r"\bplus\b", " + ", text)
     text = re.sub(r"(?<=\d|\))\s*[x]\s*(?=\d|\(|[a-z])", " * ", text)
     text = re.sub(r"\bx\b", " * ", text)
     text = re.sub(r"\bfois\b", " * ", text)
     text = re.sub(r"\bpourcent\b|%", "", text)
+    text = re.sub(r"\(\s*\)", "", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
@@ -2360,9 +2402,55 @@ def aggregate_numeric_elements(elements: list[dict]) -> tuple[dict[str, float], 
     return values, raw_numbers
 
 
-def evaluate_kpi_formula(formula: str, elements: list[dict]) -> tuple[float | None, str, list[str]]:
+def add_formula_context_values(element_values: dict[str, float], context_values: dict[str, float] | None) -> None:
+    for label, value in (context_values or {}).items():
+        number = parse_number(value)
+        if number is None:
+            continue
+        key = normalize_match_key(label)
+        if key:
+            element_values.setdefault(key, number)
+
+
+def direct_value_from_elements(element_values: dict[str, float]) -> tuple[float | None, str]:
+    for preferred in ("resultat", "valeur kpi", "kpi value", "realisation", "realise", "score"):
+        preferred_key = normalize_match_key(preferred)
+        for label, value in element_values.items():
+            if preferred_key in label:
+                return value, "Valeur KPI directe"
+
+    if len(element_values) == 1:
+        label, value = next(iter(element_values.items()))
+        return value, f"Valeur unique Kobo: {label}"
+    return None, "Calcul a verifier"
+
+
+def missing_formula_tokens(expression: str) -> list[str]:
+    tokens = re.findall(r"\b(?!v\d+\b)[a-z_][a-z0-9_]*\b", expression)
+    ignored = {"if", "and", "or"}
+    return sorted({token for token in tokens if token not in ignored})
+
+
+def formula_result_requires_percent_scaling(formula: str, expression: str, unit: str, result: float) -> bool:
+    if abs(result) > 1:
+        return False
+    unit_text = str(unit or "")
+    normalized_unit = normalize_match_key(unit_text)
+    if "%" not in unit_text and "(%)" not in str(formula or "") and "pourcentage" not in normalized_unit:
+        return False
+    compact_expression = re.sub(r"\s+", "", expression)
+    return "/" in compact_expression and "*100" not in compact_expression and "100*" not in compact_expression
+
+
+def evaluate_kpi_formula(
+    formula: str,
+    elements: list[dict],
+    context_values: dict[str, float] | None = None,
+    unit: str = "",
+) -> tuple[float | None, str, list[str]]:
     warnings: list[str] = []
     element_values, raw_numbers = aggregate_numeric_elements(elements)
+    add_formula_context_values(element_values, context_values)
     formula_key = normalize_match_key(formula)
     if not element_values:
         return None, "Aucune valeur numerique", ["Aucune valeur numerique exploitable dans le formulaire donnees."]
@@ -2371,6 +2459,11 @@ def evaluate_kpi_formula(formula: str, elements: list[dict]) -> tuple[float | No
         return sum(raw_numbers) / len(raw_numbers), "Moyenne des elements Kobo", warnings
 
     if formula:
+        if len(raw_numbers) == 1:
+            single_value = raw_numbers[0]
+            for alias in ("realise", "realisation", "valeur realisee", "valeur du jour"):
+                element_values.setdefault(normalize_match_key(alias), single_value)
+
         expression = normalize_formula_expression(formula)
         variables: dict[str, float] = {}
         for index, label in enumerate(sorted(element_values, key=len, reverse=True)):
@@ -2383,19 +2476,23 @@ def evaluate_kpi_formula(formula: str, elements: list[dict]) -> tuple[float | No
         if variables and not re.search(r"\b(?!v\d+\b)[a-z_]+\b", expression):
             result = safe_eval_expression(expression, variables)
             if result is not None:
-                return result, "Formule catalogue appliquee", warnings
-        warnings.append("Formule non interpretee automatiquement: verifier les libelles des elements.")
+                if formula_result_requires_percent_scaling(formula, expression, unit, result):
+                    return result * 100, "Formule Kobo appliquee, ratio affiche en pourcentage", warnings
+                return result, "Formule Kobo appliquee", warnings
+        direct_terms = ("valeur directe", "saisie directe", "resultat direct", "realisation directe")
+        if any(term in formula_key for term in direct_terms):
+            direct_value, direct_method = direct_value_from_elements(element_values)
+            if direct_value is not None:
+                return direct_value, direct_method, warnings
+        missing_tokens = missing_formula_tokens(expression)
+        missing_label = ", ".join(missing_tokens[:5]) if missing_tokens else "libelles non reconnus"
+        return None, "Formule Kobo non interpretee", [
+            f"Formule Kobo non appliquee: champs manquants ou non alignes ({missing_label})."
+        ]
 
-    for preferred in ("resultat", "valeur kpi", "kpi value", "realisation", "score"):
-        preferred_key = normalize_match_key(preferred)
-        for label, value in element_values.items():
-            if preferred_key in label:
-                return value, "Valeur KPI directe", warnings
-
-    if len(element_values) == 1:
-        label, value = next(iter(element_values.items()))
-        return value, f"Valeur unique Kobo: {label}", warnings
-
+    direct_value, direct_method = direct_value_from_elements(element_values)
+    if direct_value is not None:
+        return direct_value, direct_method, warnings
     return None, "Calcul a verifier", warnings or ["Plusieurs elements trouves, mais aucune formule exploitable."]
 
 
@@ -2771,14 +2868,25 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             quality["warnings"].append("Reference KPI ignoree: pole ou KPI non reconnu.")
             continue
 
+        formula = text_or_empty(mapped_submission_value(reference_source, payload, "formula", ["formule_de_calcul", "formule"]))
+        target = text_or_empty(mapped_submission_value(reference_source, payload, "target", ["valeur_cible", "seuil_cible", "objectif", "objectif_cible"]))
+        raw_performance_direction = text_or_empty(
+            mapped_submission_value(
+                reference_source,
+                payload,
+                "performanceDirection",
+                ["sens_performance", "sens_de_performance", "orientation_performance", "orientation", "sens"],
+            )
+        )
         record = {
             "branch": branch,
             "branchKey": branch_key,
             "poleId": pole_id,
             "kpiId": kpi_code or normalize_match_key(kpi_name).upper(),
             "kpiName": kpi_name or kpi_code,
-            "formula": text_or_empty(mapped_submission_value(reference_source, payload, "formula", ["formule_de_calcul", "formule"])),
-            "target": text_or_empty(mapped_submission_value(reference_source, payload, "target", ["valeur_cible", "seuil_cible", "objectif", "objectif_cible"])),
+            "formula": formula,
+            "target": target,
+            "performanceDirection": infer_performance_direction(raw_performance_direction, kpi_name, formula, target),
             "type": text_or_empty(mapped_submission_value(reference_source, payload, "type", ["type_de_kpi", "type_kpi"])),
             "unit": text_or_empty(mapped_submission_value(reference_source, payload, "unit", ["unite_de_mesure", "unite"])),
             "sourceData": text_or_empty(
@@ -3150,6 +3258,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     "monthlyTarget": linked_objective["target"] if linked_objective else "",
                     "unit": linked_objective.get("unit") or record["unit"] if linked_objective else record["unit"],
                     "formula": record["formula"] or "Formule a completer",
+                    "performanceDirection": record.get("performanceDirection", "higherBetter"),
                     "source": reference_source["formId"],
                     "sourceData": record["sourceData"],
                     "owner": record["owner"],
@@ -3175,18 +3284,43 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
 
         if not is_month_to_date:
             quality["matchedCalculationGroups"] += 1
-        value, method, formula_warnings = evaluate_kpi_formula(reference["formula"], group["elements"])
+        objective = objective_for_group(reference, group)
+        target_info = effective_target_for_group(reference, objective, group)
+        formula_context = {}
+        if target_info["numeric"] is not None:
+            formula_context = {
+                "objectif": target_info["numeric"],
+                "objectif kpi": target_info["numeric"],
+                "objectif mensuel": target_info["numeric"],
+                "objectif a date": target_info["numeric"],
+                "cible": target_info["numeric"],
+                "target": target_info["numeric"],
+            }
+        value, method, formula_warnings = evaluate_kpi_formula(
+            reference["formula"],
+            group["elements"],
+            context_values=formula_context,
+            unit=objective.get("unit") or reference["unit"] if objective else reference["unit"],
+        )
         if value is None:
             if not is_month_to_date:
                 quality["uncalculatedCount"] += 1
                 quality["warnings"].extend(formula_warnings[:1])
             continue
 
-        objective = objective_for_group(reference, group)
-        target_info = effective_target_for_group(reference, objective, group)
         if not objective and not is_month_to_date:
             quality["missingMonthlyObjectiveCount"] += 1
-        status = rag_status(value, target_info["label"], reference["kpiName"], reference["formula"]) if target_info["statusReady"] else "gray"
+        status = (
+            rag_status(
+                value,
+                target_info["label"],
+                reference["kpiName"],
+                reference["formula"],
+                reference.get("performanceDirection", ""),
+            )
+            if target_info["statusReady"]
+            else "gray"
+        )
         result = {
             "id": f"{group.get('branchKey') or 'groupe'}:{group['poleId']}:{reference['kpiId']}:{normalize_submission_key(group['period'])}",
             "branch": group.get("branch") or "Groupe",
@@ -3205,6 +3339,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "monthlyTarget": target_info["monthlyLabel"],
             "targetValue": round(target_info["numeric"], 4) if target_info["numeric"] is not None else None,
             "targetMode": target_info["mode"],
+            "performanceDirection": reference.get("performanceDirection", "higherBetter"),
             "unit": objective.get("unit") or reference["unit"] if objective else reference["unit"],
             "status": status,
             "trend": "Calcul Kobo",

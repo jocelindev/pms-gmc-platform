@@ -580,6 +580,7 @@
         monthlyTarget: result.monthlyTarget,
         targetValue: result.targetValue,
         targetMode: result.targetMode,
+        performanceDirection: result.performanceDirection || "",
         status: result.status,
       });
       historyByKpi.set(key, history);
@@ -609,6 +610,7 @@
           pendingCalculation: true,
           period: "A calculer",
           formula: kpi.formula,
+          performanceDirection: kpi.performanceDirection || "",
           method: kpi.method || "Donnees de calcul attendues",
           trendHistory: historyByKpi.get(kpiHistoryKey(kpi)) || [],
         });
@@ -639,6 +641,7 @@
         calculated: true,
         period: state.calendar?.label || result.period,
         formula: result.formula,
+        performanceDirection: result.performanceDirection || "",
         method: result.method,
         elementsCount: result.elementsCount,
         trendHistory: scopedHistory,
@@ -2111,6 +2114,7 @@
       { mappedTo: "unit", inputId: "#admin-kobo-reference-unit-field", defaultValue: "unite_de_mesure" },
       { mappedTo: "formula", inputId: "#admin-kobo-reference-formula-field", defaultValue: "formule_de_calcul" },
       { mappedTo: "target", inputId: "#admin-kobo-reference-target-field", defaultValue: "valeur_cible" },
+      { mappedTo: "performanceDirection", inputId: "#admin-kobo-reference-performance-direction-field", defaultValue: "sens_performance" },
       { mappedTo: "collectionFrequency", inputId: "#admin-kobo-reference-collection-frequency-field", defaultValue: "frequence_de_collecte" },
       { mappedTo: "reportingFrequency", inputId: "#admin-kobo-reference-reporting-frequency-field", defaultValue: "periodicite_du_reporting" },
       { mappedTo: "sourceData", inputId: "#admin-kobo-reference-source-field", defaultValue: "source_de_la_donnee" },
