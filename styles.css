@@ -933,6 +933,25 @@ textarea {
   box-shadow: 0 10px 28px rgba(31, 56, 100, 0.06);
 }
 
+button.dashboard-control-card {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.dashboard-control-card.score-toggle {
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.dashboard-control-card.score-toggle:hover,
+.dashboard-control-card.score-toggle:focus-visible {
+  box-shadow: 0 14px 34px rgba(31, 56, 100, 0.12);
+  outline: 2px solid rgba(214, 168, 56, 0.32);
+  outline-offset: 2px;
+  transform: translateY(-1px);
+}
+
 .dashboard-control-card.status-green {
   border-top-color: var(--green-text);
 }
@@ -958,6 +977,67 @@ textarea {
   color: var(--palladium-blue);
   font-size: 30px;
   margin: 7px 0 4px;
+}
+
+.dashboard-score-detail {
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-left: 4px solid var(--palladium-gold);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 28px rgba(31, 56, 100, 0.06);
+  margin: -2px 0 16px;
+  padding: 14px;
+}
+
+.score-detail-main {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.score-detail-main span,
+.score-detail-grid span,
+.score-detail-grid small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.score-detail-main strong {
+  display: block;
+  color: var(--palladium-blue);
+  font-size: 1.05rem;
+  margin-top: 4px;
+}
+
+.score-detail-main p {
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 6px 0 0;
+}
+
+.score-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.score-detail-grid div {
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 10px;
+}
+
+.score-detail-grid strong {
+  display: block;
+  color: var(--palladium-blue);
+  font-size: 1.1rem;
+  margin: 4px 0;
 }
 
 .dashboard-focus-panel,

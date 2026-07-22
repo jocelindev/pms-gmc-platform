@@ -1319,6 +1319,7 @@
         value: metricValueOrPending(selectedPole, score),
         hint: hasData ? selectedPole?.owner || "Responsable a definir" : "donnees Kobo attendues",
         className: metricClassOrPending(selectedPole, score),
+        scoreToggle: true,
       },
       { label: "KPI suivis", value: totalKpis, hint: `${pendingCount} en attente Kobo`, className: pendingCount ? "amber" : "green" },
       { label: "KPI critiques", value: redCount, hint: `${amberCount} KPI orange`, className: redCount ? "red" : amberCount ? "amber" : "green" },
@@ -1348,14 +1349,70 @@
     target.innerHTML = cards
       .map(
         (card) => `
-          <article class="dashboard-control-card status-${escapeHtml(card.className)}">
+          <${card.scoreToggle ? "button" : "article"} class="dashboard-control-card status-${escapeHtml(card.className)}${card.scoreToggle ? " score-toggle" : ""}" ${card.scoreToggle ? 'type="button" data-dashboard-score-toggle="true" aria-expanded="false"' : ""}>
             <span>${escapeHtml(card.label)}</span>
             <strong>${escapeHtml(card.value)}</strong>
             <small>${escapeHtml(card.hint)}</small>
-          </article>
+          </${card.scoreToggle ? "button" : "article"}>
         `
       )
       .join("");
+  }
+
+  function renderDashboardScoreDetail(context, state = {}) {
+    const target = $("#dashboard-score-detail");
+    if (!target) return;
+    const selectedPole = context.selectedPole;
+    const isOpen = Boolean(state.dashboardScoreDetailOpen);
+    target.hidden = !isOpen;
+    const toggle = $('[data-dashboard-score-toggle]');
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", String(isOpen));
+    }
+    if (!isOpen) {
+      target.innerHTML = "";
+      return;
+    }
+
+    const rows = context.kpiRows || [];
+    const dataRows = rows.filter((row) => hasKpiData(row.kpi));
+    const greenCount = dataRows.filter((row) => row.kpi.status === "green").length;
+    const amberCount = dataRows.filter((row) => row.kpi.status === "amber").length;
+    const redCount = dataRows.filter((row) => row.kpi.status === "red").length;
+    const pendingCount = rows.filter((row) => row.kpi.pendingCalculation || row.kpi.status === "gray").length;
+    const knownTargets = rows.filter(targetKnown);
+    const reachedTargets = knownTargets.filter(targetReached).length;
+    const score = selectedPole && hasPoleData(selectedPole) ? Number(selectedPole.score || 0) : null;
+    const scoreLabel = score === null ? "--" : `${Math.round(score)}/100`;
+    const scoreStatus = score === null ? "En attente Kobo" : ragLabel(scoreClass(score));
+    const quality = selectedPole && hasPoleData(selectedPole) ? Number(selectedPole.quality || 0) : null;
+    const lateSubmissions = selectedPole ? Number(selectedPole.lateSubmissions || 0) : 0;
+    const explanation = score === null
+      ? "Le score sera calcule des que les donnees Kobo du pole seront disponibles."
+      : redCount
+        ? "Le score est tire vers le bas par les KPI rouges du pole."
+        : amberCount
+          ? "Le score reste en vigilance a cause des KPI orange ou des objectifs partiellement atteints."
+          : pendingCount
+            ? "Le score est lisible, mais certaines donnees Kobo restent a alimenter."
+            : "Le score est stable sur les KPI calcules du pole.";
+
+    target.innerHTML = `
+      <div class="score-detail-main">
+        <div>
+          <span>Lecture du score</span>
+          <strong>${escapeHtml(scoreLabel)} - ${escapeHtml(scoreStatus)}</strong>
+          <p>${escapeHtml(explanation)}</p>
+        </div>
+        <button class="ghost-action" type="button" data-dashboard-score-toggle="true">Refermer</button>
+      </div>
+      <div class="score-detail-grid">
+        <div><span>KPI calcules</span><strong>${escapeHtml(dataRows.length)}</strong><small>${escapeHtml(pendingCount)} en attente Kobo</small></div>
+        <div><span>Repartition</span><strong>${escapeHtml(greenCount)} V / ${escapeHtml(amberCount)} O / ${escapeHtml(redCount)} R</strong><small>vert, orange, rouge</small></div>
+        <div><span>Cibles</span><strong>${escapeHtml(reachedTargets)}/${escapeHtml(knownTargets.length)}</strong><small>objectifs atteints</small></div>
+        <div><span>Qualite Kobo</span><strong>${escapeHtml(quality === null ? "--" : `${Math.round(quality)}%`)}</strong><small>${escapeHtml(lateSubmissions ? `${lateSubmissions} retard(s)` : "collecte a jour")}</small></div>
+      </div>
+    `;
   }
 
   function dashboardCriticalRows(context, limit = 6) {
@@ -1770,6 +1827,7 @@
   function renderAdvancedDashboard(state = {}) {
     const context = getDashboardPoleContext(state);
     renderDashboardControlCards(context);
+    renderDashboardScoreDetail(context, state);
     renderDashboardAlerts(context, state);
     renderDashboardKpiTable(context);
   }

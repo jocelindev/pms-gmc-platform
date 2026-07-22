@@ -753,6 +753,7 @@
     currentPoleCycle: PMS_DATA.reporting.defaultCycle,
     currentPoleFrequency: "Tous",
     currentDashboardKpiKey: "",
+    dashboardScoreDetailOpen: false,
     currentReportPole: PMS_DATA.reporting.defaultPole,
     currentReportCycle: PMS_DATA.reporting.defaultCycle,
     currentAdminPole: PMS_DATA.reporting.defaultPole,
@@ -1303,6 +1304,15 @@
 
   function bindDashboardActions() {
     document.addEventListener("click", (event) => {
+      const scoreToggle = event.target.closest("[data-dashboard-score-toggle]");
+      if (scoreToggle) {
+        state.dashboardScoreDetailOpen = !state.dashboardScoreDetailOpen;
+        renderAdvancedDashboard(state);
+        if (state.dashboardScoreDetailOpen) {
+          document.getElementById("dashboard-score-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+        return;
+      }
       const detailButton = event.target.closest("[data-dashboard-kpi-detail]");
       if (!detailButton) return;
       state.currentDashboardKpiKey = detailButton.dataset.dashboardKpiDetail;
