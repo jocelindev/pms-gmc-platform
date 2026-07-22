@@ -23,8 +23,8 @@ Le script lit les donnees deja presentes dans `scripts/data.js` puis alimente le
 ## Tables principales
 
 - `users` : responsables, managers, analystes et administrateurs.
-- `profiles` : Administrateur, Direction, Manager / Responsable, Analyste BI.
-- `permissions` et `profile_permissions` : matrice des droits d'acces.
+- `profiles` : Administrateur, PDG / Management, Direction, Manager / Responsable, Analyste BI.
+- `permissions` et `profile_permissions` : matrice des droits d'acces, dont le droit `management` pour la vue PDG.
 - `poles` : poles et directions de suivi KPI.
 - `user_access` : affectation utilisateur par utilisateur, avec pole, profil et dashboard autorise.
 - `kpis` : catalogue KPI par pole.

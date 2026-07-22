@@ -34,7 +34,55 @@ PERMISSION_LABELS = {
     "modification": "Modification",
     "suppression": "Suppression",
     "validation": "Validation",
+    "management": "Management",
     "administration": "Administration",
+}
+DEFAULT_PROFILE_PERMISSIONS = {
+    "Administrateur": {
+        "consultation": True,
+        "ajout": True,
+        "modification": True,
+        "suppression": True,
+        "validation": True,
+        "management": True,
+        "administration": True,
+    },
+    "PDG / Management": {
+        "consultation": True,
+        "ajout": False,
+        "modification": False,
+        "suppression": False,
+        "validation": True,
+        "management": True,
+        "administration": False,
+    },
+    "Direction": {
+        "consultation": True,
+        "ajout": False,
+        "modification": False,
+        "suppression": False,
+        "validation": True,
+        "management": True,
+        "administration": False,
+    },
+    "Manager / Responsable": {
+        "consultation": True,
+        "ajout": True,
+        "modification": True,
+        "suppression": False,
+        "validation": True,
+        "management": False,
+        "administration": False,
+    },
+    "Analyste BI": {
+        "consultation": True,
+        "ajout": True,
+        "modification": True,
+        "suppression": False,
+        "validation": False,
+        "management": False,
+        "administration": False,
+    },
 }
 PASSWORD_ITERATIONS = 210_000
 DEFAULT_ADMIN_PASSWORD = os.environ.get("PMS_ADMIN_PASSWORD", "Admin@2026!")
@@ -741,6 +789,7 @@ def migrate_database(conn: sqlite3.Connection) -> None:
         """,
         (default_hash,),
     )
+    sync_default_profile_permissions(conn)
     if changed or conn.total_changes:
         conn.commit()
 
@@ -772,6 +821,21 @@ def ensure_profile(conn: sqlite3.Connection, profile: str) -> int:
     if not row:
         raise ValueError(f"Profil introuvable: {profile}")
     return int(row["id"])
+
+
+def sync_default_profile_permissions(conn: sqlite3.Connection) -> None:
+    for profile, permissions in DEFAULT_PROFILE_PERMISSIONS.items():
+        profile_id = ensure_profile(conn, profile)
+        for code in PERMISSION_LABELS:
+            permission_id = ensure_permission(conn, code)
+            conn.execute(
+                """
+                INSERT INTO profile_permissions (profile_id, permission_id, allowed)
+                VALUES (?, ?, ?)
+                ON CONFLICT(profile_id, permission_id) DO NOTHING
+                """,
+                (profile_id, permission_id, 1 if permissions.get(code) else 0),
+            )
 
 
 def ensure_user(
@@ -1727,7 +1791,8 @@ def permission_map_for_profile(conn: sqlite3.Connection, profile_id: int) -> dic
 
 
 def access_for_session(conn: sqlite3.Connection, user_id: int, profile: str, permissions: dict) -> list[dict]:
-    if permissions.get("administration"):
+    if permissions.get("administration") or permissions.get("management"):
+        is_admin = bool(permissions.get("administration"))
         rows = conn.execute(
             """
             SELECT id, owner AS responsible, id AS pole_id, name AS pole_name
@@ -1738,14 +1803,16 @@ def access_for_session(conn: sqlite3.Connection, user_id: int, profile: str, per
         return [
             {
                 "id": f"ADMIN-{row['pole_id']}",
-                "responsible": row["responsible"] or "Administrateur PMS",
+                "responsible": row["responsible"] or ("Administrateur PMS" if is_admin else "Management PMS"),
                 "poleId": row["pole_id"],
                 "poleName": row["pole_name"],
                 "branch": "Groupe",
                 "countryName": "Groupe",
                 "role": profile,
                 "dashboardScope": f"Dashboard Suivi KPI - Groupe - {row['pole_name']}",
-                "permission": "Acces administration a tous les pays et poles",
+                "permission": "Acces administration a tous les pays et poles"
+                if is_admin
+                else "Acces management a la vision groupe et aux poles",
                 "status": "Actif",
                 "className": "green",
             }

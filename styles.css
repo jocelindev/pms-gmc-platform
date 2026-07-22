@@ -1086,6 +1086,279 @@ button.dashboard-control-card {
   max-width: 260px;
 }
 
+.management-hero-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  gap: 18px;
+  align-items: stretch;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, var(--palladium-blue), #255b8e);
+  color: #fff;
+}
+
+.management-hero-main {
+  padding: 22px;
+}
+
+.management-hero-main h3 {
+  color: #fff;
+  font-size: 30px;
+  margin: 8px 0;
+}
+
+.management-hero-main p:not(.eyebrow) {
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.5;
+  max-width: 780px;
+}
+
+.management-hero-score {
+  border-left: 1px solid rgba(255, 255, 255, 0.24);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  text-align: center;
+}
+
+.management-hero-score span,
+.management-hero-score small {
+  color: rgba(255, 255, 255, 0.78);
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.management-hero-score strong {
+  color: var(--palladium-gold);
+  display: block;
+  font-size: 46px;
+  line-height: 1;
+  margin: 8px 0;
+}
+
+.management-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.management-summary-card {
+  background: var(--surface);
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-top: 4px solid var(--palladium-blue);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(31, 56, 100, 0.06);
+  padding: 14px;
+}
+
+.management-summary-card.status-green,
+.management-priority-row.status-green,
+.management-country-card.status-green {
+  border-top-color: var(--green-text);
+}
+
+.management-summary-card.status-amber,
+.management-priority-row.status-amber,
+.management-country-card.status-amber {
+  border-top-color: var(--amber-text);
+}
+
+.management-summary-card.status-red,
+.management-priority-row.status-red,
+.management-country-card.status-red {
+  border-top-color: var(--red-text);
+}
+
+.management-summary-card.status-gray,
+.management-priority-row.status-gray,
+.management-country-card.status-gray {
+  border-top-color: var(--muted);
+}
+
+.management-summary-card span,
+.management-summary-card small,
+.management-kobo-stats span,
+.management-kobo-stats small {
+  color: var(--muted);
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.management-summary-card strong {
+  color: var(--palladium-blue);
+  display: block;
+  font-size: 28px;
+  margin: 7px 0 4px;
+}
+
+.management-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.management-priority-list,
+.management-kobo-quality,
+.management-country-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.management-priority-row {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-left: 4px solid var(--palladium-blue);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 110px auto;
+  padding: 12px;
+}
+
+.management-priority-row.status-green {
+  border-left-color: var(--green-text);
+}
+
+.management-priority-row.status-amber {
+  border-left-color: var(--amber-text);
+}
+
+.management-priority-row.status-red {
+  border-left-color: var(--red-text);
+}
+
+.management-priority-row.status-gray {
+  border-left-color: var(--muted);
+}
+
+.management-priority-row strong,
+.management-priority-row small {
+  display: block;
+}
+
+.management-priority-row small {
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.management-priority-meta span {
+  color: var(--muted);
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.management-priority-meta strong {
+  color: var(--palladium-blue);
+  margin-top: 4px;
+}
+
+.management-priority-meta strong.positive {
+  color: var(--green-text);
+}
+
+.management-priority-meta strong.negative {
+  color: var(--red-text);
+}
+
+.management-priority-meta strong.empty {
+  color: var(--muted);
+}
+
+.management-kobo-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.management-kobo-stats div,
+.management-kobo-forms div {
+  background: var(--surface-soft);
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.management-kobo-stats strong {
+  color: var(--palladium-blue);
+  display: block;
+  font-size: 22px;
+  margin: 5px 0 3px;
+}
+
+.management-kobo-forms {
+  display: grid;
+  gap: 8px;
+}
+
+.management-kobo-forms div {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.management-kobo-forms span:last-child {
+  color: var(--palladium-blue);
+  font-weight: 800;
+}
+
+.management-pole-panel {
+  min-width: 0;
+}
+
+.management-pole-table {
+  min-width: 820px;
+}
+
+.management-pole-table td {
+  vertical-align: middle;
+}
+
+.management-country-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.management-country-card {
+  appearance: none;
+  background: #fff;
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-top: 4px solid var(--palladium-blue);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 12px;
+  text-align: left;
+}
+
+.management-country-card:hover,
+.management-country-card:focus-visible {
+  outline: 2px solid rgba(214, 168, 56, 0.32);
+  outline-offset: 2px;
+}
+
+.management-country-card span,
+.management-country-card small {
+  color: var(--muted);
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.management-country-card strong {
+  color: var(--palladium-blue);
+  display: block;
+  font-size: 28px;
+  margin: 6px 0 4px;
+}
+
 .dashboard-command-panel {
   margin-bottom: 16px;
 }
@@ -4097,6 +4370,10 @@ td small {
   .dashboard-control-grid,
   .dashboard-focus-summary,
   .dashboard-alerts-strip,
+  .management-hero-panel,
+  .management-summary-grid,
+  .management-grid,
+  .management-country-grid,
   .dashboard-insights-grid,
   .dashboard-command-grid,
   .kpi-detail-grid,
@@ -4186,6 +4463,12 @@ td small {
   .dashboard-control-grid,
   .dashboard-focus-summary,
   .dashboard-alerts-strip,
+  .management-hero-panel,
+  .management-summary-grid,
+  .management-grid,
+  .management-country-grid,
+  .management-priority-row,
+  .management-kobo-stats,
   .dashboard-insights-grid,
   .dashboard-command-grid,
   .director-brief,
@@ -4258,6 +4541,11 @@ td small {
 
   .report-preview-panel {
     grid-row: auto;
+  }
+
+  .management-hero-score {
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.24);
   }
 
   .report-cover {

@@ -106,6 +106,7 @@ PERMISSIONS = [
     ("modification", "Modification", "Modifier les informations existantes."),
     ("suppression", "Suppression", "Supprimer des donnees ou configurations."),
     ("validation", "Validation", "Valider les KPI, rapports et donnees consolidees."),
+    ("management", "Management", "Acceder a la vision consolidee PDG et Direction."),
     ("administration", "Administration", "Gerer les utilisateurs, profils et droits."),
 ]
 
@@ -117,7 +118,17 @@ PROFILE_PERMISSIONS = {
         "modification": True,
         "suppression": True,
         "validation": True,
+        "management": True,
         "administration": True,
+    },
+    "PDG / Management": {
+        "consultation": True,
+        "ajout": False,
+        "modification": False,
+        "suppression": False,
+        "validation": True,
+        "management": True,
+        "administration": False,
     },
     "Direction": {
         "consultation": True,
@@ -125,6 +136,7 @@ PROFILE_PERMISSIONS = {
         "modification": False,
         "suppression": False,
         "validation": True,
+        "management": True,
         "administration": False,
     },
     "Manager / Responsable": {
@@ -133,6 +145,7 @@ PROFILE_PERMISSIONS = {
         "modification": True,
         "suppression": False,
         "validation": True,
+        "management": False,
         "administration": False,
     },
     "Analyste BI": {
@@ -141,6 +154,7 @@ PROFILE_PERMISSIONS = {
         "modification": True,
         "suppression": False,
         "validation": False,
+        "management": False,
         "administration": False,
     },
 }

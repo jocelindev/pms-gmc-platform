@@ -9,6 +9,7 @@
     renderCalendarSlicer,
     renderCountryDashboard,
     renderAdvancedDashboard,
+    renderManagementDashboard,
     renderPoleSummaryTables,
     renderPoleControls,
     renderPoleMonitor,
@@ -22,6 +23,7 @@
 
   const viewTitles = {
     dashboard: "Dashboard KPI par pole",
+    management: "Management performance groupe",
     poles: "Suivi des performances par pole",
     kpis: "Referentiel KPI",
     alerts: "Notifications",
@@ -699,7 +701,20 @@
           modification: true,
           suppression: true,
           validation: true,
+          management: true,
           administration: true,
+        },
+      },
+      {
+        profile: "PDG / Management",
+        permissions: {
+          consultation: true,
+          ajout: false,
+          modification: false,
+          suppression: false,
+          validation: true,
+          management: true,
+          administration: false,
         },
       },
       {
@@ -710,6 +725,7 @@
           modification: false,
           suppression: false,
           validation: true,
+          management: true,
           administration: false,
         },
       },
@@ -721,6 +737,7 @@
           modification: true,
           suppression: false,
           validation: true,
+          management: false,
           administration: false,
         },
       },
@@ -732,6 +749,7 @@
           modification: true,
           suppression: false,
           validation: false,
+          management: false,
           administration: false,
         },
       },
@@ -1134,11 +1152,17 @@
     return authorizedPoleIds[0] || requestedPoleId;
   }
 
+  function canAccessManagement() {
+    return Boolean(state.currentPermissions?.management || state.currentPermissions?.administration);
+  }
+
   function applyUserAccessScope() {
     const firstAccess = state.userAccessScope?.[0];
     const canAdmin = Boolean(state.currentPermissions?.administration);
+    const canManagement = canAccessManagement();
 
     document.querySelector('.nav-item[data-view="admin"]')?.toggleAttribute("hidden", !canAdmin);
+    document.querySelector('.nav-item[data-view="management"]')?.toggleAttribute("hidden", !canManagement);
 
     if (canAdmin) {
       state.activeAccessRuleId = null;
@@ -1237,6 +1261,10 @@
   function activateView(view) {
     if (view === "admin" && !state.currentPermissions?.administration) {
       showToast("Acces reserve aux administrateurs.");
+      view = "dashboard";
+    }
+    if (view === "management" && !canAccessManagement()) {
+      showToast("Acces reserve au management.");
       view = "dashboard";
     }
     document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
@@ -1645,6 +1673,7 @@
     applyCalculatedKpisToReporting();
     renderCalendarSlicer(state);
     renderAdvancedDashboard(state);
+    renderManagementDashboard(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
     renderReportControls(state);
@@ -1659,6 +1688,7 @@
     renderCalendarSlicer(state);
     renderCountryDashboard(state);
     renderAdvancedDashboard(state);
+    renderManagementDashboard(state);
     renderPoleSummaryTables(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
@@ -1746,6 +1776,7 @@
         state.actorScope = button.dataset.actorScope || "responsable";
         renderCalendarSlicer(state);
         renderAdvancedDashboard(state);
+        renderManagementDashboard(state);
         showToast(
           state.actorScope === "direction"
             ? "Vue acteur: Direction."

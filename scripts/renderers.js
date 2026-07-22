@@ -1824,6 +1824,247 @@
       .join("");
   }
 
+  function renderManagementDashboard(state = {}) {
+    const context = getDashboardContext(state);
+    const dataRows = scopedKpiDataRows(context.kpiRows);
+    const dataPoles = context.visiblePoles.filter(hasPoleData);
+    const redRows = dataRows.filter((row) => row.kpi.status === "red");
+    const amberRows = dataRows.filter((row) => row.kpi.status === "amber");
+    const score = dataPoles.length ? averageNumber(dataPoles.map((pole) => pole.score)) : null;
+    const quality = dataPoles.length ? averageNumber(dataPoles.map((pole) => pole.quality)) : null;
+    const lateSubmissions = dataPoles.reduce((sum, pole) => sum + Number(pole.lateSubmissions || 0), 0);
+    const knownTargets = dataRows.filter(targetKnown);
+    const reachedTargets = knownTargets.filter(targetReached);
+    const objectiveRate = knownTargets.length ? Math.round((reachedTargets.length / knownTargets.length) * 100) : null;
+    const globalClass = !dataRows.length ? "gray" : redRows.length ? "red" : amberRows.length ? "amber" : scoreClass(score);
+    const activeScope = context.isGroup ? "Groupe consolide" : context.activeCountry.name;
+    const period = state.calendar?.label || $("#period-filter")?.value || "Periode active";
+
+    const status = $("#management-status");
+    if (status) {
+      status.className = `status-pill ${escapeHtml(globalClass)}`;
+      status.textContent = dataRows.length ? ragLabel(globalClass) : "En attente Kobo";
+    }
+
+    const title = $("#management-brief-title");
+    if (title) title.textContent = `Performance consolidee - ${activeScope}`;
+
+    const copy = $("#management-brief-copy");
+    if (copy) {
+      copy.textContent = !dataRows.length
+        ? "Aucune decision de performance n'est produite tant que les trois formulaires Kobo ne remontent pas de KPI calcules."
+        : redRows.length
+          ? `${redRows.length} KPI critique(s) necessitent une action de direction avant la prochaine validation.`
+          : amberRows.length
+            ? `${amberRows.length} KPI en vigilance doivent etre suivis pour securiser la trajectoire.`
+            : "Les KPI calcules sont sous controle sur le perimetre selectionne.";
+    }
+
+    const periodBadge = $("#management-period-badge");
+    if (periodBadge) periodBadge.textContent = `${period} - ${activeScope}`;
+
+    const hero = $("#management-hero-score");
+    if (hero) {
+      hero.className = `management-hero-score status-${escapeHtml(globalClass)}`;
+      const value = hero.querySelector("strong");
+      if (value) value.textContent = score === null ? "--" : `${score}/100`;
+    }
+
+    const summary = $("#management-summary-cards");
+    if (summary) {
+      const redPoles = dataPoles.filter((pole) => pole.rag === "red").length;
+      const amberPoles = dataPoles.filter((pole) => pole.rag === "amber").length;
+      const totalKpis = context.kpiRows.length;
+      const cards = [
+        {
+          label: "Score groupe",
+          value: score === null ? "--" : `${score}/100`,
+          hint: dataPoles.length ? `${dataPoles.length} pole(s) alimente(s)` : "donnees Kobo attendues",
+          className: globalClass,
+        },
+        {
+          label: "KPI calcules",
+          value: `${dataRows.length}/${totalKpis}`,
+          hint: totalKpis ? "selon le perimetre actif" : "referentiel attendu",
+          className: dataRows.length ? "green" : "gray",
+        },
+        {
+          label: "Poles a surveiller",
+          value: redPoles + amberPoles,
+          hint: `${redPoles} rouge / ${amberPoles} orange`,
+          className: redPoles ? "red" : amberPoles ? "amber" : dataPoles.length ? "green" : "gray",
+        },
+        {
+          label: "Cibles atteintes",
+          value: objectiveRate === null ? "--" : `${objectiveRate}%`,
+          hint: knownTargets.length ? `${reachedTargets.length}/${knownTargets.length} KPI avec cible` : "objectifs Kobo attendus",
+          className: objectiveRate === null ? "gray" : scoreClass(objectiveRate),
+        },
+        {
+          label: "Qualite Kobo",
+          value: quality === null ? "--" : `${quality}%`,
+          hint: lateSubmissions ? `${lateSubmissions} retard(s)` : "collecte a jour",
+          className: quality === null ? "gray" : lateSubmissions ? "amber" : scoreClass(quality),
+        },
+      ];
+      summary.innerHTML = cards
+        .map(
+          (card) => `
+            <article class="management-summary-card status-${escapeHtml(card.className)}">
+              <span>${escapeHtml(card.label)}</span>
+              <strong>${escapeHtml(card.value)}</strong>
+              <small>${escapeHtml(card.hint)}</small>
+            </article>
+          `
+        )
+        .join("");
+    }
+
+    const priorityRows = dashboardCriticalRows(context, 6);
+    const priorityCount = $("#management-priority-count");
+    if (priorityCount) {
+      priorityCount.className = `status-pill ${priorityRows.length ? (redRows.length ? "red" : "amber") : dataRows.length ? "green" : "gray"}`;
+      priorityCount.textContent = `${priorityRows.length} priorite${priorityRows.length > 1 ? "s" : ""}`;
+    }
+
+    const priorityList = $("#management-priority-list");
+    if (priorityList) {
+      priorityList.innerHTML = priorityRows.length
+        ? priorityRows
+            .map((row) => {
+              const targetMetric = metricFromTarget(row.kpi);
+              return `
+                <article class="management-priority-row status-${escapeHtml(row.kpi.status || "gray")}">
+                  <div>
+                    <span class="code-chip">${escapeHtml(row.pole.id)}</span>
+                    <strong>${escapeHtml(row.kpi.name)}</strong>
+                    <small>${escapeHtml(row.pole.name)} - ${escapeHtml(trendSummaryLabel(row.kpi, row.pole))}</small>
+                  </div>
+                  <div class="management-priority-meta">
+                    <span>Vs target</span>
+                    <strong class="${escapeHtml(targetMetric.className)}">${escapeHtml(targetMetric.display)}</strong>
+                  </div>
+                  <button class="ghost-action" type="button" data-open-pole="${escapeHtml(row.pole.id)}">Voir le pole</button>
+                </article>
+              `;
+            })
+            .join("")
+        : `<div class="empty-kpi-state">${dataRows.length ? "Aucune priorite critique sur le perimetre actif." : "Les priorites PDG apparaitront apres synchronisation et calcul Kobo."}</div>`;
+    }
+
+    const audit = state.koboDataAudit || {};
+    const auditStatus = $("#management-kobo-status");
+    if (auditStatus) {
+      auditStatus.className = `status-pill ${escapeHtml(audit.statusClass || "gray")}`;
+      auditStatus.textContent = audit.status || "Controle";
+    }
+
+    const koboQuality = $("#management-kobo-quality");
+    if (koboQuality) {
+      const forms = Array.isArray(audit.forms) ? audit.forms : [];
+      const anomalyCount = Number(audit.anomalyCount ?? state.koboAnomalies?.length ?? 0);
+      const blockingCount = Number(audit.blockingAnomalyCount || 0);
+      const koboCards = [
+        { label: "Formulaires", value: `${audit.connectedForms || 0}/${audit.expectedForms || 3}`, hint: "referentiel + objectifs + donnees" },
+        { label: "Soumissions", value: audit.submissionCount || state.koboSubmissions?.length || 0, hint: "donnees recues" },
+        { label: "Lignes jour", value: audit.dailyRows || state.kpiCalculationResults?.length || 0, hint: "stockage journalier" },
+        { label: "Anomalies", value: anomalyCount, hint: blockingCount ? `${blockingCount} bloquante(s)` : "controle actif" },
+      ];
+      koboQuality.innerHTML = `
+        <div class="management-kobo-stats">
+          ${koboCards
+            .map(
+              (card) => `
+                <div>
+                  <span>${escapeHtml(card.label)}</span>
+                  <strong>${escapeHtml(card.value)}</strong>
+                  <small>${escapeHtml(card.hint)}</small>
+                </div>
+              `
+            )
+            .join("")}
+        </div>
+        <div class="management-kobo-forms">
+          ${forms.length
+            ? forms
+                .map(
+                  (form) => `
+                    <div>
+                      ${statusPill(form.status || "A connecter", form.statusClass || "gray")}
+                      <span>${escapeHtml(form.label || form.role)}</span>
+                    </div>
+                  `
+                )
+                .join("")
+            : `<div><span>Aucun audit Kobo disponible.</span></div>`}
+        </div>
+      `;
+    }
+
+    const poleCount = $("#management-pole-count");
+    if (poleCount) {
+      poleCount.className = `status-pill ${context.visiblePoles.length ? "green" : "gray"}`;
+      poleCount.textContent = `${context.visiblePoles.length} pole${context.visiblePoles.length > 1 ? "s" : ""}`;
+    }
+
+    const poleTable = $("#management-pole-table");
+    if (poleTable) {
+      poleTable.innerHTML = context.visiblePoles.length
+        ? [...context.visiblePoles]
+            .sort((left, right) => {
+              const leftScore = hasPoleData(left) ? Number(left.score || 0) : 999;
+              const rightScore = hasPoleData(right) ? Number(right.score || 0) : 999;
+              return leftScore - rightScore;
+            })
+            .map((pole) => {
+              const kpis = PMS_DATA.reporting.kpisByPole[pole.id] || [];
+              const calculated = kpis.filter(hasKpiData);
+              const redCount = calculated.filter((kpi) => kpi.status === "red").length;
+              const amberCount = calculated.filter((kpi) => kpi.status === "amber").length;
+              const poleClass = hasPoleData(pole) ? (redCount ? "red" : amberCount ? "amber" : scoreClass(pole.score)) : "gray";
+              return `
+                <tr>
+                  <td><strong>${escapeHtml(pole.name)}</strong><br><small>${escapeHtml(pole.owner || "")}</small></td>
+                  <td><strong>${escapeHtml(hasPoleData(pole) ? pole.score : "--")}</strong></td>
+                  <td>${escapeHtml(calculated.length)}/${escapeHtml(kpis.length)}</td>
+                  <td>${statusPill(`${redCount} R / ${amberCount} O`, poleClass)}</td>
+                  <td>${escapeHtml(hasPoleData(pole) ? `${pole.quality}%` : "--")}</td>
+                  <td><button class="ghost-action" type="button" data-open-pole="${escapeHtml(pole.id)}">Ouvrir</button></td>
+                </tr>
+              `;
+            })
+            .join("")
+        : `<tr><td colspan="6">Aucun pole autorise pour ce profil.</td></tr>`;
+    }
+
+    const activeCountry = context.activeCountry;
+    const countryOptions = getAuthorizedCountryOptions(state).filter((country) => !isGroupCountry(country));
+    const countries = (context.isGroup ? countryOptions : countryOptions.filter((country) => country.name === activeCountry.name)).map(countryDataProfile);
+    const safeCountries = countries.length ? countries : countryOptions.map(countryDataProfile);
+    const countryCount = $("#management-country-count");
+    if (countryCount) {
+      countryCount.className = `status-pill ${safeCountries.length ? "green" : "gray"}`;
+      countryCount.textContent = `${safeCountries.length} pays`;
+    }
+    const countryCards = $("#management-country-cards");
+    if (countryCards) {
+      countryCards.innerHTML = safeCountries.length
+        ? safeCountries
+            .slice(0, 8)
+            .map(
+              (country) => `
+                <button class="management-country-card status-${escapeHtml(country.className || "gray")}" type="button" data-country-filter="${escapeHtml(countryFilterValue(country))}">
+                  <span>${escapeHtml(country.code || country.name)}</span>
+                  <strong>${escapeHtml(country.hasData ? country.score : "--")}</strong>
+                  <small>${escapeHtml(country.name)} - ${escapeHtml(country.activePoles || 0)} pole(s)</small>
+                </button>
+              `
+            )
+            .join("")
+        : `<div class="empty-kpi-state">Aucun pays / filiale autorise pour ce profil.</div>`;
+    }
+  }
+
   function renderAdvancedDashboard(state = {}) {
     const context = getDashboardPoleContext(state);
     renderDashboardControlCards(context);
@@ -3862,6 +4103,7 @@
       ["modification", "Modification"],
       ["suppression", "Suppression"],
       ["validation", "Validation"],
+      ["management", "Management"],
       ["administration", "Administration"],
     ];
 
@@ -3901,7 +4143,7 @@
               }
             )
             .join("")
-        : `<tr><td colspan="8">Aucun profil configure pour le moment.</td></tr>`;
+        : `<tr><td colspan="${permissionLabels.length + 2}">Aucun profil configure pour le moment.</td></tr>`;
     }
 
     if (poleAccessTable) {
@@ -3945,6 +4187,7 @@
     renderCalendarSlicer(state);
     renderCountryDashboard(state);
     renderAdvancedDashboard(state);
+    renderManagementDashboard(state);
     renderPoleSummaryTables(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
@@ -3980,6 +4223,7 @@
     renderCalendarSlicer,
     renderCountryDashboard,
     renderAdvancedDashboard,
+    renderManagementDashboard,
     renderPoleMonitor,
     renderValidationQueue,
     renderReportControls,
