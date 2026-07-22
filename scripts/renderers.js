@@ -1279,6 +1279,223 @@
     return Math.max(0, Math.min(100, Math.round(Number(pole.score || 0))));
   }
 
+  function managementResultCountry(result = {}) {
+    return result.branch || result.country || result.filiale || result.pays || "Groupe";
+  }
+
+  function managementResultKpiKey(result = {}) {
+    return [
+      normalizeLookup(managementResultCountry(result)),
+      result.poleId || "",
+      normalizeLookup(result.kpiId || result.kpiName || result.name),
+    ].join(":");
+  }
+
+  function hasFiniteMetricValue(value) {
+    return value !== null && value !== undefined && String(value).trim() !== "" && Number.isFinite(Number(value));
+  }
+
+  function managementResultHasValue(result = {}) {
+    return Boolean(
+      hasFiniteMetricValue(result.monthToDateValue) ||
+        hasFiniteMetricValue(result.dayValue) ||
+        hasFiniteMetricValue(result.actualValue) ||
+        hasFiniteMetricValue(result.value) ||
+        result.monthToDateValueLabel ||
+        result.dayValueLabel ||
+        result.actualValueLabel ||
+        result.valueLabel
+    );
+  }
+
+  function managementResultStatus(result = {}) {
+    if (["green", "amber", "red"].includes(result.status)) return result.status;
+    if (result.vsTargetClass === "positive" || result.vsTargetClass === "neutral") return "green";
+    if (result.vsTargetClass === "negative") return "red";
+    return "gray";
+  }
+
+  function managementResultMatchesCountry(result = {}, country = {}) {
+    if (isGroupCountry(country)) return true;
+    const resultCountry = managementResultCountry(result);
+    if (normalizeLookup(resultCountry) === "groupe") return false;
+    return matchesCountryScope(resultCountry, country);
+  }
+
+  function managementResultMatchesCalendar(result = {}, calendar = {}) {
+    const calendarStart = parseIsoDate(calendar.start);
+    const calendarEnd = parseIsoDate(calendar.end);
+    if (!calendarStart || !calendarEnd) return true;
+
+    const startIso = dateToIso(calendarStart);
+    const endIso = dateToIso(calendarEnd);
+    const resultStart = parseIsoDate(result.periodStart);
+    const resultEnd = parseIsoDate(result.periodEnd);
+    const resultDate = resultCalendarDate(result);
+
+    if (calendar.preset === "monthToDate") {
+      if (result.periodType === "monthToDate" && resultStart && resultEnd) {
+        return dateToIso(resultStart) === startIso && dateToIso(resultEnd) === endIso;
+      }
+      return resultDate ? dateToIso(resultDate) === endIso : false;
+    }
+
+    if (resultStart && resultEnd) {
+      return dateToIso(resultEnd) >= startIso && dateToIso(resultStart) <= endIso;
+    }
+
+    if (!resultDate) return false;
+    const resultIso = dateToIso(resultDate);
+    return resultIso >= startIso && resultIso <= endIso;
+  }
+
+  function managementCalendarResults(results = [], calendar = {}) {
+    if (!calendar?.start || !calendar?.end) return results;
+    const matches = results.filter((result) => managementResultMatchesCalendar(result, calendar));
+    if (calendar.preset === "monthToDate") {
+      const cumulativeMatches = matches.filter((result) => result.periodType === "monthToDate");
+      return cumulativeMatches.length ? cumulativeMatches : matches;
+    }
+    return matches;
+  }
+
+  function managementLatestResults(results = []) {
+    const sorted = [...results].sort((left, right) => {
+      const leftDate = resultCalendarDate(left)?.getTime() || 0;
+      const rightDate = resultCalendarDate(right)?.getTime() || 0;
+      if (leftDate !== rightDate) return leftDate - rightDate;
+      return String(left.periodType || "").localeCompare(String(right.periodType || ""));
+    });
+    const byKpi = new Map();
+    sorted.forEach((result) => {
+      byKpi.set(managementResultKpiKey(result), result);
+    });
+    return [...byKpi.values()];
+  }
+
+  function managementHistoryByKpi(results = []) {
+    const source = results.filter((result) => result.periodType !== "monthToDate");
+    const rows = source.length ? source : results;
+    return rows.reduce((history, result) => {
+      const key = managementResultKpiKey(result);
+      const points = history.get(key) || [];
+      points.push({
+        period: result.periodEnd || result.periodStart || result.period,
+        value: result.actualValue ?? result.value,
+        valueLabel: result.actualValueLabel || result.valueLabel,
+      });
+      history.set(key, points);
+      return history;
+    }, new Map());
+  }
+
+  function managementResultToKpi(result = {}, trendHistory = []) {
+    return {
+      id: result.kpiId,
+      name: result.kpiName || result.name || "KPI calcule",
+      branch: managementResultCountry(result),
+      value: result.monthToDateValueLabel || result.actualValueLabel || result.valueLabel || "",
+      numericValue: result.monthToDateValue ?? result.actualValue ?? result.value,
+      dayValue: result.dayValue ?? result.actualValue ?? result.value,
+      dayValueLabel: result.dayValueLabel || result.actualValueLabel || result.valueLabel || "",
+      monthToDateValue: result.monthToDateValue ?? result.actualValue ?? result.value,
+      monthToDateValueLabel: result.monthToDateValueLabel || result.actualValueLabel || result.valueLabel || "",
+      target: result.target || "A completer",
+      monthlyTarget: result.monthlyTarget || "",
+      targetValue: result.targetValue,
+      targetMode: result.targetMode || "",
+      vsTargetValue: result.vsTargetValue,
+      vsTargetLabel: result.vsTargetLabel,
+      vsTargetClass: result.vsTargetClass,
+      aggregationMode: result.aggregationMode || "",
+      objectiveSource: result.objectiveSource || "",
+      trend: result.trend || "Calcul Kobo",
+      status: managementResultStatus(result),
+      source: result.source || "KoboCollect",
+      collectionFrequency: result.collectionFrequency || "",
+      reportingFrequency: result.reportingFrequency || "",
+      calculated: true,
+      period: result.period,
+      formula: result.formula,
+      performanceDirection: result.performanceDirection || "",
+      method: result.method,
+      elementsCount: result.elementsCount,
+      trendHistory,
+    };
+  }
+
+  function managementRowsFromResults(state = {}, context = {}) {
+    const poleById = new Map(context.visiblePoles.map((pole) => [pole.id, pole]));
+    const activeCountries = context.isGroup ? context.visibleCountries : [context.activeCountry];
+    const results = (Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [])
+      .filter(managementResultHasValue)
+      .filter((result) => poleById.has(result.poleId))
+      .filter((result) => {
+        if (context.isGroup) return true;
+        return activeCountries.some((country) => managementResultMatchesCountry(result, country));
+      });
+    const historyByKey = managementHistoryByKpi(results);
+    return managementLatestResults(managementCalendarResults(results, state.calendar))
+      .map((result, index) => {
+        const pole = poleById.get(result.poleId);
+        if (!pole) return null;
+        return {
+          key: `management:${result.id || managementResultKpiKey(result)}:${index}`,
+          pole,
+          kpi: managementResultToKpi(result, historyByKey.get(managementResultKpiKey(result)) || []),
+          result,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function managementScoreFromRows(rows = []) {
+    const weights = { green: 100, amber: 70, red: 35 };
+    const statuses = rows.map((row) => row.kpi.status).filter((status) => weights[status]);
+    if (!statuses.length) return null;
+    return Math.round(statuses.reduce((sum, status) => sum + weights[status], 0) / statuses.length);
+  }
+
+  function managementCriticalRows(rows = [], limit = 5) {
+    return [...rows]
+      .map((row) => ({ ...row, riskScore: kpiRiskScore(row) }))
+      .filter((row) => row.riskScore >= 60 || ["red", "amber"].includes(row.kpi.status))
+      .sort((left, right) => right.riskScore - left.riskScore)
+      .slice(0, limit);
+  }
+
+  function managementCellProfile(state = {}, pole = {}, country = {}) {
+    if (!poleAvailableForCountry(pole, country)) {
+      return { hasData: false, score: null, className: "gray", status: "gray", total: 0, label: "Hors scope" };
+    }
+    const cellResults = (Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [])
+      .filter(managementResultHasValue)
+      .filter((result) => result.poleId === pole.id)
+      .filter((result) => managementResultMatchesCountry(result, country));
+    const latestResults = managementLatestResults(managementCalendarResults(cellResults, state.calendar));
+    const rows = latestResults.map((result) => ({
+      pole,
+      kpi: managementResultToKpi(result),
+      result,
+    }));
+    const score = managementScoreFromRows(rows);
+    const red = rows.filter((row) => row.kpi.status === "red").length;
+    const amber = rows.filter((row) => row.kpi.status === "amber").length;
+    const green = rows.filter((row) => row.kpi.status === "green").length;
+    const className = !rows.length ? "gray" : red ? "red" : amber ? "amber" : score === null ? "gray" : scoreClass(score);
+    return {
+      hasData: rows.length > 0,
+      score,
+      className,
+      status: className,
+      total: rows.length,
+      red,
+      amber,
+      green,
+      label: rows.length ? `${rows.length} KPI` : "Kobo",
+    };
+  }
+
   function renderDashboardControlCards(context) {
     const target = $("#dashboard-control-cards");
     if (!target) return;
@@ -1826,25 +2043,24 @@
 
   function renderManagementDashboard(state = {}) {
     const context = getDashboardContext(state);
-    const dataRows = scopedKpiDataRows(context.kpiRows);
-    const dataPoles = context.visiblePoles.filter(hasPoleData);
+    const dataRows = managementRowsFromResults(state, context);
     const redRows = dataRows.filter((row) => row.kpi.status === "red");
     const amberRows = dataRows.filter((row) => row.kpi.status === "amber");
     const greenRows = dataRows.filter((row) => row.kpi.status === "green");
-    const score = dataPoles.length ? averageNumber(dataPoles.map((pole) => pole.score)) : null;
-    const lateSubmissions = dataPoles.reduce((sum, pole) => sum + Number(pole.lateSubmissions || 0), 0);
+    const score = managementScoreFromRows(dataRows);
+    const lateSubmissions = Number(state.kpiCalculationQuality?.unmatchedCalculationCount || 0);
     const anomalyCount = Number(state.koboDataAudit?.anomalyCount ?? state.koboAnomalies?.length ?? 0);
-    const objectiveRows = context.kpiRows || [];
-    const knownTargets = objectiveRows.filter(targetKnown);
-    const reachedTargets = dataRows.filter(targetKnown).filter(targetReached);
-    const lateTargets = dataRows.filter((row) => targetKnown(row) && !targetReached(row));
-    const missingTargets = objectiveRows.filter((row) => !targetKnown(row));
+    const objectiveRows = dataRows.length ? dataRows : context.kpiRows || [];
+    const knownTargets = dataRows.filter(targetKnown);
+    const reachedTargets = knownTargets.filter(targetReached);
+    const lateTargets = knownTargets.filter((row) => !targetReached(row));
+    const missingTargets = dataRows.filter((row) => !targetKnown(row));
     const objectiveRate = knownTargets.length ? Math.round((reachedTargets.length / knownTargets.length) * 100) : null;
     const targetAchievement = averageTargetAchievement(dataRows.filter(targetKnown));
-    const globalClass = !dataRows.length ? "gray" : redRows.length ? "red" : amberRows.length ? "amber" : scoreClass(score);
+    const globalClass = !dataRows.length ? "gray" : redRows.length ? "red" : amberRows.length ? "amber" : score === null ? "gray" : scoreClass(score);
     const activeScope = context.isGroup ? "Groupe consolide" : context.activeCountry.name;
     const period = state.calendar?.label || $("#period-filter")?.value || "Periode active";
-    const priorityRows = dashboardCriticalRows(context, 5);
+    const priorityRows = managementCriticalRows(dataRows, 5);
 
     const actionRecommendation = (row) => {
       const targetMetric = metricFromTarget(row.kpi);
@@ -1937,16 +2153,14 @@
 
     const summary = $("#management-summary-cards");
     if (summary) {
-      const redPoles = dataPoles.filter((pole) => pole.rag === "red").length;
-      const amberPoles = dataPoles.filter((pole) => pole.rag === "amber").length;
-      const totalKpis = context.kpiRows.length;
+      const totalKpis = dataRows.length || context.kpiRows.length;
       const trendMetrics = dataRows.flatMap((row) => kpiTrendMetrics(row.kpi, row.pole));
       const negativeTrends = trendMetrics.filter((metric) => metric.className === "negative").length;
       const cards = [
         {
           label: "Score consolide",
           value: score === null ? "--" : `${score}/100`,
-          hint: dataPoles.length ? `${dataPoles.length} pole(s) alimente(s)` : "donnees Kobo attendues",
+          hint: dataRows.length ? `${dataRows.length} resultat(s) Kobo calcule(s)` : "donnees Kobo attendues",
           className: globalClass,
         },
         {
@@ -1989,8 +2203,16 @@
         ? context.visibleCountries
         : getAuthorizedCountryOptions(state).filter((country) => !isGroupCountry(country))).slice(0, 8);
       const poles = context.visiblePoles;
+      const cellProfiles = new Map();
+      const getCellProfile = (pole, country) => {
+        const key = `${pole.id}:${countryFilterValue(country)}`;
+        if (!cellProfiles.has(key)) {
+          cellProfiles.set(key, managementCellProfile(state, pole, country));
+        }
+        return cellProfiles.get(key);
+      };
       const activeCells = poles.flatMap((pole) =>
-        countries.map((country) => dashboardCellScore(pole, country)).filter((value) => value !== null)
+        countries.map((country) => getCellProfile(pole, country)).filter((cell) => cell.hasData)
       ).length;
       if (heatmapStatus) {
         heatmapStatus.className = `status-pill ${activeCells ? "green" : "gray"}`;
@@ -2007,19 +2229,18 @@
                   <td><button class="management-pole-link" type="button" data-open-pole="${escapeHtml(pole.id)}"><strong>${escapeHtml(pole.id)}</strong><small>${escapeHtml(pole.name)}</small></button></td>
                   ${countries
                     .map((country) => {
-                      const cellScore = dashboardCellScore(pole, country);
-                      const cellClass = cellScore === null ? "gray" : scoreClass(cellScore);
+                      const cell = getCellProfile(pole, country);
                       return `
                         <td>
                           <button
-                            class="management-heat-cell status-${escapeHtml(cellClass)}"
+                            class="management-heat-cell status-${escapeHtml(cell.className)}"
                             type="button"
                             data-open-pole="${escapeHtml(pole.id)}"
                             data-country-filter="${escapeHtml(countryFilterValue(country))}"
-                            ${cellScore === null ? "disabled" : ""}
+                            ${cell.hasData ? "" : "disabled"}
                           >
-                            <strong>${escapeHtml(cellScore === null ? "--" : cellScore)}</strong>
-                            <small>${escapeHtml(cellScore === null ? "Kobo" : ragLabel(cellClass))}</small>
+                            <strong>${escapeHtml(cell.score === null ? "--" : cell.score)}</strong>
+                            <small>${escapeHtml(cell.hasData ? cell.label : "Kobo")}</small>
                           </button>
                         </td>
                       `;
@@ -2044,12 +2265,13 @@
         ? priorityRows
             .map((row) => {
               const targetMetric = metricFromTarget(row.kpi);
+              const rowCountry = row.kpi.branch || context.activeCountry.name;
               return `
                 <article class="management-priority-row status-${escapeHtml(row.kpi.status || "gray")}">
                   <div>
                     <span class="code-chip">${escapeHtml(row.pole.id)}</span>
                     <strong>${escapeHtml(row.kpi.name)}</strong>
-                    <small>${escapeHtml(row.pole.name)} / ${escapeHtml(context.activeCountry.name)} - ${escapeHtml(row.pole.owner || "Responsable a affecter")}</small>
+                    <small>${escapeHtml(row.pole.name)} / ${escapeHtml(rowCountry)} - ${escapeHtml(row.pole.owner || "Responsable a affecter")}</small>
                   </div>
                   <div class="management-priority-meta">
                     <span>Valeur</span>
@@ -2061,7 +2283,7 @@
                     <strong class="${escapeHtml(targetMetric.className)}">${escapeHtml(targetMetric.display)}</strong>
                     <small>${escapeHtml(actionRecommendation(row))}</small>
                   </div>
-                  <button class="ghost-action" type="button" data-open-pole="${escapeHtml(row.pole.id)}">Detail</button>
+                  <button class="ghost-action" type="button" data-open-pole="${escapeHtml(row.pole.id)}" data-country-filter="${escapeHtml(rowCountry)}">Detail</button>
                 </article>
               `;
             })
@@ -2154,7 +2376,7 @@
             ? criticalTrendRows
                 .map(
                   (row) => `
-                    <button class="management-critical-trend" type="button" data-open-pole="${escapeHtml(row.pole.id)}">
+                    <button class="management-critical-trend" type="button" data-open-pole="${escapeHtml(row.pole.id)}" data-country-filter="${escapeHtml(row.kpi.branch || context.activeCountry.name)}">
                       <span>${escapeHtml(row.pole.id)}</span>
                       <strong>${escapeHtml(row.kpi.name)}</strong>
                       <small>${escapeHtml(trendSummaryLabel(row.kpi, row.pole))}</small>
