@@ -84,6 +84,11 @@ DEFAULT_PROFILE_PERMISSIONS = {
         "administration": False,
     },
 }
+FORCED_PROFILE_PERMISSIONS = {
+    "Administrateur": ("consultation", "ajout", "modification", "suppression", "validation", "management", "administration"),
+    "PDG / Management": ("consultation", "validation", "management"),
+    "Direction": ("consultation", "validation", "management"),
+}
 PASSWORD_ITERATIONS = 210_000
 DEFAULT_ADMIN_PASSWORD = os.environ.get("PMS_ADMIN_PASSWORD", "Admin@2026!")
 DEFAULT_USER_PASSWORD = os.environ.get("PMS_DEFAULT_USER_PASSWORD", "Palladium@2026!")
@@ -835,6 +840,18 @@ def sync_default_profile_permissions(conn: sqlite3.Connection) -> None:
                 ON CONFLICT(profile_id, permission_id) DO NOTHING
                 """,
                 (profile_id, permission_id, 1 if permissions.get(code) else 0),
+            )
+    for profile, codes in FORCED_PROFILE_PERMISSIONS.items():
+        profile_id = ensure_profile(conn, profile)
+        for code in codes:
+            permission_id = ensure_permission(conn, code)
+            conn.execute(
+                """
+                INSERT INTO profile_permissions (profile_id, permission_id, allowed)
+                VALUES (?, ?, 1)
+                ON CONFLICT(profile_id, permission_id) DO UPDATE SET allowed = 1
+                """,
+                (profile_id, permission_id),
             )
 
 
