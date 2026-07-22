@@ -8,7 +8,9 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS
-        value: "900"
+        value: "300"
+      - key: PMS_KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS
+        value: "5"
       - key: PMS_KOBO_SERVER_URL
         value: https://kf.kobotoolbox.org
       - key: PMS_KOBO_REFERENCE_FORM_UID

@@ -80,7 +80,7 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
   - `PMS_KOBO_REFERENCE_FORM_UID` : UID du formulaire KPI et formules.
   - `PMS_KOBO_OBJECTIVES_FORM_UID` : UID du formulaire objectifs mensuels.
   - `PMS_KOBO_CALCULATION_FORM_UID` : UID du formulaire donnees de calcul journalieres.
-- Par defaut, le serveur synchronise automatiquement les formulaires operationnels toutes les 15 minutes avec `PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS=900`.
+- Sur Render, le serveur synchronise automatiquement les formulaires operationnels toutes les 5 minutes avec `PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS=300`. Une protection empeche le lancement d'une nouvelle synchronisation si la precedente est encore en cours.
 - Si `PMS_KOBO_API_TOKEN` n'est pas encore configure, il reste possible de renseigner le token API Kobo dans **Administration > KoboCollecte**, puis cliquer sur `Synchroniser depuis Kobo`.
 - Depuis l'interface, ces modeles sont telechargeables dans **Administration > KoboCollecte**, avant les zones UID/token.
 - Le serveur lit les metadonnees du formulaire Kobo et enregistre les champs detectes dans SQLite.
