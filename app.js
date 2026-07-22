@@ -1915,9 +1915,17 @@
       const poleButton = event.target.closest("[data-open-pole]");
       if (!poleButton) return;
       const requestedPole = poleButton.dataset.openPole;
+      const requestedCountry = poleButton.dataset.countryFilter;
+      if (requestedCountry) {
+        state.calendarBranchFilter = ensureAllowedCountry(requestedCountry);
+      }
       const allowedPole = getAllowedPoleFromScope(requestedPole);
       state.currentPoleMonitor = allowedPole;
       activateView("poles");
+      renderCalendarSlicer(state);
+      renderCountryDashboard(state);
+      renderAdvancedDashboard(state);
+      renderManagementDashboard(state);
       renderPoleControls(state);
       renderPoleMonitor(state);
       const targetBlock = document.getElementById(`pole-block-${state.currentPoleMonitor}`);

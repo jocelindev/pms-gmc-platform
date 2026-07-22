@@ -1830,15 +1830,30 @@
     const dataPoles = context.visiblePoles.filter(hasPoleData);
     const redRows = dataRows.filter((row) => row.kpi.status === "red");
     const amberRows = dataRows.filter((row) => row.kpi.status === "amber");
+    const greenRows = dataRows.filter((row) => row.kpi.status === "green");
     const score = dataPoles.length ? averageNumber(dataPoles.map((pole) => pole.score)) : null;
-    const quality = dataPoles.length ? averageNumber(dataPoles.map((pole) => pole.quality)) : null;
     const lateSubmissions = dataPoles.reduce((sum, pole) => sum + Number(pole.lateSubmissions || 0), 0);
-    const knownTargets = dataRows.filter(targetKnown);
-    const reachedTargets = knownTargets.filter(targetReached);
+    const anomalyCount = Number(state.koboDataAudit?.anomalyCount ?? state.koboAnomalies?.length ?? 0);
+    const objectiveRows = context.kpiRows || [];
+    const knownTargets = objectiveRows.filter(targetKnown);
+    const reachedTargets = dataRows.filter(targetKnown).filter(targetReached);
+    const lateTargets = dataRows.filter((row) => targetKnown(row) && !targetReached(row));
+    const missingTargets = objectiveRows.filter((row) => !targetKnown(row));
     const objectiveRate = knownTargets.length ? Math.round((reachedTargets.length / knownTargets.length) * 100) : null;
+    const targetAchievement = averageTargetAchievement(dataRows.filter(targetKnown));
     const globalClass = !dataRows.length ? "gray" : redRows.length ? "red" : amberRows.length ? "amber" : scoreClass(score);
     const activeScope = context.isGroup ? "Groupe consolide" : context.activeCountry.name;
     const period = state.calendar?.label || $("#period-filter")?.value || "Periode active";
+    const priorityRows = dashboardCriticalRows(context, 5);
+
+    const actionRecommendation = (row) => {
+      const targetMetric = metricFromTarget(row.kpi);
+      const badTrends = kpiTrendMetrics(row.kpi, row.pole).filter((metric) => metric.className === "negative");
+      if (targetMetric.className === "negative") return "Valider un plan de rattrapage vs objectif.";
+      if (row.kpi.status === "red") return "Demander une action corrective prioritaire.";
+      if (badTrends.length) return `Surveiller la tendance ${badTrends[0].label}.`;
+      return "Maintenir le suivi jusqu'a la prochaine validation.";
+    };
 
     const status = $("#management-status");
     if (status) {
@@ -1870,29 +1885,75 @@
       if (value) value.textContent = score === null ? "--" : `${score}/100`;
     }
 
+    const briefGrid = $("#management-brief-grid");
+    if (briefGrid) {
+      const firstPriority = priorityRows[0];
+      const briefCards = [
+        {
+          label: "Ce qui va bien",
+          value: greenRows.length ? `${greenRows.length} KPI sous controle` : "A confirmer",
+          detail: greenRows.length
+            ? `${reachedTargets.length} objectif(s) deja atteint(s) sur les KPI calcules.`
+            : "Les points positifs apparaitront apres reception de donnees Kobo calculees.",
+          className: greenRows.length ? "green" : "gray",
+        },
+        {
+          label: "Ce qui bloque",
+          value: redRows.length ? `${redRows.length} KPI rouge(s)` : lateSubmissions ? `${lateSubmissions} retard(s) Kobo` : "Aucun blocage majeur",
+          detail: redRows[0]
+            ? `${redRows[0].kpi.name} - ${redRows[0].pole.name}.`
+            : lateSubmissions
+              ? "Certaines collectes Kobo doivent etre rattrapees pour fiabiliser la lecture."
+              : dataRows.length
+                ? "Aucune alerte critique sur le perimetre actif."
+                : "Les blocages seront detectes apres calcul des KPI.",
+          className: redRows.length || lateSubmissions ? "red" : dataRows.length ? "green" : "gray",
+        },
+        {
+          label: "Decision demandee",
+          value: firstPriority ? "Arbitrage requis" : anomalyCount ? "Fiabiliser Kobo" : "Pas de decision urgente",
+          detail: firstPriority
+            ? `${actionRecommendation(firstPriority)} Responsable: ${firstPriority.pole.owner || "A affecter"}.`
+            : anomalyCount
+              ? `${anomalyCount} anomalie(s) Kobo a corriger avant lecture definitive.`
+              : dataRows.length
+                ? "Continuer le pilotage normal et surveiller les prochaines remontees."
+                : "Aucune decision automatique sans donnees KPI calculees.",
+          className: firstPriority || anomalyCount ? "amber" : dataRows.length ? "green" : "gray",
+        },
+      ];
+      briefGrid.innerHTML = briefCards
+        .map(
+          (card) => `
+            <article class="management-brief-card status-${escapeHtml(card.className)}">
+              <span>${escapeHtml(card.label)}</span>
+              <strong>${escapeHtml(card.value)}</strong>
+              <p>${escapeHtml(card.detail)}</p>
+            </article>
+          `
+        )
+        .join("");
+    }
+
     const summary = $("#management-summary-cards");
     if (summary) {
       const redPoles = dataPoles.filter((pole) => pole.rag === "red").length;
       const amberPoles = dataPoles.filter((pole) => pole.rag === "amber").length;
       const totalKpis = context.kpiRows.length;
+      const trendMetrics = dataRows.flatMap((row) => kpiTrendMetrics(row.kpi, row.pole));
+      const negativeTrends = trendMetrics.filter((metric) => metric.className === "negative").length;
       const cards = [
         {
-          label: "Score groupe",
+          label: "Score consolide",
           value: score === null ? "--" : `${score}/100`,
           hint: dataPoles.length ? `${dataPoles.length} pole(s) alimente(s)` : "donnees Kobo attendues",
           className: globalClass,
         },
         {
-          label: "KPI calcules",
-          value: `${dataRows.length}/${totalKpis}`,
-          hint: totalKpis ? "selon le perimetre actif" : "referentiel attendu",
-          className: dataRows.length ? "green" : "gray",
-        },
-        {
-          label: "Poles a surveiller",
-          value: redPoles + amberPoles,
-          hint: `${redPoles} rouge / ${amberPoles} orange`,
-          className: redPoles ? "red" : amberPoles ? "amber" : dataPoles.length ? "green" : "gray",
+          label: "KPI critiques",
+          value: redRows.length + amberRows.length,
+          hint: `${redRows.length} rouge / ${amberRows.length} orange`,
+          className: redRows.length ? "red" : amberRows.length ? "amber" : dataRows.length ? "green" : "gray",
         },
         {
           label: "Cibles atteintes",
@@ -1901,10 +1962,10 @@
           className: objectiveRate === null ? "gray" : scoreClass(objectiveRate),
         },
         {
-          label: "Qualite Kobo",
-          value: quality === null ? "--" : `${quality}%`,
-          hint: lateSubmissions ? `${lateSubmissions} retard(s)` : "collecte a jour",
-          className: quality === null ? "gray" : lateSubmissions ? "amber" : scoreClass(quality),
+          label: "Tendances defavorables",
+          value: negativeTrends,
+          hint: `${totalKpis} KPI visibles`,
+          className: negativeTrends ? "amber" : dataRows.length ? "green" : "gray",
         },
       ];
       summary.innerHTML = cards
@@ -1920,7 +1981,57 @@
         .join("");
     }
 
-    const priorityRows = dashboardCriticalRows(context, 6);
+    const heatmapHead = $("#management-heatmap-head");
+    const heatmapBody = $("#management-heatmap-body");
+    const heatmapStatus = $("#management-heatmap-status");
+    if (heatmapHead && heatmapBody) {
+      const countries = (context.visibleCountries.length
+        ? context.visibleCountries
+        : getAuthorizedCountryOptions(state).filter((country) => !isGroupCountry(country))).slice(0, 8);
+      const poles = context.visiblePoles;
+      const activeCells = poles.flatMap((pole) =>
+        countries.map((country) => dashboardCellScore(pole, country)).filter((value) => value !== null)
+      ).length;
+      if (heatmapStatus) {
+        heatmapStatus.className = `status-pill ${activeCells ? "green" : "gray"}`;
+        heatmapStatus.textContent = activeCells ? `${activeCells} cellule${activeCells > 1 ? "s" : ""}` : "En attente";
+      }
+      heatmapHead.innerHTML = countries.length
+        ? `<tr><th>Pole</th>${countries.map((country) => `<th>${escapeHtml(country.code || country.name)}</th>`).join("")}</tr>`
+        : "";
+      heatmapBody.innerHTML = poles.length && countries.length
+        ? poles
+            .map(
+              (pole) => `
+                <tr>
+                  <td><button class="management-pole-link" type="button" data-open-pole="${escapeHtml(pole.id)}"><strong>${escapeHtml(pole.id)}</strong><small>${escapeHtml(pole.name)}</small></button></td>
+                  ${countries
+                    .map((country) => {
+                      const cellScore = dashboardCellScore(pole, country);
+                      const cellClass = cellScore === null ? "gray" : scoreClass(cellScore);
+                      return `
+                        <td>
+                          <button
+                            class="management-heat-cell status-${escapeHtml(cellClass)}"
+                            type="button"
+                            data-open-pole="${escapeHtml(pole.id)}"
+                            data-country-filter="${escapeHtml(countryFilterValue(country))}"
+                            ${cellScore === null ? "disabled" : ""}
+                          >
+                            <strong>${escapeHtml(cellScore === null ? "--" : cellScore)}</strong>
+                            <small>${escapeHtml(cellScore === null ? "Kobo" : ragLabel(cellClass))}</small>
+                          </button>
+                        </td>
+                      `;
+                    })
+                    .join("")}
+                </tr>
+              `
+            )
+            .join("")
+        : `<tr><td colspan="${Math.max(countries.length + 1, 1)}">Carte disponible apres calcul des KPI Kobo.</td></tr>`;
+    }
+
     const priorityCount = $("#management-priority-count");
     if (priorityCount) {
       priorityCount.className = `status-pill ${priorityRows.length ? (redRows.length ? "red" : "amber") : dataRows.length ? "green" : "gray"}`;
@@ -1938,13 +2049,19 @@
                   <div>
                     <span class="code-chip">${escapeHtml(row.pole.id)}</span>
                     <strong>${escapeHtml(row.kpi.name)}</strong>
-                    <small>${escapeHtml(row.pole.name)} - ${escapeHtml(trendSummaryLabel(row.kpi, row.pole))}</small>
+                    <small>${escapeHtml(row.pole.name)} / ${escapeHtml(context.activeCountry.name)} - ${escapeHtml(row.pole.owner || "Responsable a affecter")}</small>
+                  </div>
+                  <div class="management-priority-meta">
+                    <span>Valeur</span>
+                    <strong>${escapeHtml(monthToDateValueLabel(row.kpi))}</strong>
+                    <small>Objectif: ${escapeHtml(row.kpi.target || "A definir")}</small>
                   </div>
                   <div class="management-priority-meta">
                     <span>Vs target</span>
                     <strong class="${escapeHtml(targetMetric.className)}">${escapeHtml(targetMetric.display)}</strong>
+                    <small>${escapeHtml(actionRecommendation(row))}</small>
                   </div>
-                  <button class="ghost-action" type="button" data-open-pole="${escapeHtml(row.pole.id)}">Voir le pole</button>
+                  <button class="ghost-action" type="button" data-open-pole="${escapeHtml(row.pole.id)}">Detail</button>
                 </article>
               `;
             })
@@ -1952,116 +2069,102 @@
         : `<div class="empty-kpi-state">${dataRows.length ? "Aucune priorite critique sur le perimetre actif." : "Les priorites PDG apparaitront apres synchronisation et calcul Kobo."}</div>`;
     }
 
-    const audit = state.koboDataAudit || {};
-    const auditStatus = $("#management-kobo-status");
-    if (auditStatus) {
-      auditStatus.className = `status-pill ${escapeHtml(audit.statusClass || "gray")}`;
-      auditStatus.textContent = audit.status || "Controle";
+    const objectiveStatus = $("#management-objective-status");
+    if (objectiveStatus) {
+      objectiveStatus.className = `status-pill ${objectiveRate === null ? "gray" : scoreClass(objectiveRate)}`;
+      objectiveStatus.textContent = objectiveRate === null ? "A calculer" : `${objectiveRate}% atteint`;
+    }
+    const objectiveView = $("#management-objective-view");
+    if (objectiveView) {
+      const targetAchievementLabel = Number.isFinite(targetAchievement) ? formatRatioPercent(targetAchievement) : "--";
+      const objectiveCards = [
+        { label: "% atteint", value: objectiveRate === null ? "--" : `${objectiveRate}%`, hint: `${reachedTargets.length}/${knownTargets.length} KPI`, className: objectiveRate === null ? "gray" : scoreClass(objectiveRate) },
+        { label: "% en retard", value: knownTargets.length ? `${Math.round((lateTargets.length / knownTargets.length) * 100)}%` : "--", hint: `${lateTargets.length} KPI sous cible`, className: lateTargets.length ? "red" : knownTargets.length ? "green" : "gray" },
+        { label: "% sans objectif", value: objectiveRows.length ? `${Math.round((missingTargets.length / objectiveRows.length) * 100)}%` : "--", hint: `${missingTargets.length} KPI sans cible`, className: missingTargets.length ? "amber" : objectiveRows.length ? "green" : "gray" },
+        { label: "MTD vs mensuel", value: targetAchievementLabel, hint: "cumul mois a date", className: Number.isFinite(targetAchievement) ? (targetAchievement >= 100 ? "green" : targetAchievement >= 90 ? "amber" : "red") : "gray" },
+      ];
+      objectiveView.innerHTML = objectiveCards
+        .map(
+          (card) => `
+            <div class="management-objective-card status-${escapeHtml(card.className)}">
+              <span>${escapeHtml(card.label)}</span>
+              <strong>${escapeHtml(card.value)}</strong>
+              <small>${escapeHtml(card.hint)}</small>
+            </div>
+          `
+        )
+        .join("");
     }
 
-    const koboQuality = $("#management-kobo-quality");
-    if (koboQuality) {
-      const forms = Array.isArray(audit.forms) ? audit.forms : [];
-      const anomalyCount = Number(audit.anomalyCount ?? state.koboAnomalies?.length ?? 0);
-      const blockingCount = Number(audit.blockingAnomalyCount || 0);
-      const koboCards = [
-        { label: "Formulaires", value: `${audit.connectedForms || 0}/${audit.expectedForms || 3}`, hint: "referentiel + objectifs + donnees" },
-        { label: "Soumissions", value: audit.submissionCount || state.koboSubmissions?.length || 0, hint: "donnees recues" },
-        { label: "Lignes jour", value: audit.dailyRows || state.kpiCalculationResults?.length || 0, hint: "stockage journalier" },
-        { label: "Anomalies", value: anomalyCount, hint: blockingCount ? `${blockingCount} bloquante(s)` : "controle actif" },
-      ];
-      koboQuality.innerHTML = `
-        <div class="management-kobo-stats">
-          ${koboCards
+    const trendRollup = (label) => {
+      const metrics = dataRows
+        .map((row) => ({
+          row,
+          metric: kpiTrendMetrics(row.kpi, row.pole).find((item) => item.label === label),
+        }))
+        .filter((item) => item.metric && item.metric.display !== "--" && item.metric.className !== "empty");
+      const positive = metrics.filter((item) => item.metric.className === "positive").length;
+      const negative = metrics.filter((item) => item.metric.className === "negative").length;
+      const neutral = metrics.filter((item) => item.metric.className === "neutral").length;
+      return {
+        label,
+        positive,
+        negative,
+        neutral,
+        total: metrics.length,
+        className: negative ? "red" : positive ? "green" : metrics.length ? "amber" : "gray",
+      };
+    };
+    const trendBlocks = ["DoD", "WoW", "MoM", "Vs Target"].map(trendRollup);
+    const allNegativeTrends = trendBlocks.reduce((sum, block) => sum + block.negative, 0);
+    const allPositiveTrends = trendBlocks.reduce((sum, block) => sum + block.positive, 0);
+    const trendStatus = $("#management-trend-status");
+    if (trendStatus) {
+      trendStatus.className = `status-pill ${allNegativeTrends ? "amber" : allPositiveTrends ? "green" : "gray"}`;
+      trendStatus.textContent = allNegativeTrends ? `${allNegativeTrends} defavorable(s)` : allPositiveTrends ? "Favorable" : "A calculer";
+    }
+    const trendList = $("#management-trend-list");
+    if (trendList) {
+      const criticalTrendRows = dataRows
+        .filter((row) => row.kpi.status === "red" || kpiTrendMetrics(row.kpi, row.pole).some((metric) => metric.className === "negative"))
+        .map((row) => ({ ...row, riskScore: kpiRiskScore(row) }))
+        .sort((left, right) => right.riskScore - left.riskScore)
+        .slice(0, 3);
+      trendList.innerHTML = `
+        <div class="management-trend-grid">
+          <article class="management-trend-card status-${escapeHtml(allNegativeTrends ? "amber" : allPositiveTrends ? "green" : "gray")}">
+            <span>Tendance globale</span>
+            <strong>${escapeHtml(allNegativeTrends ? `${allNegativeTrends} alerte(s)` : allPositiveTrends ? `${allPositiveTrends} favorable(s)` : "--")}</strong>
+            <small>${escapeHtml(activeScope)}</small>
+          </article>
+          ${trendBlocks
             .map(
-              (card) => `
-                <div>
-                  <span>${escapeHtml(card.label)}</span>
-                  <strong>${escapeHtml(card.value)}</strong>
-                  <small>${escapeHtml(card.hint)}</small>
-                </div>
+              (block) => `
+                <article class="management-trend-card status-${escapeHtml(block.className)}">
+                  <span>${escapeHtml(block.label)}</span>
+                  <strong>${escapeHtml(block.total ? `${block.positive} F / ${block.negative} D` : "--")}</strong>
+                  <small>${escapeHtml(block.total ? `${block.total} KPI avec tendance` : "donnees attendues")}</small>
+                </article>
               `
             )
             .join("")}
         </div>
-        <div class="management-kobo-forms">
-          ${forms.length
-            ? forms
+        <div class="management-critical-trends">
+          ${criticalTrendRows.length
+            ? criticalTrendRows
                 .map(
-                  (form) => `
-                    <div>
-                      ${statusPill(form.status || "A connecter", form.statusClass || "gray")}
-                      <span>${escapeHtml(form.label || form.role)}</span>
-                    </div>
+                  (row) => `
+                    <button class="management-critical-trend" type="button" data-open-pole="${escapeHtml(row.pole.id)}">
+                      <span>${escapeHtml(row.pole.id)}</span>
+                      <strong>${escapeHtml(row.kpi.name)}</strong>
+                      <small>${escapeHtml(trendSummaryLabel(row.kpi, row.pole))}</small>
+                    </button>
                   `
                 )
                 .join("")
-            : `<div><span>Aucun audit Kobo disponible.</span></div>`}
+            : `<div class="empty-kpi-state">Aucune evolution critique detectee sur les tendances visibles.</div>`}
         </div>
       `;
-    }
-
-    const poleCount = $("#management-pole-count");
-    if (poleCount) {
-      poleCount.className = `status-pill ${context.visiblePoles.length ? "green" : "gray"}`;
-      poleCount.textContent = `${context.visiblePoles.length} pole${context.visiblePoles.length > 1 ? "s" : ""}`;
-    }
-
-    const poleTable = $("#management-pole-table");
-    if (poleTable) {
-      poleTable.innerHTML = context.visiblePoles.length
-        ? [...context.visiblePoles]
-            .sort((left, right) => {
-              const leftScore = hasPoleData(left) ? Number(left.score || 0) : 999;
-              const rightScore = hasPoleData(right) ? Number(right.score || 0) : 999;
-              return leftScore - rightScore;
-            })
-            .map((pole) => {
-              const kpis = PMS_DATA.reporting.kpisByPole[pole.id] || [];
-              const calculated = kpis.filter(hasKpiData);
-              const redCount = calculated.filter((kpi) => kpi.status === "red").length;
-              const amberCount = calculated.filter((kpi) => kpi.status === "amber").length;
-              const poleClass = hasPoleData(pole) ? (redCount ? "red" : amberCount ? "amber" : scoreClass(pole.score)) : "gray";
-              return `
-                <tr>
-                  <td><strong>${escapeHtml(pole.name)}</strong><br><small>${escapeHtml(pole.owner || "")}</small></td>
-                  <td><strong>${escapeHtml(hasPoleData(pole) ? pole.score : "--")}</strong></td>
-                  <td>${escapeHtml(calculated.length)}/${escapeHtml(kpis.length)}</td>
-                  <td>${statusPill(`${redCount} R / ${amberCount} O`, poleClass)}</td>
-                  <td>${escapeHtml(hasPoleData(pole) ? `${pole.quality}%` : "--")}</td>
-                  <td><button class="ghost-action" type="button" data-open-pole="${escapeHtml(pole.id)}">Ouvrir</button></td>
-                </tr>
-              `;
-            })
-            .join("")
-        : `<tr><td colspan="6">Aucun pole autorise pour ce profil.</td></tr>`;
-    }
-
-    const activeCountry = context.activeCountry;
-    const countryOptions = getAuthorizedCountryOptions(state).filter((country) => !isGroupCountry(country));
-    const countries = (context.isGroup ? countryOptions : countryOptions.filter((country) => country.name === activeCountry.name)).map(countryDataProfile);
-    const safeCountries = countries.length ? countries : countryOptions.map(countryDataProfile);
-    const countryCount = $("#management-country-count");
-    if (countryCount) {
-      countryCount.className = `status-pill ${safeCountries.length ? "green" : "gray"}`;
-      countryCount.textContent = `${safeCountries.length} pays`;
-    }
-    const countryCards = $("#management-country-cards");
-    if (countryCards) {
-      countryCards.innerHTML = safeCountries.length
-        ? safeCountries
-            .slice(0, 8)
-            .map(
-              (country) => `
-                <button class="management-country-card status-${escapeHtml(country.className || "gray")}" type="button" data-country-filter="${escapeHtml(countryFilterValue(country))}">
-                  <span>${escapeHtml(country.code || country.name)}</span>
-                  <strong>${escapeHtml(country.hasData ? country.score : "--")}</strong>
-                  <small>${escapeHtml(country.name)} - ${escapeHtml(country.activePoles || 0)} pole(s)</small>
-                </button>
-              `
-            )
-            .join("")
-        : `<div class="empty-kpi-state">Aucun pays / filiale autorise pour ce profil.</div>`;
     }
   }
 
