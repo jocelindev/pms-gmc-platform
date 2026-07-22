@@ -334,6 +334,14 @@ body[data-active-view="admin"] .calendar-slicer {
   display: none;
 }
 
+body[data-active-view="management"] .calendar-pole-filter-box {
+  display: none;
+}
+
+body[data-active-view="management"] .powerbi-filter-row {
+  grid-template-columns: minmax(240px, 0.9fr) minmax(250px, 1.1fr) minmax(250px, 1.1fr);
+}
+
 .eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.08em;
