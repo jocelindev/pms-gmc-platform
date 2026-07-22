@@ -2971,6 +2971,37 @@
     const objectiveSummary = $("#objective-summary-cards");
     const autoSync = state.koboAutoSync || {};
 
+    const setKoboQuickCard = (selector, source, title, fallback, detail) => {
+      const card = $(selector);
+      if (!card) return;
+      card.innerHTML = `
+        <span>${escapeHtml(title)}</span>
+        <strong>${escapeHtml(source?.formId || fallback)}</strong>
+        <small>${escapeHtml(source?.serverUrl || detail)}</small>
+      `;
+    };
+    setKoboQuickCard(
+      "#admin-kobo-reference-quick",
+      referenceSource,
+      "Formulaire 1",
+      "A connecter",
+      "Referentiel KPI et formules."
+    );
+    setKoboQuickCard(
+      "#admin-kobo-objective-quick",
+      monthlyObjectiveSource,
+      "Objectifs mensuels",
+      "A connecter",
+      "Cibles mensuelles officielles."
+    );
+    setKoboQuickCard(
+      "#admin-kobo-calculation-quick",
+      calculationSource,
+      "Donnees de calcul",
+      "A connecter",
+      "Donnees journalieres et elements de calcul."
+    );
+
     if (objectiveSummary) {
       const selectedPoleObjectives = objectives.filter((objective) => objective.poleId === selectedPole.id).length;
       objectiveSummary.innerHTML = `

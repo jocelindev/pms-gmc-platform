@@ -2012,6 +2012,7 @@ textarea {
   gap: 3px;
   text-align: left;
   min-width: 210px;
+  cursor: pointer;
 }
 
 .admin-tab-button.active {
@@ -2201,6 +2202,31 @@ textarea {
   gap: 14px;
 }
 
+.admin-advanced-mapping {
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  background: rgba(31, 56, 100, 0.035);
+  margin-top: 14px;
+  padding: 0;
+}
+
+.admin-advanced-mapping summary {
+  color: var(--palladium-blue);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 900;
+  list-style-position: inside;
+  padding: 12px 14px;
+}
+
+.admin-advanced-mapping[open] summary {
+  border-bottom: 1px solid rgba(31, 56, 100, 0.12);
+}
+
+.admin-advanced-mapping .admin-kobo-form {
+  padding: 14px;
+}
+
 .kobo-logic-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -2239,7 +2265,7 @@ textarea {
 
 .kobo-template-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
   margin-top: 14px;
 }

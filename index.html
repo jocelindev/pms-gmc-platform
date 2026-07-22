@@ -673,21 +673,21 @@
             <div>
               <p class="eyebrow">Administration</p>
               <h2>Administration</h2>
-              <p>Gerer les objectifs KPI via KoboCollect et limiter chaque responsable au dashboard de son pole.</p>
+              <p>Connecter KoboCollect, verifier les objectifs importes, gerer les droits et consulter la base PMS.</p>
             </div>
           </div>
 
           <div class="admin-submenu" role="tablist" aria-label="Sous-menu administration">
-            <button class="admin-tab-button active" type="button" data-admin-tab="objectives">
-              <strong>Objectif</strong>
-              <span>Cibles KPI via KoboCollect</span>
-            </button>
-            <button class="admin-tab-button" type="button" data-admin-tab="kobo">
+            <button class="admin-tab-button active" type="button" data-admin-tab="kobo">
               <strong>KoboCollecte</strong>
-              <span>Formulaire et mapping</span>
+              <span>Formulaires, UID et synchronisation</span>
+            </button>
+            <button class="admin-tab-button" type="button" data-admin-tab="objectives">
+              <strong>Objectifs</strong>
+              <span>Cibles KPI importees</span>
             </button>
             <button class="admin-tab-button" type="button" data-admin-tab="access">
-              <strong>Droit d'acces</strong>
+              <strong>Droits d'acces</strong>
               <span>Utilisateurs, profils et poles</span>
             </button>
             <button class="admin-tab-button" type="button" data-admin-tab="database">
@@ -696,7 +696,7 @@
             </button>
           </div>
 
-          <div class="admin-tab-panel active" data-admin-panel="objectives">
+          <div class="admin-tab-panel" data-admin-panel="objectives">
           <div class="dashboard-grid admin-objective-grid">
             <section class="panel span-3 admin-summary-panel">
               <div class="admin-summary-head">
@@ -755,7 +755,7 @@
           </div>
           </div>
 
-          <div class="admin-tab-panel" data-admin-panel="kobo">
+          <div class="admin-tab-panel active" data-admin-panel="kobo">
             <div class="dashboard-grid admin-objective-grid">
               <section class="panel span-3 admin-kobo-source-panel">
                 <div class="panel-header">
@@ -801,22 +801,22 @@
                   </a>
                 </div>
                 <p class="kobo-template-note">
-                  Le referentiel KPI et les donnees de calcul sont preconfigures. Ajouter l'UID du formulaire Objectifs mensuels pour activer le Vs Target.
+                  Telecharger les modeles corriges, les importer dans KoboToolbox, puis renseigner les UID publies dans les zones ci-dessous.
                 </p>
                 <div class="kobo-sync-ready" aria-label="Configuration Kobo prete">
-                  <div>
+                  <div id="admin-kobo-reference-quick">
                     <span>Formulaire 1 configure</span>
-                    <strong>agJCJ2VqwMGNk586NHJ39W</strong>
+                    <strong>A connecter</strong>
                     <small>Referentiel KPI et formules.</small>
                   </div>
-                  <div>
+                  <div id="admin-kobo-objective-quick">
                     <span>Objectifs mensuels</span>
                     <strong>A connecter</strong>
                     <small>Cibles mensuelles officielles.</small>
                   </div>
-                  <div>
-                    <span>Donnees de calcul configurees</span>
-                    <strong>aZ5JcFjcL9YvnQozqHWrqN</strong>
+                  <div id="admin-kobo-calculation-quick">
+                    <span>Donnees de calcul</span>
+                    <strong>A connecter</strong>
                     <small>Donnees journalieres et elements de calcul.</small>
                   </div>
                   <div id="admin-kobo-auto-summary">
@@ -847,6 +847,10 @@
                     Token API Kobo
                     <input id="admin-kobo-reference-token" class="search-input" type="password" autocomplete="off" placeholder="Token API pour synchroniser" />
                   </label>
+                </div>
+                <details class="admin-advanced-mapping">
+                  <summary>Mapping avance des champs du formulaire 1</summary>
+                  <div class="admin-kobo-form admin-kobo-dual-form">
                   <label>
                     Champ ID KPI
                     <input id="admin-kobo-reference-id-field" class="search-input" value="id_kpi" />
@@ -955,7 +959,8 @@
                     Champ points d'attention
                     <input id="admin-kobo-reference-attention-field" class="search-input" value="points_d_attention" />
                   </label>
-                </div>
+                  </div>
+                </details>
                 <div class="connector-actions admin-kobo-actions">
                   <button class="primary-action" id="admin-kobo-reference-save" type="button">
                     Enregistrer le formulaire KPI et formules
@@ -989,6 +994,10 @@
                     Token API Kobo
                     <input id="admin-kobo-monthly-objective-token" class="search-input" type="password" autocomplete="off" placeholder="Token API pour synchroniser" />
                   </label>
+                </div>
+                <details class="admin-advanced-mapping">
+                  <summary>Mapping avance des champs objectifs</summary>
+                  <div class="admin-kobo-form admin-kobo-dual-form">
                   <label>
                     Champ pays / filiale
                     <input id="admin-kobo-monthly-objective-branch-field" class="search-input" value="pays_filiale" />
@@ -1033,7 +1042,8 @@
                     Champ validation
                     <input id="admin-kobo-monthly-objective-validation-field" class="search-input" value="validation_hierarchique" />
                   </label>
-                </div>
+                  </div>
+                </details>
                 <div class="connector-actions admin-kobo-actions">
                   <button class="primary-action" id="admin-kobo-monthly-objective-save" type="button">
                     Enregistrer le formulaire objectifs
@@ -1067,6 +1077,10 @@
                     Token API Kobo
                     <input id="admin-kobo-calculation-token" class="search-input" type="password" autocomplete="off" placeholder="Token API pour synchroniser" />
                   </label>
+                </div>
+                <details class="admin-advanced-mapping">
+                  <summary>Mapping avance des champs donnees de calcul</summary>
+                  <div class="admin-kobo-form admin-kobo-dual-form">
                   <label>
                     Champ pole
                     <input id="admin-kobo-calculation-pole-field" class="search-input" value="pole_id" />
@@ -1099,7 +1113,8 @@
                     Champ validation
                     <input id="admin-kobo-calculation-validation-field" class="search-input" value="validation_hierarchique" />
                   </label>
-                </div>
+                  </div>
+                </details>
                 <div class="connector-actions admin-kobo-actions">
                   <button class="primary-action" id="admin-kobo-calculation-save" type="button">
                     Enregistrer le formulaire donnees de calcul

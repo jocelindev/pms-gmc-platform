@@ -741,7 +741,7 @@
     currentReportCycle: PMS_DATA.reporting.defaultCycle,
     currentAdminPole: PMS_DATA.reporting.defaultPole,
     currentAdminKpi: null,
-    currentAdminTab: "objectives",
+    currentAdminTab: "kobo",
     currentAdminAccessPole: PMS_DATA.reporting.defaultPole,
     currentAccessProfile: "Administrateur",
     currentUserAccessUserId: `seed-${PMS_DATA.reporting.defaultPole}`,
