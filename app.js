@@ -818,6 +818,12 @@
 
   function mergeKoboSources(sources) {
     if (!Array.isArray(sources)) return;
+    if (!sources.length) {
+      state.objectiveKoboSource = null;
+      state.monthlyObjectiveKoboSource = null;
+      state.calculationKoboSource = null;
+      return;
+    }
     const referenceSource = sources.find((source) => source.role === "referentielKpi");
     const monthlyObjectiveSource = sources.find((source) => source.role === "objectifsMensuels");
     const calculationSource = sources.find((source) => source.role === "donneesCalcul");
@@ -834,10 +840,10 @@
 
   function mergeDatabasePayload(payload) {
     if (!payload) return;
-    if (Array.isArray(payload.profiles) && payload.profiles.length) {
+    if (Array.isArray(payload.profiles)) {
       state.platformAccessRoles = payload.profiles;
     }
-    if (Array.isArray(payload.users) && payload.users.length) {
+    if (Array.isArray(payload.users)) {
       state.platformUsers = payload.users;
       const selectedUser =
         state.platformUsers.find((user) => String(user.id) === String(state.currentUserAccessUserId)) ||
@@ -845,9 +851,11 @@
         state.platformUsers[0];
       if (selectedUser) {
         state.currentUserAccessUserId = selectedUser.id;
+      } else {
+        state.currentUserAccessUserId = "";
       }
     }
-    if (Array.isArray(payload.userAccess) && payload.userAccess.length) {
+    if (Array.isArray(payload.userAccess)) {
       state.accessRules = payload.userAccess;
       const activeRule =
         state.accessRules.find((rule) => rule.id === state.activeAccessRuleId) ||
@@ -883,8 +891,8 @@
     } else if (Array.isArray(payload.kpiCalculationQuality?.anomalies)) {
       state.koboAnomalies = payload.kpiCalculationQuality.anomalies;
     }
-    if (payload.activeKoboForm) {
-      state.koboActiveForm = payload.activeKoboForm;
+    if ("activeKoboForm" in payload) {
+      state.koboActiveForm = payload.activeKoboForm || null;
     }
     mergeKoboSources(payload.koboSources);
     if (payload.koboAutoSync) {
@@ -899,13 +907,15 @@
   }
 
   async function hydrateFromDatabase() {
-    if (!api?.bootstrap) return;
+    if (!api?.bootstrap) return false;
     try {
       const payload = await api.bootstrap();
       mergeDatabasePayload(payload);
+      return true;
     } catch (error) {
       console.warn("Base PMS indisponible, mode local active.", error);
       state.databaseConnected = false;
+      return false;
     }
   }
 
@@ -1226,6 +1236,11 @@
           }
           const session = await api.login(identifier, password);
           saveSession(session);
+          const hydrated = await hydrateFromDatabase();
+          if (!hydrated) {
+            clearSession();
+            throw new Error("Connexion valide, mais le chargement securise des donnees a echoue.");
+          }
           setLoginFeedback("Connexion reussie.", "success");
           applyAuthenticatedSession(session);
         } catch (error) {
@@ -1243,6 +1258,14 @@
         state.currentUser = null;
         state.currentPermissions = {};
         state.userAccessScope = [];
+        state.platformUsers = [];
+        state.accessRules = [];
+        state.koboActiveForm = null;
+        state.objectiveKoboSource = null;
+        state.monthlyObjectiveKoboSource = null;
+        state.calculationKoboSource = null;
+        state.koboAutoSync = null;
+        state.koboDataAudit = null;
         $("#session-chip").hidden = true;
         logout.hidden = true;
         showLogin();
@@ -2802,7 +2825,20 @@
   }
 
   async function init() {
-    await hydrateFromDatabase();
+    const savedSession = loadSavedSession();
+    let restoredSession = false;
+    if (savedSession?.user) {
+      state.currentUser = savedSession.user;
+      state.currentPermissions = savedSession.permissions || {};
+      state.userAccessScope = savedSession.access || [];
+      restoredSession = await hydrateFromDatabase();
+      if (!restoredSession) {
+        clearSession();
+        state.currentUser = null;
+        state.currentPermissions = {};
+        state.userAccessScope = [];
+      }
+    }
     applyCalculatedKpisToReporting();
     syncPeriodFilterFromCalendar();
     renderAll(state);
@@ -2817,8 +2853,7 @@
     bindPoleMonitoring();
     bindReporting();
     bindAdminActions();
-    const savedSession = loadSavedSession();
-    if (savedSession) {
+    if (savedSession && restoredSession) {
       applyAuthenticatedSession(savedSession, { toast: false });
     } else {
       showLogin();

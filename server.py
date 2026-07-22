@@ -97,6 +97,14 @@ SESSION_SIGNING_SECRET = os.environ.get(
     "PMS_SESSION_SECRET",
     hashlib.sha256(f"{DEFAULT_ADMIN_PASSWORD}|pms-gmc-session".encode("utf-8")).hexdigest(),
 )
+PUBLIC_APP_ORIGIN = os.environ.get("PMS_PUBLIC_APP_ORIGIN", "https://pms-gmc-platform.onrender.com").strip()
+ALLOWED_CORS_ORIGINS = {
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("PMS_ALLOWED_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+}
+if PUBLIC_APP_ORIGIN:
+    ALLOWED_CORS_ORIGINS.add(PUBLIC_APP_ORIGIN.rstrip("/"))
 MIN_PASSWORD_LENGTH = 8
 KOBO_REQUEST_TIMEOUT = 15
 KOBO_SUBMISSION_LIMIT = 500
@@ -1473,27 +1481,163 @@ def list_users(conn: sqlite3.Connection) -> list[dict]:
     return [user_to_front(row) for row in rows]
 
 
-def get_bootstrap_payload() -> dict:
+def session_has_global_kpi_scope(session: dict) -> bool:
+    permissions = session.get("permissions") or {}
+    return bool(permissions.get("administration") or permissions.get("management"))
+
+
+def record_pole_id(record: dict) -> str:
+    return str(
+        record.get("poleId")
+        or record.get("pole_id")
+        or record.get("pole")
+        or ""
+    ).strip()
+
+
+def record_branch(record: dict) -> str:
+    return str(
+        record.get("branch")
+        or record.get("countryName")
+        or record.get("country")
+        or record.get("filiale")
+        or record.get("pays")
+        or "Groupe"
+    ).strip() or "Groupe"
+
+
+def rule_branch(rule: dict) -> str:
+    return str(rule.get("branch") or rule.get("countryName") or "Groupe").strip() or "Groupe"
+
+
+def branch_matches_rule(record_value: str, rule_value: str, *, allow_group_record: bool = False) -> bool:
+    if branch_is_group(rule_value):
+        return True
+    if allow_group_record and branch_is_group(record_value):
+        return True
+    return branch_lookup_key(record_value) == branch_lookup_key(rule_value)
+
+
+def filter_records_by_access_rules(
+    records: list[dict],
+    access_rules: list[dict],
+    *,
+    allow_group_record: bool = False,
+) -> list[dict]:
+    if not access_rules:
+        return []
+
+    filtered = []
+    for record in records:
+        pole_id = record_pole_id(record)
+        branch = record_branch(record)
+        if any(
+            (not rule.get("poleId") or rule.get("poleId") == pole_id)
+            and branch_matches_rule(branch, rule_branch(rule), allow_group_record=allow_group_record)
+            for rule in access_rules
+        ):
+            filtered.append(record)
+    return filtered
+
+
+def scoped_kpi_quality(
+    quality: dict,
+    access_rules: list[dict],
+    *,
+    has_global_scope: bool,
+    scoped_results: list[dict],
+) -> dict:
+    if has_global_scope:
+        return quality
+
+    scoped_quality = dict(quality or {})
+    reference_kpis = filter_records_by_access_rules(
+        list(scoped_quality.get("referenceKpis") or []),
+        access_rules,
+        allow_group_record=True,
+    )
+    monthly_objectives = filter_records_by_access_rules(
+        list(scoped_quality.get("monthlyObjectives") or []),
+        access_rules,
+        allow_group_record=True,
+    )
+    anomalies = filter_records_by_access_rules(
+        list(scoped_quality.get("anomalies") or []),
+        access_rules,
+        allow_group_record=True,
+    )
+    exact_results = [result for result in scoped_results if result.get("periodType") != "monthToDate"]
+    scoped_quality.update(
+        {
+            "referenceKpis": reference_kpis,
+            "monthlyObjectives": monthly_objectives,
+            "anomalies": anomalies,
+            "referenceCount": len(reference_kpis),
+            "objectiveRecords": len(monthly_objectives),
+            "objectiveCount": len(monthly_objectives),
+            "calculatedCount": len(exact_results),
+            "monthToDateCount": len(scoped_results) - len(exact_results),
+            "anomalyCount": len(anomalies),
+            "blockingAnomalyCount": sum(1 for item in anomalies if item.get("severity") == "Bloquant"),
+        }
+    )
+    return scoped_quality
+
+
+def get_bootstrap_payload(session: dict) -> dict:
     trigger_kobo_auto_sync("Ouverture plateforme", force=False)
     with db_connect() as conn:
+        permissions = session.get("permissions") or {}
+        is_admin = bool(permissions.get("administration"))
+        has_global_scope = session_has_global_kpi_scope(session)
+        access_rules = access_for_session(
+            conn,
+            int(session.get("userId") or 0),
+            str(session.get("profile") or ""),
+            permissions,
+        )
         kpi_results, kpi_quality = calculate_kpi_results(conn)
         kobo_sources = list_kobo_sources(conn)
-        kobo_data_audit = get_kobo_data_audit(conn, kpi_quality)
+        objectives = list_objectives(conn)
+        reports = list_reports(conn)
+        kobo_submissions = list_kobo_submissions(conn)
+        kpi_daily_dates = list_kpi_daily_dates(conn)
+
+        if has_global_scope:
+            scoped_results = kpi_results
+            scoped_objectives = objectives
+            scoped_reports = reports
+            scoped_submissions = kobo_submissions
+            scoped_daily_dates = kpi_daily_dates
+        else:
+            scoped_results = filter_records_by_access_rules(kpi_results, access_rules)
+            scoped_objectives = filter_records_by_access_rules(objectives, access_rules, allow_group_record=True)
+            scoped_reports = filter_records_by_access_rules(reports, access_rules, allow_group_record=True)
+            scoped_submissions = filter_records_by_access_rules(kobo_submissions, access_rules)
+            scoped_daily_dates = filter_records_by_access_rules(kpi_daily_dates, access_rules)
+
+        scoped_quality = scoped_kpi_quality(
+            kpi_quality,
+            access_rules,
+            has_global_scope=has_global_scope,
+            scoped_results=scoped_results,
+        )
+        kobo_data_audit = get_kobo_data_audit(conn, kpi_quality) if is_admin else {}
         return {
-            "profiles": list_profiles(conn),
-            "users": list_users(conn),
-            "userAccess": list_user_access(conn),
-            "objectives": list_objectives(conn),
-            "reportHistory": list_reports(conn),
-            "activeKoboForm": active_kobo_form(conn),
-            "koboSources": kobo_sources,
-            "koboSubmissions": list_kobo_submissions(conn),
-            "kpiDailyDates": list_kpi_daily_dates(conn),
-            "kpiCalculationResults": kpi_results,
-            "kpiCalculationQuality": kpi_quality,
-            "koboAnomalies": kpi_quality.get("anomalies", []),
+            "profiles": list_profiles(conn) if is_admin else [],
+            "users": list_users(conn) if is_admin else [],
+            "userAccess": list_user_access(conn) if is_admin else access_rules,
+            "objectives": scoped_objectives,
+            "reportHistory": scoped_reports,
+            "activeKoboForm": active_kobo_form(conn) if is_admin else None,
+            "koboSources": kobo_sources if is_admin else [],
+            "koboSubmissions": scoped_submissions,
+            "kpiDailyDates": scoped_daily_dates,
+            "kpiCalculationResults": scoped_results,
+            "kpiCalculationQuality": scoped_quality,
+            "koboAnomalies": scoped_quality.get("anomalies", []),
             "koboDataAudit": kobo_data_audit,
-            "koboAutoSync": get_kobo_auto_sync_status(),
+            "koboAutoSync": get_kobo_auto_sync_status() if is_admin else {"enabled": False, "tokenConfigured": False},
         }
 
 
@@ -1628,16 +1772,74 @@ def get_database_table_preview(table_name: str, limit: int = 50) -> dict:
         }
 
 
-def require_admin_session(headers) -> dict:
+def require_authenticated_session(headers, message: str = "Connexion requise.") -> dict:
     authorization = str(headers.get("Authorization") or "").strip()
     if not authorization.lower().startswith("bearer "):
-        raise PermissionError("Connexion administrateur requise pour visiter la base.")
+        raise PermissionError(message)
     session = verify_session_token(authorization.split(" ", 1)[1].strip())
     if not session:
-        raise PermissionError("Session expiree. Reconnectez-vous comme administrateur.")
+        raise PermissionError("Session expiree. Reconnectez-vous.")
+    return session
+
+
+def require_permission_session(headers, permission_code: str, message: str | None = None) -> dict:
+    session = require_authenticated_session(headers, message or "Connexion requise.")
     permissions = session.get("permissions") or {}
-    if not permissions.get("administration"):
-        raise PermissionError("Acces reserve aux administrateurs.")
+    if not (permissions.get("administration") or permissions.get(permission_code)):
+        raise PermissionError(message or "Droit insuffisant pour cette action.")
+    return session
+
+
+def require_admin_session(headers) -> dict:
+    return require_permission_session(headers, "administration", "Acces reserve aux administrateurs.")
+
+
+def session_can_access_scope(
+    conn: sqlite3.Connection,
+    session: dict,
+    *,
+    pole_id: str,
+    branch: str = "Groupe",
+    allow_group_record: bool = False,
+) -> bool:
+    permissions = session.get("permissions") or {}
+    if permissions.get("administration") or permissions.get("management"):
+        return True
+
+    access_rules = access_for_session(
+        conn,
+        int(session.get("userId") or 0),
+        str(session.get("profile") or ""),
+        permissions,
+    )
+    return any(
+        rule.get("poleId") == pole_id
+        and branch_matches_rule(branch, rule_branch(rule), allow_group_record=allow_group_record)
+        for rule in access_rules
+    )
+
+
+def require_payload_scope(
+    headers,
+    payload: dict,
+    *,
+    permission_code: str,
+    message: str,
+    allow_group_record: bool = False,
+) -> dict:
+    session = require_permission_session(headers, permission_code, message)
+    permissions = session.get("permissions") or {}
+    if permissions.get("administration") or permissions.get("management"):
+        return session
+
+    pole_id = str(payload.get("poleId") or payload.get("pole") or "").strip()
+    branch = str(payload.get("branch") or payload.get("countryName") or "Groupe").strip() or "Groupe"
+    if not pole_id:
+        return session
+
+    with db_connect() as conn:
+        if not session_can_access_scope(conn, session, pole_id=pole_id, branch=branch, allow_group_record=allow_group_record):
+            raise PermissionError("Acces refuse: ce pole ou cette filiale n'est pas dans votre perimetre.")
     return session
 
 
@@ -2665,14 +2867,32 @@ def parse_number(value) -> float | None:
     text = unicodedata.normalize("NFD", str(value))
     text = text.encode("ascii", "ignore").decode("ascii")
     text = text.replace("\u00a0", " ").strip()
-    match = re.search(r"[-+]?\d+(?:[\s.]\d{3})*(?:,\d+)?|[-+]?\d+(?:\.\d+)?", text)
+    match = re.search(r"[-+]?\d[\d\s.,]*", text)
     if not match:
         return None
-    number_text = match.group(0).replace(" ", "")
-    if "," in number_text and "." in number_text:
-        number_text = number_text.replace(".", "").replace(",", ".")
-    else:
-        number_text = number_text.replace(",", ".")
+    number_text = re.sub(r"\s+", "", match.group(0))
+    if not re.search(r"\d", number_text):
+        return None
+
+    comma_index = number_text.rfind(",")
+    dot_index = number_text.rfind(".")
+    decimal_separator = ""
+    if comma_index >= 0 and dot_index >= 0:
+        decimal_separator = "," if comma_index > dot_index else "."
+    elif comma_index >= 0:
+        decimal_separator = ","
+    elif dot_index >= 0:
+        decimal_separator = "."
+
+    if decimal_separator:
+        thousands_separator = "." if decimal_separator == "," else ","
+        number_text = number_text.replace(thousands_separator, "")
+        if number_text.count(decimal_separator) > 1:
+            parts = number_text.split(decimal_separator)
+            number_text = "".join(parts[:-1]) + "." + parts[-1]
+        else:
+            number_text = number_text.replace(decimal_separator, ".")
+
     try:
         return float(number_text)
     except ValueError:
@@ -3399,6 +3619,7 @@ def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
         """
         SELECT
           s.form_uid,
+          s.pole_id,
           s.branch,
           s.kpi_name,
           s.collector,
@@ -3424,6 +3645,8 @@ def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
         submissions.append(
             {
                 "form": row["form_title"] or row["form_uid"],
+                "poleId": row["pole_id"] or "",
+                "poleName": row["pole_name"] or row["pole_id"] or "",
                 "branch": row["branch"] or row["pole_name"] or row["period"] or "Perimetre non renseigne",
                 "kpi": row["kpi_name"] or "KPI non renseigne",
                 "collector": row["collector"] or "KoboCollect",
@@ -4736,7 +4959,12 @@ class PMSHandler(BaseHTTPRequestHandler):
     server_version = "PMSGMC/1.0"
 
     def end_headers(self) -> None:
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = str(self.headers.get("Origin") or "").rstrip("/")
+        if origin:
+            parsed_origin = urlparse(origin)
+            if origin in ALLOWED_CORS_ORIGINS or parsed_origin.hostname in {"127.0.0.1", "localhost"}:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         super().end_headers()
@@ -4757,9 +4985,11 @@ class PMSHandler(BaseHTTPRequestHandler):
                 self.send_json({"database": str(DB_PATH), "status": "ok"})
                 return
             if path == "/api/bootstrap":
-                self.send_json(get_bootstrap_payload())
+                session = require_permission_session(self.headers, "consultation", "Connexion requise pour charger la plateforme.")
+                self.send_json(get_bootstrap_payload(session))
                 return
             if path == "/api/kobo/auto-status":
+                require_admin_session(self.headers)
                 self.send_json(get_kobo_auto_sync_status())
                 return
             if path == "/api/database/overview":
@@ -4795,27 +5025,44 @@ class PMSHandler(BaseHTTPRequestHandler):
                 self.send_json(authenticate_user(payload))
                 return
             if path == "/api/users":
+                require_admin_session(self.headers)
                 self.send_json(create_platform_user(payload))
                 return
             if path == "/api/access/profile-permissions":
+                require_admin_session(self.headers)
                 self.send_json(save_profile_permissions(payload))
                 return
             if path == "/api/access/user-access":
+                require_admin_session(self.headers)
                 self.send_json(save_user_access(payload))
                 return
             if path == "/api/objectives":
+                require_admin_session(self.headers)
                 self.send_json(save_objective(payload))
                 return
             if path == "/api/reports":
+                require_payload_scope(
+                    self.headers,
+                    payload,
+                    permission_code="ajout",
+                    message="Droit d'ajout requis pour enregistrer un rapport.",
+                    allow_group_record=True,
+                )
                 self.send_json(save_report(payload))
                 return
             if path == "/api/kobo/forms":
+                require_admin_session(self.headers)
                 self.send_json(save_kobo_form(payload))
                 return
             if path == "/api/kobo/sync":
+                require_admin_session(self.headers)
                 self.send_json(sync_kobo_form(payload))
                 return
             self.send_error_json(404, "Endpoint API introuvable.")
+        except PermissionError as exc:
+            self.send_error_json(403, str(exc))
+        except ValueError as exc:
+            self.send_error_json(400, str(exc))
         except Exception as exc:
             self.send_error_json(400, str(exc))
 
