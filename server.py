@@ -201,6 +201,37 @@ KOBO_FIELD_ALIASES = {
     "distribution_mode": ["mode_repartition", "repartition_objectif", "type_objectif"],
     "validation_status": ["validation_status", "statut_validation", "validation_hierarchique", "validation"],
 }
+KOBO_AUDIT_ROLE_LABELS = {
+    "referentielKpi": "Referentiel KPI et formules",
+    "objectifsMensuels": "Objectifs mensuels",
+    "donneesCalcul": "Donnees de calcul",
+}
+KOBO_AUDIT_REQUIRED_FIELDS = {
+    "referentielKpi": (
+        ("id", "ID KPI"),
+        ("pole", "Pole"),
+        ("title", "Intitule KPI"),
+        ("formula", "Formule"),
+        ("unit", "Unite"),
+        ("performanceDirection", "Sens performance"),
+    ),
+    "objectifsMensuels": (
+        ("branch", "Pays / filiale"),
+        ("pole", "Pole"),
+        ("kpi", "ID KPI"),
+        ("period", "Mois objectif"),
+        ("target", "Objectif mensuel"),
+        ("distributionMode", "Mode repartition"),
+    ),
+    "donneesCalcul": (
+        ("branch", "Pays / filiale"),
+        ("pole", "Pole"),
+        ("kpi", "ID KPI"),
+        ("date", "Date collecte"),
+        ("element", "Element de calcul"),
+        ("value", "Valeur element"),
+    ),
+}
 CATALOG_POLE_ALIASES = {
     "direction finance comptabilite": "DFC",
     "direction finance et comptabilite": "DFC",
@@ -1108,6 +1139,198 @@ def list_kobo_sources(conn: sqlite3.Connection) -> list[dict]:
     return sources
 
 
+def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = None) -> dict:
+    sources = list_kobo_sources(conn)
+    source_by_role: dict[str, dict] = {}
+    for source in sources:
+        source_by_role.setdefault(source["role"], source)
+
+    form_audits = []
+    connected_count = 0
+    mapped_ready_count = 0
+    forms_with_submissions = 0
+    total_submission_count = 0
+    total_field_count = 0
+    total_daily_rows = 0
+    issues: list[str] = []
+
+    for role in KOBO_AUTO_SYNC_ROLES:
+        label = KOBO_AUDIT_ROLE_LABELS.get(role, role)
+        required_fields = KOBO_AUDIT_REQUIRED_FIELDS.get(role, ())
+        source = source_by_role.get(role)
+        field_count = 0
+        submission_count = 0
+        daily_rows = 0
+        last_submission_at = ""
+        form_status = "Non configure"
+        missing_fields = [field_label for _, field_label in required_fields]
+        action = "Renseigner l'UID du formulaire Kobo puis synchroniser."
+        status_class = "red"
+        status_label = "A connecter"
+        mapped_count = 0
+
+        if source:
+            connected_count += 1
+            form_status = source.get("status") or "Actif"
+            mapped_fields = source.get("mappedFields") or {}
+            missing_fields = [field_label for field_key, field_label in required_fields if not mapped_fields.get(field_key)]
+            mapped_count = len(required_fields) - len(missing_fields)
+
+            form_row = conn.execute(
+                """
+                SELECT id
+                FROM kobo_forms
+                WHERE uid = ?
+                LIMIT 1
+                """,
+                (source["formId"],),
+            ).fetchone()
+            if form_row:
+                field_row = conn.execute(
+                    """
+                    SELECT COUNT(*) AS field_count
+                    FROM kobo_form_fields
+                    WHERE form_id = ?
+                    """,
+                    (form_row["id"],),
+                ).fetchone()
+                field_count = int(field_row["field_count"] if field_row else 0)
+
+            submission_row = conn.execute(
+                """
+                SELECT
+                  COUNT(*) AS submission_count,
+                  MAX(COALESCE(NULLIF(submitted_at, ''), created_at)) AS last_submission_at
+                FROM kobo_submissions
+                WHERE form_uid = ?
+                """,
+                (source["formId"],),
+            ).fetchone()
+            submission_count = int(submission_row["submission_count"] if submission_row else 0)
+            last_submission_at = str(submission_row["last_submission_at"] or "") if submission_row else ""
+
+            if role == "donneesCalcul":
+                daily_row = conn.execute(
+                    """
+                    SELECT COUNT(*) AS daily_rows
+                    FROM kpi_daily_data
+                    WHERE source_form_uid = ?
+                    """,
+                    (source["formId"],),
+                ).fetchone()
+                daily_rows = int(daily_row["daily_rows"] if daily_row else 0)
+
+            if not missing_fields:
+                mapped_ready_count += 1
+            if submission_count:
+                forms_with_submissions += 1
+
+            if missing_fields:
+                action = f"Completer le mapping: {', '.join(missing_fields[:4])}."
+                status_label = "Mapping incomplet"
+                status_class = "red"
+            elif not submission_count:
+                action = "Publier au moins une soumission Kobo, puis synchroniser."
+                status_label = "A alimenter"
+                status_class = "amber"
+            elif role == "donneesCalcul" and not daily_rows:
+                action = "Verifier date_collecte, id_kpi, pole et element_id pour creer les donnees journalieres."
+                status_label = "Donnees non datables"
+                status_class = "amber"
+            else:
+                action = "Pret pour le rapprochement PMS."
+                status_label = "Pret"
+                status_class = "green"
+
+            total_submission_count += submission_count
+            total_field_count += field_count
+            total_daily_rows += daily_rows
+
+        if status_class != "green":
+            issues.append(f"{label}: {action}")
+
+        form_audits.append(
+            {
+                "role": role,
+                "label": label,
+                "status": status_label,
+                "statusClass": status_class,
+                "formStatus": form_status,
+                "serverUrl": source.get("serverUrl") if source else "",
+                "formId": source.get("formId") if source else "",
+                "fieldCount": field_count,
+                "requiredFieldCount": len(required_fields),
+                "mappedRequiredCount": mapped_count,
+                "missingFields": missing_fields,
+                "submissionCount": submission_count,
+                "dailyRows": daily_rows,
+                "lastSubmissionAt": last_submission_at,
+                "action": action,
+            }
+        )
+
+    quality = kpi_quality or {}
+    calculation_groups = int(quality.get("calculationGroups") or 0)
+    calculated_count = int(quality.get("calculatedCount") or 0)
+    match_rate = float(quality.get("matchRate") or 0)
+    calculation_rate = float(quality.get("calculationRate") or 0)
+    reference_count = int(quality.get("referenceCount") or 0)
+    objective_count = int(quality.get("objectiveCount") or quality.get("objectiveRecords") or 0)
+
+    readiness_score = round(
+        (connected_count / len(KOBO_AUTO_SYNC_ROLES)) * 25
+        + (mapped_ready_count / len(KOBO_AUTO_SYNC_ROLES)) * 25
+        + (forms_with_submissions / len(KOBO_AUTO_SYNC_ROLES)) * 25
+        + (min(calculation_rate, 100) / 100) * 25
+    )
+    if connected_count == len(KOBO_AUTO_SYNC_ROLES) and mapped_ready_count == len(KOBO_AUTO_SYNC_ROLES):
+        if calculated_count:
+            global_status = "Pret pour dashboard"
+            global_class = "green"
+        elif total_submission_count:
+            global_status = "A fiabiliser"
+            global_class = "amber"
+        else:
+            global_status = "En attente donnees"
+            global_class = "amber"
+    else:
+        global_status = "Configuration incomplete"
+        global_class = "red"
+
+    for warning in quality.get("warnings") or []:
+        if warning and warning not in issues:
+            issues.append(str(warning))
+
+    proposals = []
+    for proposal in quality.get("proposals") or []:
+        if proposal and proposal not in proposals:
+            proposals.append(str(proposal))
+    if not proposals:
+        proposals.append("Conserver le meme ID KPI dans les trois formulaires pour fiabiliser le rapprochement automatique.")
+
+    return {
+        "status": global_status,
+        "statusClass": global_class,
+        "readinessScore": readiness_score,
+        "connectedForms": connected_count,
+        "expectedForms": len(KOBO_AUTO_SYNC_ROLES),
+        "mappedForms": mapped_ready_count,
+        "formsWithSubmissions": forms_with_submissions,
+        "fieldCount": total_field_count,
+        "submissionCount": total_submission_count,
+        "dailyRows": total_daily_rows,
+        "referenceCount": reference_count,
+        "objectiveCount": objective_count,
+        "calculationGroups": calculation_groups,
+        "calculatedCount": calculated_count,
+        "matchRate": round(match_rate),
+        "calculationRate": round(calculation_rate),
+        "forms": form_audits,
+        "issues": issues[:10],
+        "proposals": proposals[:5],
+    }
+
+
 def user_to_front(
     row: sqlite3.Row,
     default_pole_id: str | None = None,
@@ -1160,6 +1383,8 @@ def get_bootstrap_payload() -> dict:
     trigger_kobo_auto_sync("Ouverture plateforme", force=False)
     with db_connect() as conn:
         kpi_results, kpi_quality = calculate_kpi_results(conn)
+        kobo_sources = list_kobo_sources(conn)
+        kobo_data_audit = get_kobo_data_audit(conn, kpi_quality)
         return {
             "profiles": list_profiles(conn),
             "users": list_users(conn),
@@ -1167,11 +1392,12 @@ def get_bootstrap_payload() -> dict:
             "objectives": list_objectives(conn),
             "reportHistory": list_reports(conn),
             "activeKoboForm": active_kobo_form(conn),
-            "koboSources": list_kobo_sources(conn),
+            "koboSources": kobo_sources,
             "koboSubmissions": list_kobo_submissions(conn),
             "kpiDailyDates": list_kpi_daily_dates(conn),
             "kpiCalculationResults": kpi_results,
             "kpiCalculationQuality": kpi_quality,
+            "koboDataAudit": kobo_data_audit,
             "koboAutoSync": get_kobo_auto_sync_status(),
         }
 
@@ -3954,6 +4180,8 @@ def sync_kobo_form(payload: dict) -> dict:
         synced_at = conn.execute("SELECT CURRENT_TIMESTAMP AS synced_at").fetchone()["synced_at"]
         kpi_results, kpi_quality = calculate_kpi_results(conn)
         kpi_daily_dates = list_kpi_daily_dates(conn)
+        kobo_sources = list_kobo_sources(conn)
+        kobo_data_audit = get_kobo_data_audit(conn, kpi_quality)
         kobo_submissions = list_kobo_submissions(conn)
         objectives = list_objectives(conn)
 
@@ -3971,6 +4199,8 @@ def sync_kobo_form(payload: dict) -> dict:
         "kpiDailyDates": kpi_daily_dates,
         "kpiCalculationResults": kpi_results,
         "kpiCalculationQuality": kpi_quality,
+        "koboSources": kobo_sources,
+        "koboDataAudit": kobo_data_audit,
         "objectives": objectives,
         "koboSubmissions": kobo_submissions,
     }

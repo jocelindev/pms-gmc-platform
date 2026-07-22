@@ -2323,6 +2323,177 @@ textarea {
   line-height: 1.35;
 }
 
+.admin-kobo-audit {
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  background: #fff;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.admin-kobo-audit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.admin-kobo-audit-head span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-kobo-audit-head strong {
+  display: block;
+  color: var(--palladium-blue);
+  font-size: 1.05rem;
+  margin-top: 4px;
+}
+
+.admin-kobo-audit-head b {
+  border-radius: 999px;
+  color: var(--palladium-blue);
+  font-size: 1rem;
+  padding: 8px 12px;
+}
+
+.admin-kobo-audit-head .status-green,
+.admin-kobo-audit-head b.status-green {
+  background: rgba(35, 197, 94, 0.13);
+  color: #047857;
+}
+
+.admin-kobo-audit-head .status-amber,
+.admin-kobo-audit-head b.status-amber {
+  background: rgba(217, 163, 38, 0.14);
+  color: #9a6a05;
+}
+
+.admin-kobo-audit-head .status-red,
+.admin-kobo-audit-head b.status-red {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
+.admin-kobo-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.admin-kobo-audit-card {
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-top: 4px solid var(--muted);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 12px;
+}
+
+.admin-kobo-audit-card.status-green {
+  border-top-color: #16a34a;
+}
+
+.admin-kobo-audit-card.status-amber {
+  border-top-color: var(--palladium-gold-dark);
+}
+
+.admin-kobo-audit-card.status-red {
+  border-top-color: #dc2626;
+}
+
+.admin-kobo-audit-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-kobo-audit-card-head span:first-child {
+  color: var(--palladium-blue);
+  font-weight: 900;
+}
+
+.admin-kobo-audit-card > strong {
+  display: block;
+  color: var(--palladium-blue);
+  margin-top: 9px;
+  overflow-wrap: anywhere;
+}
+
+.admin-kobo-audit-card > small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.admin-kobo-audit-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.admin-kobo-audit-metrics span {
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 6px 8px;
+}
+
+.admin-kobo-audit-metrics b {
+  color: var(--palladium-blue);
+}
+
+.admin-kobo-audit-card p {
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 10px 0 0;
+}
+
+.admin-kobo-audit-card .admin-kobo-missing {
+  color: #b91c1c;
+  font-weight: 800;
+}
+
+.admin-kobo-audit-notes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.admin-kobo-audit-notes div {
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-radius: 8px;
+  background: rgba(31, 56, 100, 0.03);
+  padding: 10px;
+}
+
+.admin-kobo-audit-notes strong,
+.admin-kobo-audit-notes span {
+  display: block;
+}
+
+.admin-kobo-audit-notes strong {
+  color: var(--palladium-blue);
+  margin-bottom: 6px;
+}
+
+.admin-kobo-audit-notes span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
 .admin-kobo-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3791,6 +3962,8 @@ td small {
   .kobo-logic-grid,
   .kobo-template-actions,
   .kobo-sync-ready,
+  .admin-kobo-audit-grid,
+  .admin-kobo-audit-notes,
   .objective-profile-main,
   .collection-sheet-grid,
   .objective-field-section-grid,
@@ -3878,6 +4051,8 @@ td small {
   .kobo-logic-grid,
   .kobo-template-actions,
   .kobo-sync-ready,
+  .admin-kobo-audit-grid,
+  .admin-kobo-audit-notes,
   .objective-profile-main,
   .collection-sheet-grid,
   .objective-field-section-grid,

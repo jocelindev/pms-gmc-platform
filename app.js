@@ -773,6 +773,7 @@
     monthlyObjectiveKoboSource: defaultMonthlyObjectiveKoboSource ? clone(defaultMonthlyObjectiveKoboSource) : null,
     calculationKoboSource: defaultCalculationKoboSource ? clone(defaultCalculationKoboSource) : null,
     koboAutoSync: null,
+    koboDataAudit: null,
     databaseOverview: null,
     databaseTablePreview: null,
     currentDatabaseTable: "",
@@ -793,6 +794,22 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+  }
+
+  function mergeKoboSources(sources) {
+    if (!Array.isArray(sources)) return;
+    const referenceSource = sources.find((source) => source.role === "referentielKpi");
+    const monthlyObjectiveSource = sources.find((source) => source.role === "objectifsMensuels");
+    const calculationSource = sources.find((source) => source.role === "donneesCalcul");
+    if (referenceSource) {
+      state.objectiveKoboSource = referenceSource;
+    }
+    if (monthlyObjectiveSource) {
+      state.monthlyObjectiveKoboSource = monthlyObjectiveSource;
+    }
+    if (calculationSource) {
+      state.calculationKoboSource = calculationSource;
+    }
   }
 
   function mergeDatabasePayload(payload) {
@@ -844,22 +861,12 @@
     if (payload.activeKoboForm) {
       state.koboActiveForm = payload.activeKoboForm;
     }
-    if (Array.isArray(payload.koboSources)) {
-      const referenceSource = payload.koboSources.find((source) => source.role === "referentielKpi");
-      const monthlyObjectiveSource = payload.koboSources.find((source) => source.role === "objectifsMensuels");
-      const calculationSource = payload.koboSources.find((source) => source.role === "donneesCalcul");
-      if (referenceSource) {
-        state.objectiveKoboSource = referenceSource;
-      }
-      if (monthlyObjectiveSource) {
-        state.monthlyObjectiveKoboSource = monthlyObjectiveSource;
-      }
-      if (calculationSource) {
-        state.calculationKoboSource = calculationSource;
-      }
-    }
+    mergeKoboSources(payload.koboSources);
     if (payload.koboAutoSync) {
       state.koboAutoSync = payload.koboAutoSync;
+    }
+    if (payload.koboDataAudit) {
+      state.koboDataAudit = payload.koboDataAudit;
     }
     ensureCalendarDateFromAvailableData();
     applyCalculatedKpisToReporting();
@@ -1370,6 +1377,10 @@
         }
         if (result.kpiCalculationQuality) {
           state.kpiCalculationQuality = result.kpiCalculationQuality;
+        }
+        mergeKoboSources(result.koboSources);
+        if (result.koboDataAudit) {
+          state.koboDataAudit = result.koboDataAudit;
         }
         applyCalculatedKpisToReporting();
         renderAll(state);
@@ -2274,6 +2285,10 @@
         }
         if (result.kpiCalculationQuality) {
           state.kpiCalculationQuality = result.kpiCalculationQuality;
+        }
+        mergeKoboSources(result.koboSources);
+        if (result.koboDataAudit) {
+          state.koboDataAudit = result.koboDataAudit;
         }
         applyCalculatedKpisToReporting();
         renderAll(state);

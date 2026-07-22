@@ -3136,7 +3136,7 @@
           minute: "2-digit",
         });
       };
-      const intervalMinutes = Math.max(1, Math.round((autoSync.intervalSeconds || 900) / 60));
+      const intervalMinutes = Math.max(1, Math.round((autoSync.intervalSeconds || 300) / 60));
       const statusLabel = autoSync.running
         ? "Synchronisation en cours"
         : autoSync.enabled
@@ -3155,6 +3155,121 @@
         <span>Synchronisation automatique</span>
         <strong>${escapeHtml(statusLabel)}</strong>
         <small>${escapeHtml(detail)}</small>
+      `;
+    }
+
+    const audit = state.koboDataAudit || {};
+    const auditTitle = $("#admin-kobo-audit-title");
+    const auditScore = $("#admin-kobo-audit-score");
+    const auditGrid = $("#admin-kobo-audit-grid");
+    const auditNotes = $("#admin-kobo-audit-notes");
+    const formatInteger = (value) => new Intl.NumberFormat("fr-FR").format(Number(value) || 0);
+    const fallbackAuditForms = [
+      {
+        role: "referentielKpi",
+        label: "Referentiel KPI",
+        formId: referenceSource?.formId || "",
+        serverUrl: referenceSource?.serverUrl || "",
+        status: referenceSource ? "Configure" : "A connecter",
+        statusClass: referenceSource ? "amber" : "red",
+        fieldCount: Object.keys(referenceSource?.mappedFields || {}).length,
+        submissionCount: referenceCount,
+        dailyRows: 0,
+        missingFields: [],
+        action: referenceSource ? "Synchroniser pour verifier les soumissions." : "Renseigner l'UID du formulaire.",
+      },
+      {
+        role: "objectifsMensuels",
+        label: "Objectifs mensuels",
+        formId: monthlyObjectiveSource?.formId || "",
+        serverUrl: monthlyObjectiveSource?.serverUrl || "",
+        status: monthlyObjectiveSource ? "Configure" : "A connecter",
+        statusClass: monthlyObjectiveSource ? "amber" : "red",
+        fieldCount: Object.keys(monthlyObjectiveSource?.mappedFields || {}).length,
+        submissionCount: objectives.length,
+        dailyRows: 0,
+        missingFields: [],
+        action: monthlyObjectiveSource ? "Synchroniser pour verifier les objectifs." : "Renseigner l'UID du formulaire.",
+      },
+      {
+        role: "donneesCalcul",
+        label: "Donnees de calcul",
+        formId: calculationSource?.formId || "",
+        serverUrl: calculationSource?.serverUrl || "",
+        status: calculationSource ? "Configure" : "A connecter",
+        statusClass: calculationSource ? "amber" : "red",
+        fieldCount: Object.keys(calculationSource?.mappedFields || {}).length,
+        submissionCount: state.koboSubmissions?.filter((item) => item.sourceRole === "donneesCalcul").length || 0,
+        dailyRows: state.kpiCalculationQuality?.dailyDataRows || 0,
+        missingFields: [],
+        action: calculationSource ? "Synchroniser pour verifier les donnees jour." : "Renseigner l'UID du formulaire.",
+      },
+    ];
+    const auditForms = Array.isArray(audit.forms) && audit.forms.length ? audit.forms : fallbackAuditForms;
+    const scoreValue = Number.isFinite(Number(audit.readinessScore))
+      ? Math.max(0, Math.min(100, Number(audit.readinessScore)))
+      : Math.round((auditForms.filter((form) => form.formId).length / 3) * 50);
+    const auditClass = audit.statusClass || (scoreValue >= 80 ? "green" : scoreValue >= 50 ? "amber" : "red");
+    if (auditTitle) {
+      auditTitle.textContent = audit.status || (scoreValue >= 80 ? "Pret pour controle" : "Configuration a verifier");
+    }
+    if (auditScore) {
+      auditScore.textContent = `${scoreValue}%`;
+      auditScore.className = `status-${auditClass}`;
+    }
+    if (auditGrid) {
+      auditGrid.innerHTML = auditForms
+        .map((form) => {
+          const missingFields = Array.isArray(form.missingFields) ? form.missingFields.filter(Boolean) : [];
+          const missingMarkup = missingFields.length
+            ? `<p class="admin-kobo-missing">A mapper: ${escapeHtml(missingFields.slice(0, 5).join(", "))}</p>`
+            : "";
+          const dailyMetric =
+            form.role === "donneesCalcul" || Number(form.dailyRows || 0) > 0
+              ? `<span><b>${formatInteger(form.dailyRows)}</b> lignes jour</span>`
+              : "";
+          return `
+            <article class="admin-kobo-audit-card status-${escapeHtml(form.statusClass || "gray")}">
+              <div class="admin-kobo-audit-card-head">
+                <span>${escapeHtml(form.label || form.role)}</span>
+                ${statusPill(form.status || "A verifier", form.statusClass || "gray")}
+              </div>
+              <strong>${escapeHtml(form.formId || "Non configure")}</strong>
+              <small>${escapeHtml(form.serverUrl || "Serveur Kobo a renseigner")}</small>
+              <div class="admin-kobo-audit-metrics">
+                <span><b>${formatInteger(form.fieldCount)}</b> champs</span>
+                <span><b>${formatInteger(form.submissionCount)}</b> soumissions</span>
+                ${dailyMetric}
+              </div>
+              ${missingMarkup}
+              <p>${escapeHtml(form.action || "Verifier la configuration du formulaire.")}</p>
+            </article>
+          `;
+        })
+        .join("");
+    }
+    if (auditNotes) {
+      const issues = Array.isArray(audit.issues) ? audit.issues.slice(0, 4) : [];
+      const proposals = Array.isArray(audit.proposals)
+        ? audit.proposals.slice(0, 3)
+        : (state.kpiCalculationQuality?.proposals || []).slice(0, 3);
+      auditNotes.innerHTML = `
+        <div>
+          <strong>Points a verifier</strong>
+          ${
+            issues.length
+              ? issues.map((issue) => `<span>${escapeHtml(issue)}</span>`).join("")
+              : "<span>Aucun blocage critique detecte.</span>"
+          }
+        </div>
+        <div>
+          <strong>Prochaine action utile</strong>
+          ${
+            proposals.length
+              ? proposals.map((proposal) => `<span>${escapeHtml(proposal)}</span>`).join("")
+              : "<span>Synchroniser regulierement les trois formulaires.</span>"
+          }
+        </div>
       `;
     }
 
