@@ -128,28 +128,6 @@ button {
   letter-spacing: 0;
 }
 
-.login-copy {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.55;
-}
-
-.login-assurance {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.login-assurance span {
-  background: rgba(214, 168, 56, 0.12);
-  border: 1px solid rgba(214, 168, 56, 0.26);
-  border-radius: 999px;
-  color: var(--palladium-blue);
-  font-size: 12px;
-  font-weight: 850;
-  padding: 7px 10px;
-}
-
 .login-access-panel {
   background: linear-gradient(135deg, rgba(31, 56, 100, 0.06), rgba(214, 168, 56, 0.1));
   border: 1px solid rgba(31, 56, 100, 0.13);
