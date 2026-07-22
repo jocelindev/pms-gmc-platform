@@ -75,6 +75,11 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
   - Formulaire Objectifs mensuels : UID a renseigner apres import KoboToolbox.
   - Formulaire 2 UID `aZ5JcFjcL9YvnQozqHWrqN`.
 - Pour une synchronisation automatique, ajouter le token dans Render comme variable d'environnement secrete `PMS_KOBO_API_TOKEN`.
+- Sur Render gratuit, la base SQLite locale peut etre recreee apres redeploiement ou redemarrage. La plateforme reconstruit donc automatiquement la connexion Kobo au demarrage depuis les variables Render :
+  - `PMS_KOBO_SERVER_URL` : serveur Kobo, par defaut `https://kf.kobotoolbox.org`.
+  - `PMS_KOBO_REFERENCE_FORM_UID` : UID du formulaire KPI et formules.
+  - `PMS_KOBO_OBJECTIVES_FORM_UID` : UID du formulaire objectifs mensuels.
+  - `PMS_KOBO_CALCULATION_FORM_UID` : UID du formulaire donnees de calcul journalieres.
 - Par defaut, le serveur synchronise automatiquement les formulaires operationnels toutes les 15 minutes avec `PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS=900`.
 - Si `PMS_KOBO_API_TOKEN` n'est pas encore configure, il reste possible de renseigner le token API Kobo dans **Administration > KoboCollecte**, puis cliquer sur `Synchroniser depuis Kobo`.
 - Depuis l'interface, ces modeles sont telechargeables dans **Administration > KoboCollecte**, avant les zones UID/token.

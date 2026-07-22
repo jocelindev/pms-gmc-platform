@@ -51,11 +51,98 @@ KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT = 15 * 60
 KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS_DEFAULT = 8
 KOBO_AUTO_SYNC_ROLES = ("referentielKpi", "objectifsMensuels", "donneesCalcul")
 KOBO_TOKEN_ENV_KEYS = ("PMS_KOBO_API_TOKEN", "KOBO_API_TOKEN")
+KOBO_SERVER_ENV_KEYS = ("PMS_KOBO_SERVER_URL", "KOBO_SERVER_URL")
 REFERENCE_KOBO_CURRENT_UID = "agJCJ2VqwMGNk586NHJ39W"
 REFERENCE_KOBO_OLD_UIDS = ("auGyH8vhCsK9KKtG2fu2u5",)
 REFERENCE_KOBO_TITLE = "PMS GMC - Formulaire 1 - Referentiel KPI et formules"
 REFERENCE_KOBO_SOURCE_TYPE = "KoboCollect Referentiel KPI"
 REFERENCE_KOBO_DEFAULT_SERVER = "https://kf.kobotoolbox.org"
+CALCULATION_KOBO_DEFAULT_UID = "aZ5JcFjcL9YvnQozqHWrqN"
+ENV_KOBO_SOURCE_DEFINITIONS = (
+    {
+        "role": "referentielKpi",
+        "env_keys": ("PMS_KOBO_REFERENCE_FORM_UID", "PMS_KOBO_REFERENTIEL_FORM_UID", "KOBO_REFERENCE_FORM_UID"),
+        "server_env_keys": ("PMS_KOBO_REFERENCE_SERVER_URL",),
+        "default_uid": REFERENCE_KOBO_CURRENT_UID,
+        "title": REFERENCE_KOBO_TITLE,
+        "source_type": REFERENCE_KOBO_SOURCE_TYPE,
+        "cadence": "Selon periode",
+        "field_type": "Champ referentiel KPI",
+        "fields": {
+            "id": "id_kpi",
+            "branch": "pays_filiale",
+            "category": "categorie_organisationnelle",
+            "entity": "entite_direction",
+            "subEntity": "sous_entite_pole_filiale",
+            "pole": "groupe_de_rattachement",
+            "path": "chemin_organisationnel",
+            "title": "intitule_du_kpi",
+            "definition": "description_definition",
+            "type": "type_de_kpi",
+            "unit": "unite_de_mesure",
+            "formula": "formule_de_calcul",
+            "target": "valeur_cible",
+            "performanceDirection": "sens_performance",
+            "collectionFrequency": "frequence_de_collecte",
+            "reportingFrequency": "periodicite_du_reporting",
+            "sourceData": "source_de_la_donnee",
+            "owner": "responsable_du_kpi",
+            "respondent": "repondant",
+            "respondentFunction": "fonction_du_repondant",
+            "year": "annee",
+            "validation": "validation_hierarchique",
+            "validator": "validateur",
+            "comments": "commentaires",
+            "submittedAt": "date_de_soumission",
+            "sourceReference": "reference_source",
+            "documentStatus": "statut_documentaire",
+            "attention": "points_d_attention",
+        },
+    },
+    {
+        "role": "objectifsMensuels",
+        "env_keys": ("PMS_KOBO_OBJECTIVES_FORM_UID", "PMS_KOBO_OBJECTIVE_FORM_UID", "KOBO_OBJECTIVES_FORM_UID"),
+        "server_env_keys": ("PMS_KOBO_OBJECTIVES_SERVER_URL", "PMS_KOBO_OBJECTIVE_SERVER_URL"),
+        "default_uid": "",
+        "title": "PMS GMC - Formulaire Objectifs mensuels",
+        "source_type": "KoboCollect Objectifs mensuels",
+        "cadence": "Mensuel",
+        "field_type": "Champ objectifs mensuels",
+        "fields": {
+            "branch": "pays_filiale",
+            "pole": "pole_id",
+            "kpi": "id_kpi",
+            "period": "periode_objectif",
+            "target": "objectif_mensuel",
+            "unit": "unite_mesure",
+            "frequency": "frequence_objectif",
+            "distributionMode": "mode_repartition",
+            "sourceData": "source_objectif",
+            "responsible": "responsable_objectif",
+            "validation": "validation_hierarchique",
+        },
+    },
+    {
+        "role": "donneesCalcul",
+        "env_keys": ("PMS_KOBO_CALCULATION_FORM_UID", "PMS_KOBO_DATA_FORM_UID", "KOBO_CALCULATION_FORM_UID"),
+        "server_env_keys": ("PMS_KOBO_CALCULATION_SERVER_URL", "PMS_KOBO_DATA_SERVER_URL"),
+        "default_uid": CALCULATION_KOBO_DEFAULT_UID,
+        "title": "PMS GMC - Formulaire 2 - Donnees de calcul journalieres",
+        "source_type": "KoboCollect Donnees de calcul",
+        "cadence": "Journalier",
+        "field_type": "Champ donnees de calcul",
+        "fields": {
+            "pole": "pole_id",
+            "kpi": "id_kpi",
+            "period": "periode_reporting",
+            "element": "element_id",
+            "value": "valeur_element",
+            "branch": "filiale",
+            "date": "date_collecte",
+            "validation": "validation_hierarchique",
+        },
+    },
+)
 AUTO_KOBO_LOCK = threading.Lock()
 AUTO_KOBO_STATE = {
     "running": False,
@@ -542,18 +629,22 @@ def migrate_reference_kobo_uid(conn: sqlite3.Connection) -> bool:
         (REFERENCE_KOBO_CURRENT_UID,),
     ).fetchone()
     if current:
-        conn.execute(
-            """
-            INSERT INTO kobo_form_fields (form_id, field_name, field_label, field_type, mapped_to, required)
-            VALUES (?, 'pays_filiale', 'branch', 'Champ referentiel KPI', 'branch', 1)
-            ON CONFLICT(form_id, field_name) DO UPDATE SET
-              field_label = excluded.field_label,
-              field_type = excluded.field_type,
-              mapped_to = excluded.mapped_to,
-              required = excluded.required
-            """,
-            (current["id"],),
-        )
+        for field_name, mapped_to in (
+            ("pays_filiale", "branch"),
+            ("sens_performance", "performanceDirection"),
+        ):
+            conn.execute(
+                """
+                INSERT INTO kobo_form_fields (form_id, field_name, field_label, field_type, mapped_to, required)
+                VALUES (?, ?, ?, 'Champ referentiel KPI', ?, 1)
+                ON CONFLICT(form_id, field_name) DO UPDATE SET
+                  field_label = excluded.field_label,
+                  field_type = excluded.field_type,
+                  mapped_to = excluded.mapped_to,
+                  required = excluded.required
+                """,
+                (current["id"], field_name, mapped_to, mapped_to),
+            )
         changed = True
 
     return changed
@@ -926,6 +1017,7 @@ def active_kobo_form(conn: sqlite3.Connection) -> dict | None:
         """
         SELECT id, uid, title, server_url, source_type, status
         FROM kobo_forms
+        WHERE status NOT IN ('Archive', 'Inactif')
         ORDER BY updated_at DESC, id DESC
         LIMIT 1
         """
@@ -972,6 +1064,7 @@ def list_kobo_sources(conn: sqlite3.Connection) -> list[dict]:
         """
         SELECT id, uid, title, server_url, source_type, status
         FROM kobo_forms
+        WHERE status NOT IN ('Archive', 'Inactif')
         ORDER BY updated_at DESC, id DESC
         """
     ).fetchall()
@@ -1143,6 +1236,7 @@ def database_visible_where_clause(table_name: str) -> str:
           SELECT uid
           FROM kobo_forms
           WHERE lower(coalesce(source_type, '')) LIKE '%referentiel%'
+             OR lower(coalesce(source_type, '')) LIKE '%objectif%'
              OR lower(coalesce(source_type, '')) LIKE '%calcul%'
         )
         """
@@ -1740,6 +1834,162 @@ def get_kobo_api_token_from_env() -> tuple[str, str]:
         if token:
             return token, key
     return "", ""
+
+
+def first_env_value(keys: tuple[str, ...]) -> tuple[str, str]:
+    for key in keys:
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value, key
+    return "", ""
+
+
+def configured_kobo_sources_from_env() -> list[dict]:
+    common_server, _server_env = first_env_value(KOBO_SERVER_ENV_KEYS)
+    common_server = normalize_kobo_server_url(common_server) or REFERENCE_KOBO_DEFAULT_SERVER
+    sources = []
+    for definition in ENV_KOBO_SOURCE_DEFINITIONS:
+        form_uid, uid_env = first_env_value(definition["env_keys"])
+        form_uid = form_uid or definition.get("default_uid", "")
+        if not form_uid:
+            continue
+        role_server, _role_server_env = first_env_value(definition.get("server_env_keys", ()))
+        server_url = normalize_kobo_server_url(role_server) or common_server
+        sources.append(
+            {
+                "role": definition["role"],
+                "uid": form_uid,
+                "server_url": server_url,
+                "title": definition["title"],
+                "source_type": definition["source_type"],
+                "cadence": definition["cadence"],
+                "field_type": definition["field_type"],
+                "fields": definition["fields"],
+                "from_env": bool(uid_env),
+            }
+        )
+    return sources
+
+
+def upsert_kobo_source_from_env(conn: sqlite3.Connection, source: dict) -> bool:
+    row = conn.execute(
+        """
+        SELECT id, title, server_url, cadence, source_type, status
+        FROM kobo_forms
+        WHERE uid = ?
+        """,
+        (source["uid"],),
+    ).fetchone()
+    changed = False
+    desired = {
+        "title": source["title"],
+        "server_url": source["server_url"],
+        "cadence": source["cadence"],
+        "source_type": source["source_type"],
+        "status": "Actif",
+    }
+    if not row:
+        conn.execute(
+            """
+            INSERT INTO kobo_forms (uid, title, server_url, cadence, source_type, status, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'Actif', CURRENT_TIMESTAMP)
+            """,
+            (
+                source["uid"],
+                desired["title"],
+                desired["server_url"],
+                desired["cadence"],
+                desired["source_type"],
+            ),
+        )
+        changed = True
+    elif any(str(row[key] or "") != str(value or "") for key, value in desired.items()):
+        conn.execute(
+            """
+            UPDATE kobo_forms
+            SET title = ?,
+                server_url = ?,
+                cadence = ?,
+                source_type = ?,
+                status = 'Actif',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE uid = ?
+            """,
+            (
+                desired["title"],
+                desired["server_url"],
+                desired["cadence"],
+                desired["source_type"],
+                source["uid"],
+            ),
+        )
+        changed = True
+
+    if source.get("from_env"):
+        archive_cursor = conn.execute(
+            """
+            UPDATE kobo_forms
+            SET status = 'Archive',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE uid <> ?
+              AND source_type = ?
+              AND status NOT IN ('Archive', 'Inactif')
+            """,
+            (source["uid"], source["source_type"]),
+        )
+        changed = bool(archive_cursor.rowcount) or changed
+
+    form_id = conn.execute("SELECT id FROM kobo_forms WHERE uid = ?", (source["uid"],)).fetchone()["id"]
+    existing_fields = {
+        row["field_name"]: row
+        for row in conn.execute(
+            """
+            SELECT field_name, field_label, field_type, mapped_to, required
+            FROM kobo_form_fields
+            WHERE form_id = ?
+            """,
+            (form_id,),
+        ).fetchall()
+    }
+    for mapped_to, field_name in source["fields"].items():
+        existing = existing_fields.get(field_name)
+        if not existing or (
+            str(existing["field_label"] or "") != str(mapped_to)
+            or str(existing["field_type"] or "") != str(source["field_type"])
+            or str(existing["mapped_to"] or "") != str(mapped_to)
+            or int(existing["required"] or 0) != 1
+        ):
+            conn.execute(
+                """
+                INSERT INTO kobo_form_fields (form_id, field_name, field_label, field_type, mapped_to, required)
+                VALUES (?, ?, ?, ?, ?, 1)
+                ON CONFLICT(form_id, field_name) DO UPDATE SET
+                  field_label = excluded.field_label,
+                  field_type = excluded.field_type,
+                  mapped_to = excluded.mapped_to,
+                  required = excluded.required
+                """,
+                (form_id, field_name, mapped_to, source["field_type"], mapped_to),
+            )
+            changed = True
+    return changed
+
+
+def apply_env_kobo_sources(conn: sqlite3.Connection) -> bool:
+    changed = False
+    sources = configured_kobo_sources_from_env()
+    for source in sources:
+        changed = upsert_kobo_source_from_env(conn, source) or changed
+    if changed:
+        audit(
+            conn,
+            "Configuration Kobo automatique",
+            "kobo_form",
+            "env",
+            {"sources": [source["role"] for source in sources], "forms": [source["uid"] for source in sources]},
+        )
+        conn.commit()
+    return changed
 
 
 def utc_timestamp() -> str:
@@ -3860,6 +4110,8 @@ def main() -> None:
 
     DB_PATH = Path(args.db).resolve()
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with db_connect() as conn:
+        apply_env_kobo_sources(conn)
     server = ThreadingHTTPServer((args.host, args.port), PMSHandler)
     start_kobo_auto_sync_scheduler()
     print(f"PMS GMC API disponible sur http://{args.host}:{args.port}/")

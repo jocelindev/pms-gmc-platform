@@ -42,6 +42,7 @@ DEFAULT_KOBO_SOURCES = [
             "unit": "unite_de_mesure",
             "formula": "formule_de_calcul",
             "target": "valeur_cible",
+            "performanceDirection": "sens_performance",
             "collectionFrequency": "frequence_de_collecte",
             "reportingFrequency": "periodicite_du_reporting",
             "sourceData": "source_de_la_donnee",

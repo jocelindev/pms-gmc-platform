@@ -9,5 +9,13 @@ services:
     envVars:
       - key: PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS
         value: "900"
+      - key: PMS_KOBO_SERVER_URL
+        value: https://kf.kobotoolbox.org
+      - key: PMS_KOBO_REFERENCE_FORM_UID
+        value: agJCJ2VqwMGNk586NHJ39W
+      - key: PMS_KOBO_OBJECTIVES_FORM_UID
+        sync: false
+      - key: PMS_KOBO_CALCULATION_FORM_UID
+        value: aZ5JcFjcL9YvnQozqHWrqN
       - key: PMS_KOBO_API_TOKEN
         sync: false
