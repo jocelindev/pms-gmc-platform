@@ -2759,6 +2759,152 @@ button.dashboard-control-card {
   gap: 14px;
 }
 
+.pole-pilot-panel {
+  margin-bottom: 16px;
+}
+
+.pole-pilot-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pole-pilot-card {
+  border: 1px solid rgba(31, 56, 100, 0.13);
+  border-top: 4px solid #94a3b8;
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 13px;
+}
+
+.pole-pilot-card.status-green {
+  border-top-color: var(--green-text);
+}
+
+.pole-pilot-card.status-amber {
+  border-top-color: var(--amber-text);
+}
+
+.pole-pilot-card.status-red {
+  border-top-color: var(--red-text);
+}
+
+.pole-pilot-card span,
+.pole-pilot-card small {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pole-pilot-card strong {
+  color: var(--palladium-blue);
+  display: block;
+  font-size: 24px;
+  line-height: 1.12;
+  word-break: break-word;
+}
+
+.pole-pilot-card small {
+  font-size: 11px;
+  line-height: 1.3;
+  text-transform: none;
+}
+
+.pole-pilot-bottom {
+  align-items: stretch;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 12px;
+}
+
+.pole-pilot-bottom .ghost-action {
+  align-self: end;
+  min-height: 46px;
+}
+
+.pole-pilot-action-card {
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-left: 4px solid #94a3b8;
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  padding: 13px;
+}
+
+.pole-pilot-action-card.status-green {
+  border-left-color: var(--green-text);
+  background: linear-gradient(90deg, rgba(198, 239, 206, 0.32), #fff 45%);
+}
+
+.pole-pilot-action-card.status-amber {
+  border-left-color: var(--amber-text);
+  background: linear-gradient(90deg, rgba(255, 235, 156, 0.36), #fff 45%);
+}
+
+.pole-pilot-action-card.status-red {
+  border-left-color: var(--red-text);
+  background: linear-gradient(90deg, rgba(255, 199, 206, 0.36), #fff 45%);
+}
+
+.pole-pilot-action-card span,
+.pole-pilot-action-card strong,
+.pole-pilot-action-card p,
+.pole-pilot-priorities small {
+  display: block;
+}
+
+.pole-pilot-action-card span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pole-pilot-action-card strong {
+  color: var(--palladium-blue);
+  margin-top: 4px;
+}
+
+.pole-pilot-action-card p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 5px 0 0;
+}
+
+.pole-pilot-priorities {
+  display: grid;
+  gap: 7px;
+}
+
+.pole-pilot-priorities span {
+  background: rgba(31, 56, 100, 0.05);
+  border: 1px solid rgba(31, 56, 100, 0.08);
+  border-radius: 8px;
+  padding: 8px;
+  text-transform: none;
+}
+
+.pole-pilot-priorities strong {
+  font-size: 12px;
+  margin: 0;
+}
+
+.pole-pilot-priorities small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
 .kpi-engine-panel {
   margin-bottom: 16px;
 }
@@ -5067,6 +5213,8 @@ td small {
   .selected-pole-summary,
   .selected-kpi-grid,
   .pole-kpi-items,
+  .pole-pilot-grid,
+  .pole-pilot-action-card,
   .kpi-engine-grid,
   .admin-summary-grid,
   .admin-kobo-form,
@@ -5184,6 +5332,9 @@ td small {
   .selected-pole-summary,
   .selected-kpi-grid,
   .pole-kpi-items,
+  .pole-pilot-grid,
+  .pole-pilot-bottom,
+  .pole-pilot-action-card,
   .kpi-engine-grid,
   .admin-summary-grid,
   .admin-kobo-form,

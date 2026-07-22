@@ -3028,6 +3028,229 @@
     }
   }
 
+  function getPoleMonitorContext(state = {}) {
+    const reporting = PMS_DATA.reporting;
+    const accessContext = getPoleAccessContext(state);
+    const activeCountry = getActiveCountry(state);
+    const authorizedPoles = getCountryScopedPoles(state, accessContext.isRestricted ? accessContext.poles : reporting.poles);
+    if (!authorizedPoles.length) {
+      return {
+        accessContext,
+        activeCountry,
+        authorizedPoles,
+        selectedPole: null,
+        selectedFrequency: state.currentPoleFrequency || "Tous",
+        rawKpis: [],
+        kpis: [],
+        rows: [],
+        dataRows: [],
+        criticalRows: [],
+        negativeTrendRows: [],
+        targetRows: [],
+        reachedRows: [],
+        targetRate: null,
+        cadenceProfile: {},
+      };
+    }
+    if (!authorizedPoles.some((pole) => pole.id === state.currentPoleMonitor)) {
+      state.currentPoleMonitor = authorizedPoles[0]?.id || reporting.defaultPole;
+    }
+    const selectedPole =
+      authorizedPoles.find((item) => item.id === state.currentPoleMonitor) || authorizedPoles[0] || reporting.poles[0];
+    const selectedFrequency = state.currentPoleFrequency || "Tous";
+    const rawKpis = reporting.kpisByPole[selectedPole.id] || [];
+    const kpis = filteredKpisByCadence(rawKpis, selectedPole, selectedFrequency);
+    const rows = kpis.map((kpi, index) => ({
+      key: dashboardKpiKey(selectedPole, kpi, index),
+      pole: selectedPole,
+      kpi,
+      index,
+    }));
+    const dataRows = rows.filter((row) => hasKpiData(row.kpi));
+    const targetRows = dataRows.filter(targetKnown);
+    const reachedRows = targetRows.filter(targetReached);
+    const targetRate = targetRows.length ? Math.round((reachedRows.length / targetRows.length) * 100) : null;
+    const negativeTrendRows = dataRows.filter((row) =>
+      kpiTrendMetrics(row.kpi, row.pole).some((metric) => metric.className === "negative")
+    );
+    const criticalRows = dataRows
+      .filter((row) => ["red", "amber"].includes(row.kpi.status) || negativeTrendRows.includes(row))
+      .map((row) => ({ ...row, riskScore: kpiRiskScore(row) }))
+      .sort((left, right) => right.riskScore - left.riskScore)
+      .slice(0, 3);
+
+    return {
+      accessContext,
+      activeCountry,
+      authorizedPoles,
+      selectedPole,
+      selectedFrequency,
+      rawKpis,
+      kpis,
+      rows,
+      dataRows,
+      criticalRows,
+      negativeTrendRows,
+      targetRows,
+      reachedRows,
+      targetRate,
+      cadenceProfile: cadenceProfileForPole(selectedPole),
+    };
+  }
+
+  function renderPolePilotPanel(state = {}, context = getPoleMonitorContext(state)) {
+    const panel = $("#pole-pilot-panel");
+    if (!panel) return;
+    const title = $("#pole-pilot-title");
+    const status = $("#pole-pilot-status");
+    const summary = $("#pole-pilot-summary");
+    const action = $("#pole-pilot-action");
+    const reportButton = $("#open-pole-report");
+
+    if (!context.selectedPole) {
+      if (title) title.textContent = `Aucun pole disponible - ${context.activeCountry.name}`;
+      if (status) {
+        status.className = "status-pill gray";
+        status.textContent = "Aucun acces";
+      }
+      if (summary) {
+        summary.innerHTML = `<div class="empty-kpi-state">Aucun pole n'est autorise pour ${escapeHtml(context.activeCountry.name)} avec ce profil.</div>`;
+      }
+      if (action) action.innerHTML = "";
+      if (reportButton) reportButton.disabled = true;
+      return;
+    }
+
+    const {
+      selectedPole,
+      selectedFrequency,
+      rawKpis,
+      kpis,
+      dataRows,
+      criticalRows,
+      negativeTrendRows,
+      targetRows,
+      reachedRows,
+      targetRate,
+      cadenceProfile,
+      activeCountry,
+    } = context;
+    const redCount = dataRows.filter((row) => row.kpi.status === "red").length;
+    const amberCount = dataRows.filter((row) => row.kpi.status === "amber").length;
+    const greenCount = dataRows.filter((row) => row.kpi.status === "green").length;
+    const hasData = dataRows.length > 0;
+    const statusClass = hasData ? (redCount ? "red" : amberCount ? "amber" : "green") : "gray";
+    const targetClass = targetRate === null ? "gray" : scoreClass(targetRate);
+    const cadenceLabel = selectedFrequency === "Tous"
+      ? cadenceProfile.primary || normalizeCadence(cadenceProfile.cadence)
+      : selectedFrequency;
+    const visibleKpiTotal = kpis.length || rawKpis.length;
+
+    if (title) {
+      title.textContent = `${selectedPole.name} - ${activeCountry.name}`;
+    }
+    if (status) {
+      status.className = `status-pill ${statusClass}`;
+      status.textContent = hasData ? `${redCount + amberCount} point(s) a suivre` : "En attente Kobo";
+    }
+    if (reportButton) {
+      reportButton.disabled = false;
+    }
+
+    if (summary) {
+      const cards = [
+        {
+          label: "KPI calcules",
+          value: visibleKpiTotal ? `${dataRows.length}/${visibleKpiTotal}` : "0",
+          hint: selectedFrequency === "Tous" ? `${rawKpis.length} KPI rattaches` : `filtre ${selectedFrequency.toLowerCase()}`,
+          className: hasData ? "green" : rawKpis.length ? "amber" : "gray",
+        },
+        {
+          label: "Critiques",
+          value: redCount,
+          hint: `${amberCount} orange(s), ${greenCount} vert(s)`,
+          className: redCount ? "red" : amberCount ? "amber" : hasData ? "green" : "gray",
+        },
+        {
+          label: "Objectifs atteints",
+          value: targetRate === null ? "--" : `${targetRate}%`,
+          hint: targetRows.length ? `${reachedRows.length}/${targetRows.length} KPI avec cible` : "objectifs attendus",
+          className: targetClass,
+        },
+        {
+          label: "Collecte attendue",
+          value: cadenceLabel || "A preciser",
+          hint: cadenceProfile.expectedDelay || cadenceProfile.cadence || "selon Kobo",
+          className: cadenceClass(cadenceLabel),
+        },
+      ];
+      summary.innerHTML = cards
+        .map(
+          (card) => `
+            <article class="pole-pilot-card status-${escapeHtml(card.className)}">
+              <span>${escapeHtml(card.label)}</span>
+              <strong>${escapeHtml(card.value)}</strong>
+              <small>${escapeHtml(card.hint)}</small>
+            </article>
+          `
+        )
+        .join("");
+    }
+
+    if (action) {
+      let actionClass = "green";
+      let actionTitle = "Pole sous controle";
+      let actionText = "Continuer la collecte et surveiller les tendances defavorables.";
+      if (!rawKpis.length) {
+        actionClass = "gray";
+        actionTitle = "Referentiel KPI attendu";
+        actionText = "Synchroniser le formulaire referentiel KPI/formules pour faire apparaitre les KPI du pole.";
+      } else if (!kpis.length) {
+        actionClass = "gray";
+        actionTitle = "Filtre sans KPI";
+        actionText = "Aucun KPI ne correspond a cette cadence de collecte. Changez le filtre pour afficher les KPI du pole.";
+      } else if (!hasData) {
+        actionClass = "amber";
+        actionTitle = "Donnees Kobo attendues";
+        actionText = "Synchroniser le formulaire donnees de calcul pour obtenir les valeurs du jour et les cumuls a date.";
+      } else if (redCount) {
+        actionClass = "red";
+        actionTitle = "Decision requise";
+        actionText = "Traiter les KPI rouges en priorite et documenter le plan d'action du responsable.";
+      } else if (amberCount || negativeTrendRows.length) {
+        actionClass = "amber";
+        actionTitle = "Surveillance renforcee";
+        actionText = "Analyser les KPI orange ou les tendances defavorables avant le prochain reporting.";
+      }
+
+      action.innerHTML = `
+        <div class="pole-pilot-action-card status-${escapeHtml(actionClass)}">
+          <div>
+            <span>Action recommandee</span>
+            <strong>${escapeHtml(actionTitle)}</strong>
+            <p>${escapeHtml(actionText)}</p>
+          </div>
+          <div class="pole-pilot-priorities">
+            ${
+              criticalRows.length
+                ? criticalRows
+                    .map(
+                      (row) => `
+                        <span>
+                          <strong>${escapeHtml(row.kpi.name)}</strong>
+                          <small>${escapeHtml(kpiStatusText(row.kpi.status))} - ${escapeHtml(trendSummaryLabel(row.kpi, row.pole))}</small>
+                        </span>
+                      `
+                    )
+                    .join("")
+                : `<span><strong>Aucune priorite critique</strong><small>${escapeHtml(hasData ? "Les KPI visibles ne signalent pas d'urgence." : "Les priorites seront calculees apres collecte Kobo.")}</small></span>`
+            }
+          </div>
+        </div>
+      `;
+    }
+  }
+
   function renderPoleKpiDirectory(state) {
     const reporting = PMS_DATA.reporting;
     const directory = $("#pole-kpi-directory");
@@ -3037,10 +3260,10 @@
     if (!directory) return;
 
     renderCalculationEnginePanel(state);
+    const monitorContext = getPoleMonitorContext(state);
+    renderPolePilotPanel(state, monitorContext);
 
-    const accessContext = getPoleAccessContext(state);
-    const activeCountry = getActiveCountry(state);
-    const authorizedPoles = getCountryScopedPoles(state, accessContext.isRestricted ? accessContext.poles : reporting.poles);
+    const { activeCountry, authorizedPoles } = monitorContext;
     if (!authorizedPoles.length) {
       if (poleSelect) {
         poleSelect.innerHTML = `<option>Aucun pole autorise</option>`;
@@ -3051,14 +3274,7 @@
       directory.innerHTML = `<div class="empty-kpi-state">Aucun pole n'est autorise pour ${escapeHtml(activeCountry.name)} avec ce profil.</div>`;
       return;
     }
-    if (!authorizedPoles.some((pole) => pole.id === state.currentPoleMonitor)) {
-      state.currentPoleMonitor = authorizedPoles[0]?.id || reporting.defaultPole;
-    }
-    const selectedPole =
-      authorizedPoles.find((item) => item.id === state.currentPoleMonitor) || authorizedPoles[0] || reporting.poles[0];
-    const selectedFrequency = state.currentPoleFrequency || "Tous";
-    const rawSelectedKpis = reporting.kpisByPole[selectedPole.id] || [];
-    const selectedKpis = filteredKpisByCadence(rawSelectedKpis, selectedPole, selectedFrequency);
+    const { selectedPole, selectedFrequency, rawKpis: rawSelectedKpis, kpis: selectedKpis } = monitorContext;
     if (poleSelect) poleSelect.value = selectedPole.id;
     if (title) title.textContent = `KPI - ${selectedPole.name} - ${activeCountry.name}`;
     if (total) total.textContent = selectedFrequency === "Tous" ? `${selectedKpis.length} KPI` : `${selectedKpis.length}/${rawSelectedKpis.length} KPI`;
