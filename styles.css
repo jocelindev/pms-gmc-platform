@@ -1474,7 +1474,16 @@ button.dashboard-control-card {
 }
 
 .management-direction-score-panel {
+  border-top: 4px solid var(--palladium-gold);
   margin-bottom: 16px;
+}
+
+.management-direction-score-panel .panel-header {
+  align-items: end;
+}
+
+.management-direction-score-panel .panel-header h3 {
+  font-size: 1.35rem;
 }
 
 .management-direction-score-table {
