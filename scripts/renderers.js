@@ -2051,8 +2051,6 @@
     const amberRows = dataRows.filter((row) => row.kpi.status === "amber");
     const greenRows = dataRows.filter((row) => row.kpi.status === "green");
     const score = managementScoreFromRows(dataRows);
-    const lateSubmissions = Number(state.kpiCalculationQuality?.unmatchedCalculationCount || 0);
-    const anomalyCount = Number(state.koboDataAudit?.anomalyCount ?? state.koboAnomalies?.length ?? 0);
     const objectiveRows = dataRows;
     const knownTargets = dataRows.filter(targetKnown);
     const reachedTargets = knownTargets.filter(targetReached);
@@ -2062,7 +2060,6 @@
     const targetAchievement = averageTargetAchievement(dataRows.filter(targetKnown));
     const globalClass = !dataRows.length ? "gray" : redRows.length ? "red" : amberRows.length ? "amber" : score === null ? "gray" : scoreClass(score);
     const activeScope = context.isGroup ? "Groupe consolide" : context.activeCountry.name;
-    const period = state.calendar?.label || $("#period-filter")?.value || "Periode active";
     const scoreBreakdown = dataRows.length
       ? `${greenRows.length} vert / ${amberRows.length} orange / ${redRows.length} rouge`
       : "donnees Kobo attendues";
@@ -2081,83 +2078,6 @@
     if (status) {
       status.className = `status-pill ${escapeHtml(globalClass)}`;
       status.textContent = dataRows.length ? ragLabel(globalClass) : "En attente Kobo";
-    }
-
-    const title = $("#management-brief-title");
-    if (title) title.textContent = "Performance consolidee";
-
-    const scopeBadge = $("#management-brief-scope");
-    if (scopeBadge) scopeBadge.textContent = activeScope;
-
-    const copy = $("#management-brief-copy");
-    if (copy) {
-      copy.textContent = !dataRows.length
-        ? "Aucune decision de performance n'est produite tant que les trois formulaires Kobo ne remontent pas de KPI calcules."
-        : redRows.length
-          ? `${redRows.length} KPI critique(s) necessitent une action de direction avant la prochaine validation.`
-          : amberRows.length
-            ? `${amberRows.length} KPI en vigilance doivent etre suivis pour securiser la trajectoire.`
-            : "Les KPI calcules sont sous controle sur le perimetre selectionne.";
-    }
-
-    const periodBadge = $("#management-period-badge");
-    if (periodBadge) periodBadge.textContent = `${period} - ${scoreBreakdown}`;
-
-    const hero = $("#management-hero-score");
-    if (hero) {
-      hero.className = `management-hero-score status-${escapeHtml(globalClass)}`;
-      const value = hero.querySelector("strong");
-      if (value) value.textContent = score === null ? "--" : `${score}/100`;
-    }
-
-    const briefGrid = $("#management-brief-grid");
-    if (briefGrid) {
-      const firstPriority = priorityRows[0];
-      const briefCards = [
-        {
-          label: "Ce qui va bien",
-          value: greenRows.length ? `${greenRows.length} KPI sous controle` : "A confirmer",
-          detail: greenRows.length
-            ? `${reachedTargets.length} objectif(s) deja atteint(s) sur les KPI calcules.`
-            : "Les points positifs apparaitront apres reception de donnees Kobo calculees.",
-          className: greenRows.length ? "green" : "gray",
-        },
-        {
-          label: "Ce qui bloque",
-          value: redRows.length ? `${redRows.length} KPI rouge(s)` : lateSubmissions ? `${lateSubmissions} retard(s) Kobo` : "Aucun blocage majeur",
-          detail: redRows[0]
-            ? `${redRows[0].kpi.name} - ${redRows[0].pole.name}.`
-            : lateSubmissions
-              ? "Certaines collectes Kobo doivent etre rattrapees pour fiabiliser la lecture."
-              : dataRows.length
-                ? "Aucune alerte critique sur le perimetre actif."
-                : "Les blocages seront detectes apres calcul des KPI.",
-          className: redRows.length || lateSubmissions ? "red" : dataRows.length ? "green" : "gray",
-        },
-        {
-          label: "Decision demandee",
-          value: firstPriority ? "Arbitrage requis" : anomalyCount ? "Fiabiliser Kobo" : "Pas de decision urgente",
-          detail: firstPriority
-            ? `${actionRecommendation(firstPriority)} Responsable: ${firstPriority.pole.owner || "A affecter"}.`
-            : anomalyCount
-              ? `${anomalyCount} anomalie(s) Kobo a corriger avant lecture definitive.`
-              : dataRows.length
-                ? "Continuer le pilotage normal et surveiller les prochaines remontees."
-                : "Aucune decision automatique sans donnees KPI calculees.",
-          className: firstPriority || anomalyCount ? "amber" : dataRows.length ? "green" : "gray",
-        },
-      ];
-      briefGrid.innerHTML = briefCards
-        .map(
-          (card) => `
-            <article class="management-brief-card status-${escapeHtml(card.className)}">
-              <span>${escapeHtml(card.label)}</span>
-              <strong>${escapeHtml(card.value)}</strong>
-              <p>${escapeHtml(card.detail)}</p>
-            </article>
-          `
-        )
-        .join("");
     }
 
     const summary = $("#management-summary-cards");
