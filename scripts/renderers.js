@@ -1467,6 +1467,74 @@
       .slice(0, limit);
   }
 
+  function managementDirectionScores(rows = [], context = {}) {
+    const rowsByPole = rows.reduce((grouped, row) => {
+      const key = row.pole?.id;
+      if (!key) return grouped;
+      const items = grouped.get(key) || [];
+      items.push(row);
+      grouped.set(key, items);
+      return grouped;
+    }, new Map());
+
+    return [...(context.visiblePoles || [])]
+      .map((pole) => {
+        const poleRows = rowsByPole.get(pole.id) || [];
+        const score = managementScoreFromRows(poleRows);
+        const red = poleRows.filter((row) => row.kpi.status === "red").length;
+        const amber = poleRows.filter((row) => row.kpi.status === "amber").length;
+        const green = poleRows.filter((row) => row.kpi.status === "green").length;
+        const knownTargets = poleRows.filter(targetKnown);
+        const reachedTargets = knownTargets.filter(targetReached);
+        const targetRate = knownTargets.length ? Math.round((reachedTargets.length / knownTargets.length) * 100) : null;
+        const trends = poleRows.flatMap((row) => kpiTrendMetrics(row.kpi, row.pole)).filter((metric) => metric.display !== "--" && metric.className !== "empty");
+        const negativeTrends = trends.filter((metric) => metric.className === "negative").length;
+        const positiveTrends = trends.filter((metric) => metric.className === "positive").length;
+        const countries = [
+          ...new Set(
+            poleRows
+              .map((row) => row.kpi.branch || managementResultCountry(row.result))
+              .filter(Boolean)
+              .map((country) => String(country).trim())
+          ),
+        ];
+        const className = !poleRows.length ? "gray" : red ? "red" : amber ? "amber" : score === null ? "gray" : scoreClass(score);
+        const action = !poleRows.length
+          ? "Attente donnees Kobo"
+          : red
+            ? "Plan de rattrapage"
+            : amber
+              ? "Suivi rapproche"
+              : negativeTrends
+                ? "Analyser tendance"
+                : "Maintenir";
+        return {
+          pole,
+          hasData: poleRows.length > 0,
+          score,
+          className,
+          total: poleRows.length,
+          red,
+          amber,
+          green,
+          knownTargets: knownTargets.length,
+          reachedTargets: reachedTargets.length,
+          targetRate,
+          negativeTrends,
+          positiveTrends,
+          trendTotal: trends.length,
+          countryCount: countries.length,
+          action,
+        };
+      })
+      .sort((left, right) => {
+        if (left.hasData !== right.hasData) return left.hasData ? -1 : 1;
+        const statusDelta = statusWeight(right.className) - statusWeight(left.className);
+        if (statusDelta) return statusDelta;
+        return (left.score ?? 101) - (right.score ?? 101) || String(left.pole.name).localeCompare(String(right.pole.name));
+      });
+  }
+
   function managementCellProfile(state = {}, pole = {}, country = {}) {
     if (!poleAvailableForCountry(pole, country)) {
       return { hasData: false, score: null, className: "gray", status: "gray", total: 0, label: "Hors scope" };
@@ -2064,6 +2132,7 @@
       ? `${greenRows.length} vert / ${amberRows.length} orange / ${redRows.length} rouge`
       : "donnees Kobo attendues";
     const priorityRows = managementCriticalRows(dataRows, 5);
+    const directionScores = managementDirectionScores(dataRows, context);
 
     const actionRecommendation = (row) => {
       const targetMetric = metricFromTarget(row.kpi);
@@ -2122,6 +2191,65 @@
           `
         )
         .join("");
+    }
+
+    const directionScoreStatus = $("#management-direction-score-status");
+    const directionScoreBody = $("#management-direction-score-body");
+    if (directionScoreStatus) {
+      const scoredCount = directionScores.filter((item) => item.hasData).length;
+      directionScoreStatus.className = `status-pill ${scoredCount ? (scoredCount === directionScores.length ? "green" : "amber") : "gray"}`;
+      directionScoreStatus.textContent = `${scoredCount}/${directionScores.length} avec score`;
+    }
+    if (directionScoreBody) {
+      directionScoreBody.innerHTML = directionScores.length
+        ? directionScores
+            .map((item) => {
+              const scoreValue = Number.isFinite(Number(item.score)) ? Math.max(0, Math.min(100, Math.round(Number(item.score)))) : null;
+              const scoreLabel = scoreValue === null ? "--" : `${scoreValue}/100`;
+              const targetLabel = item.targetRate === null ? "--" : `${item.targetRate}%`;
+              const targetHint = item.knownTargets ? `${item.reachedTargets}/${item.knownTargets} cible(s)` : "objectifs attendus";
+              const trendLabel = item.negativeTrends ? `${item.negativeTrends} defavorable(s)` : item.positiveTrends ? `${item.positiveTrends} favorable(s)` : "--";
+              const trendHint = item.trendTotal ? `${item.trendTotal} tendance(s)` : "donnees attendues";
+              const countryHint = item.countryCount
+                ? `${item.countryCount} pays / filiale${item.countryCount > 1 ? "s" : ""}`
+                : "Kobo attendu";
+              return `
+                <tr class="management-direction-score-row status-${escapeHtml(item.className)}">
+                  <td>
+                    <button class="management-pole-link" type="button" data-open-pole="${escapeHtml(item.pole.id)}">
+                      <strong>${escapeHtml(item.pole.name)}</strong>
+                      <small>${escapeHtml(item.pole.id)} - ${escapeHtml(item.pole.owner || "Responsable a affecter")}</small>
+                    </button>
+                  </td>
+                  <td>
+                    <div class="management-direction-score-bar">
+                      <strong>${escapeHtml(scoreLabel)}</strong>
+                      <div class="bar-track">
+                        <div class="bar-fill ${escapeHtml(item.className)}" style="width:${scoreValue === null ? 0 : scoreValue}%"></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><strong>${escapeHtml(item.total || "--")}</strong><small>${escapeHtml(countryHint)}</small></td>
+                  <td>
+                    <div class="management-direction-mix">
+                      <span class="management-mini-pill red">${escapeHtml(item.red)} R</span>
+                      <span class="management-mini-pill amber">${escapeHtml(item.amber)} O</span>
+                      <span class="management-mini-pill green">${escapeHtml(item.green)} V</span>
+                    </div>
+                  </td>
+                  <td><strong>${escapeHtml(targetLabel)}</strong><small>${escapeHtml(targetHint)}</small></td>
+                  <td><strong>${escapeHtml(trendLabel)}</strong><small>${escapeHtml(trendHint)}</small></td>
+                  <td>
+                    <div class="management-direction-action">
+                      ${statusPill(item.action, item.className)}
+                      <button class="ghost-action" type="button" data-open-pole="${escapeHtml(item.pole.id)}">Detail</button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")
+        : `<tr><td colspan="7">Aucune direction autorisee sur le perimetre actif.</td></tr>`;
     }
 
     const heatmapHead = $("#management-heatmap-head");

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=management-brief-removed-20260723" />
+    <link rel="stylesheet" href="styles.css?v=management-direction-score-20260723" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -285,6 +285,33 @@
           </div>
 
           <div class="management-summary-grid" id="management-summary-cards"></div>
+
+          <section class="panel management-direction-score-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Scoring par direction</p>
+                <h3>Performance des directions</h3>
+                <p>Score calcule avec les KPI Kobo disponibles sur le perimetre actif.</p>
+              </div>
+              <span class="status-pill gray" id="management-direction-score-status">0 direction</span>
+            </div>
+            <div class="table-wrap management-direction-score-wrap">
+              <table class="management-direction-score-table">
+                <thead>
+                  <tr>
+                    <th>Direction / Pole</th>
+                    <th>Score</th>
+                    <th>KPI calcules</th>
+                    <th>Rouge / Orange / Vert</th>
+                    <th>Objectifs</th>
+                    <th>Tendance</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="management-direction-score-body"></tbody>
+              </table>
+            </div>
+          </section>
 
           <section class="panel management-heatmap-panel">
             <div class="panel-header">
@@ -1501,9 +1528,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=management-brief-removed-20260723"></script>
-    <script src="scripts/renderers.js?v=management-brief-removed-20260723"></script>
-    <script src="scripts/api.js?v=management-brief-removed-20260723"></script>
-    <script src="app.js?v=management-brief-removed-20260723"></script>
+    <script src="scripts/data.js?v=management-direction-score-20260723"></script>
+    <script src="scripts/renderers.js?v=management-direction-score-20260723"></script>
+    <script src="scripts/api.js?v=management-direction-score-20260723"></script>
+    <script src="app.js?v=management-direction-score-20260723"></script>
   </body>
 </html>
