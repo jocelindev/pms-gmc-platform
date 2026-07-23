@@ -2987,44 +2987,172 @@
     const selectedPole = PMS_DATA.reporting.poles.find((pole) => pole.id === state.currentPoleMonitor) || {};
     const cadenceProfile = cadenceProfileForPole(selectedPole);
     const configured = Boolean(quality.configured);
-    const calculated = isGroupCountry(activeCountry) ? quality.calculatedCount || results.length || 0 : countryResults.length;
+    const resultKpiKey = (item = {}) => `${item.poleId || ""}:${item.kpiId || item.kpiName || item.name || item.id || ""}`;
+    const exactResults = results.filter((item) => item.periodType !== "monthToDate");
+    const exactCountryResults = countryResults.filter((item) => item.periodType !== "monthToDate");
+    const calculated = isGroupCountry(activeCountry)
+      ? new Set(exactResults.map(resultKpiKey).filter((key) => !key.endsWith(":"))).size || Number(quality.calculatedCount || 0)
+      : new Set(exactCountryResults.map(resultKpiKey).filter((key) => !key.endsWith(":"))).size || exactCountryResults.length;
     const calculationGroups = quality.calculationGroups || 0;
     const matchRate = quality.matchRate || 0;
+    const referenceCount = Number(quality.referenceCount || 0);
+    const objectiveCount = Number(quality.objectiveCount || quality.objectiveRecords || 0);
+    const dailyRows = Number(quality.dailyDataRows || 0);
+    const calculationRecords = Number(quality.calculationRecords || 0);
+    const sourceStatuses = [
+      {
+        label: "Referentiel KPI",
+        ready: referenceCount > 0,
+        detail: referenceCount ? `${referenceCount} KPI` : "aucun KPI",
+      },
+      {
+        label: "Objectifs mensuels",
+        ready: objectiveCount > 0,
+        detail: objectiveCount ? `${objectiveCount} objectif(s)` : "aucun objectif",
+      },
+      {
+        label: "Donnees de calcul",
+        ready: calculationGroups > 0 || dailyRows > 0 || calculationRecords > 0,
+        detail: calculationGroups ? `${calculationGroups} groupe(s)` : dailyRows ? `${dailyRows} ligne(s)` : "aucune donnee",
+      },
+    ];
+    const readySources = sourceStatuses.filter((item) => item.ready).length;
+    const issueCount =
+      Number(quality.unmatchedCalculationCount || 0) +
+      Number(quality.unmatchedObjectiveCount || 0) +
+      Number(quality.uncalculatedCount || 0) +
+      Number(quality.missingMonthlyObjectiveCount || 0) +
+      Number(quality.missingFormulaCount || 0);
+    const blockingCount = Number(quality.blockingAnomalyCount || 0);
+    const selectedPoleKpis = new Set(
+      selectedPoleResults.map((item) => item.kpiId || item.kpiName || item.name).filter(Boolean)
+    );
+    const selectedPoleCalculated = selectedPoleKpis.size || selectedPoleResults.length;
+    const sourceStatusClass = readySources === 3 ? "green" : readySources ? "amber" : "red";
+    const calculationStatusClass = calculated ? "green" : configured ? "amber" : "gray";
+    const poleStatusClass = selectedPoleCalculated ? "green" : calculated ? "amber" : "gray";
+    const matchStatusClass = !configured ? "gray" : matchRate >= 90 ? "green" : matchRate >= 70 ? "amber" : "red";
+    const issueStatusClass = blockingCount ? "red" : issueCount ? "amber" : configured ? "green" : "gray";
+
+    const advice = (() => {
+      if (!configured || !referenceCount) {
+        return {
+          className: "red",
+          title: "Referentiel KPI attendu",
+          text: "Connecter puis synchroniser le formulaire referentiel KPI/formules pour afficher les KPI par pole.",
+        };
+      }
+      if (!objectiveCount) {
+        return {
+          className: "amber",
+          title: "Objectifs mensuels attendus",
+          text: "Synchroniser le formulaire objectifs pour calculer l'objectif a date et le Vs Target.",
+        };
+      }
+      if (!calculationGroups && !dailyRows && !calculationRecords) {
+        return {
+          className: "amber",
+          title: "Donnees de calcul attendues",
+          text: "Synchroniser le formulaire donnees de calcul pour alimenter les valeurs du jour et les cumuls mensuels.",
+        };
+      }
+      if (blockingCount || issueCount) {
+        return {
+          className: issueStatusClass,
+          title: "Points Kobo a corriger",
+          text: "Verifier les champs pays/filiale, pole, id_kpi et periode dans les formulaires qui ne se rapprochent pas.",
+        };
+      }
+      return {
+        className: "green",
+        title: "Donnees Kobo pretes",
+        text: "Les formulaires sont alignes. Les KPI peuvent etre lus par pole et par periode.",
+      };
+    })();
 
     if (status) {
-      status.className = `status-pill ${configured ? (calculated ? "green" : "amber") : "gray"}`;
-      status.textContent = configured ? (calculated ? "Calcul actif" : "A synchroniser") : "A configurer";
+      status.className = `status-pill ${escapeHtml(advice.className)}`;
+      status.textContent = advice.className === "green" ? "Donnees pretes" : advice.title;
     }
 
     if (summary) {
       const cards = [
-        { label: "KPI calcules", value: calculated, hint: activeCountry.name },
-        { label: "KPI du pole", value: selectedPoleResults.length, hint: "filtre actif" },
-        { label: "Collecte attendue", value: cadenceProfile.primary || normalizeCadence(cadenceProfile.cadence), hint: cadenceProfile.expectedDelay || cadenceProfile.cadence },
-        { label: "Rapprochement", value: `${matchRate}%`, hint: `${quality.matchedCalculationGroups || 0}/${calculationGroups} groupes` },
-        { label: "Ecarts", value: (quality.unmatchedCalculationCount || 0) + (quality.unmatchedObjectiveCount || 0), hint: "objectif, pole, KPI ou periode" },
+        {
+          label: "Sources Kobo",
+          value: `${readySources}/3`,
+          hint: "referentiel, objectifs, donnees",
+          className: sourceStatusClass,
+        },
+        {
+          label: "KPI calcules",
+          value: calculated,
+          hint: activeCountry.name,
+          className: calculationStatusClass,
+        },
+        {
+          label: "Pole selectionne",
+          value: selectedPoleCalculated,
+          hint: selectedPole.name || "filtre actif",
+          className: poleStatusClass,
+        },
+        {
+          label: "Alignement",
+          value: `${matchRate}%`,
+          hint: `${quality.matchedCalculationGroups || 0}/${calculationGroups} groupe(s) rapproches`,
+          className: matchStatusClass,
+        },
+        {
+          label: "A corriger",
+          value: issueCount + blockingCount,
+          hint: blockingCount ? `${blockingCount} bloquant(s)` : "aucun blocage",
+          className: issueStatusClass,
+        },
       ];
       summary.innerHTML = cards
         .map(
           (card) => `
-            <div class="kpi-engine-stat">
-              <span>${escapeHtml(card.label)}</span>
+            <article class="kpi-engine-stat status-${escapeHtml(card.className)}">
+              <div>
+                <span>${escapeHtml(card.label)}</span>
+                <i>${escapeHtml(card.className === "green" ? "OK" : card.className === "red" ? "Alerte" : card.className === "amber" ? "A suivre" : "Attente")}</i>
+              </div>
               <strong>${escapeHtml(card.value)}</strong>
               <small>${escapeHtml(card.hint)}</small>
-            </div>
+            </article>
           `
         )
         .join("");
     }
 
     if (proposals) {
-      const items = quality.proposals?.length
-        ? quality.proposals
-        : ["Configurer puis synchroniser les trois sources KoboCollect pour activer le calcul automatique."];
-      proposals.innerHTML = items
-        .slice(0, 3)
-        .map((item) => `<span>${escapeHtml(item)}</span>`)
-        .join("");
+      const items = Array.isArray(quality.proposals) && quality.proposals.length ? quality.proposals.slice(0, 2) : [];
+      proposals.innerHTML = `
+        <div class="kpi-engine-checklist">
+          ${sourceStatuses
+            .map(
+              (item) => `
+                <span class="kpi-engine-check ${item.ready ? "ready" : "missing"}">
+                  <i></i>
+                  <strong>${escapeHtml(item.label)}</strong>
+                  <small>${escapeHtml(item.detail)}</small>
+                </span>
+              `
+            )
+            .join("")}
+        </div>
+        <div class="kpi-engine-advice status-${escapeHtml(advice.className)}">
+          <div>
+            <span>Action recommandee</span>
+            <strong>${escapeHtml(advice.title)}</strong>
+            <p>${escapeHtml(advice.text)}</p>
+          </div>
+          ${
+            items.length
+              ? `<div class="kpi-engine-tip-list">${items.map((item) => `<small>${escapeHtml(item)}</small>`).join("")}</div>`
+              : ""
+          }
+        </div>
+      `;
     }
   }
 
