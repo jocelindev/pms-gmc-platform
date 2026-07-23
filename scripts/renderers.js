@@ -875,6 +875,7 @@
 
     results.forEach((result) => {
       if (allowedPoleIds.size && result.poleId && !allowedPoleIds.has(result.poleId)) return;
+      if (!managementResultMatchesCountry(result, activeCountry)) return;
       const date = resultCalendarDate(result);
       if (!date || date.getMonth() !== selectedMonth || date.getFullYear() !== selectedYear) return;
       const iso = dateToIso(date);
@@ -1164,7 +1165,11 @@
     const activeCountry = getActiveCountry(state);
     const isGroup = isGroupCountry(activeCountry);
     const accessContext = getPoleAccessContext(state);
-    const visiblePoles = getCountryScopedPoles(state, accessContext.poles);
+    const countryScopedPoles = getCountryScopedPoles(state, accessContext.poles);
+    const selectedPoleFilter = state.calendarPoleFilter && state.calendarPoleFilter !== "Tous" ? state.calendarPoleFilter : "";
+    const visiblePoles = selectedPoleFilter
+      ? countryScopedPoles.filter((pole) => pole.id === selectedPoleFilter)
+      : countryScopedPoles;
     const authorizedCountries = getAuthorizedCountryOptions(state).filter((country) => !isGroupCountry(country));
     const visibleCountries = isGroup
       ? authorizedCountries
@@ -2128,6 +2133,10 @@
     const targetAchievement = averageTargetAchievement(dataRows.filter(targetKnown));
     const globalClass = !dataRows.length ? "gray" : redRows.length ? "red" : amberRows.length ? "amber" : score === null ? "gray" : scoreClass(score);
     const activeScope = context.isGroup ? "Groupe consolide" : context.activeCountry.name;
+    const activePoleScope = state.calendarPoleFilter && state.calendarPoleFilter !== "Tous"
+      ? context.visiblePoles.find((pole) => pole.id === state.calendarPoleFilter)?.name || state.calendarPoleFilter
+      : "Tous les poles";
+    const activePeriodScope = state.calendar?.label || calendarPeriodLabel(state.calendar || {});
     const scoreBreakdown = dataRows.length
       ? `${greenRows.length} vert / ${amberRows.length} orange / ${redRows.length} rouge`
       : "donnees Kobo attendues";
@@ -2147,6 +2156,10 @@
     if (status) {
       status.className = `status-pill ${escapeHtml(globalClass)}`;
       status.textContent = dataRows.length ? ragLabel(globalClass) : "En attente Kobo";
+    }
+    const filterScope = $("#management-filter-scope");
+    if (filterScope) {
+      filterScope.textContent = `${activeScope} | ${activePeriodScope} | ${activePoleScope}`;
     }
 
     const summary = $("#management-summary-cards");

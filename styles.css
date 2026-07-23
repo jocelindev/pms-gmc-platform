@@ -1473,6 +1473,27 @@ button.dashboard-control-card {
   margin: 7px 0 4px;
 }
 
+.management-filter-stack {
+  align-items: flex-end;
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.management-filter-scope {
+  background: #fff;
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-left: 4px solid var(--palladium-gold);
+  border-radius: 8px;
+  color: var(--palladium-blue);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
+  max-width: 360px;
+  padding: 8px 10px;
+  text-align: right;
+}
+
 .management-direction-score-panel {
   border-top: 4px solid var(--palladium-gold);
   margin-bottom: 16px;

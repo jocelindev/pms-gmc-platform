@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PMS GMC Group</title>
-    <link rel="stylesheet" href="styles.css?v=management-score-first-20260723" />
+    <link rel="stylesheet" href="styles.css?v=management-filter-sync-20260723" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -281,7 +281,10 @@
               <h2>Management performance groupe</h2>
               <p>Lecture consolidee des KPI, risques, objectifs et tendances sur le perimetre autorise.</p>
             </div>
-            <span class="status-pill gray" id="management-status">En attente donnees</span>
+            <div class="management-filter-stack">
+              <span class="management-filter-scope" id="management-filter-scope">Filtres actifs</span>
+              <span class="status-pill gray" id="management-status">En attente donnees</span>
+            </div>
           </div>
 
           <section class="panel management-direction-score-panel">
@@ -1528,9 +1531,9 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=management-score-first-20260723"></script>
-    <script src="scripts/renderers.js?v=management-score-first-20260723"></script>
-    <script src="scripts/api.js?v=management-score-first-20260723"></script>
-    <script src="app.js?v=management-score-first-20260723"></script>
+    <script src="scripts/data.js?v=management-filter-sync-20260723"></script>
+    <script src="scripts/renderers.js?v=management-filter-sync-20260723"></script>
+    <script src="scripts/api.js?v=management-filter-sync-20260723"></script>
+    <script src="app.js?v=management-filter-sync-20260723"></script>
   </body>
 </html>
