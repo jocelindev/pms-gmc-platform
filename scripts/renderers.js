@@ -2084,7 +2084,10 @@
     }
 
     const title = $("#management-brief-title");
-    if (title) title.textContent = `Performance consolidee - ${activeScope}`;
+    if (title) title.textContent = "Performance consolidee";
+
+    const scopeBadge = $("#management-brief-scope");
+    if (scopeBadge) scopeBadge.textContent = activeScope;
 
     const copy = $("#management-brief-copy");
     if (copy) {

@@ -1426,7 +1426,9 @@ button.dashboard-control-card {
 }
 
 .management-brief-panel {
-  background: linear-gradient(135deg, var(--palladium-blue), #255b8e);
+  background:
+    linear-gradient(135deg, rgba(31, 56, 100, 0.98), rgba(37, 91, 142, 0.95)),
+    var(--palladium-blue);
   color: #fff;
   margin-bottom: 16px;
   overflow: hidden;
@@ -1440,17 +1442,43 @@ button.dashboard-control-card {
 }
 
 .management-brief-head > div:first-child {
-  padding: 22px 22px 8px;
+  background: rgba(3, 14, 34, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  margin: 18px 0 0 18px;
+  padding: 18px;
+}
+
+.management-brief-title-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin: 8px 0;
 }
 
 .management-brief-head h3 {
   color: #fff;
   font-size: 30px;
-  margin: 8px 0;
+  font-weight: 950;
+  margin: 0;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+.management-brief-title-row span {
+  background: rgba(214, 168, 56, 0.2);
+  border: 1px solid rgba(214, 168, 56, 0.58);
+  border-radius: 999px;
+  color: #ffe08a;
+  font-size: 12px;
+  font-weight: 950;
+  padding: 7px 10px;
+  text-transform: uppercase;
 }
 
 .management-brief-head p:not(.eyebrow) {
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 650;
   line-height: 1.5;
   max-width: 780px;
 }
@@ -1527,6 +1555,7 @@ button.dashboard-control-card {
 }
 
 .management-hero-score {
+  background: rgba(3, 14, 34, 0.14);
   border-left: 1px solid rgba(255, 255, 255, 0.24);
   display: grid;
   place-items: center;
@@ -5525,7 +5554,8 @@ td small {
   }
 
   .management-brief-head > div:first-child {
-    padding-bottom: 0;
+    margin: 14px;
+    padding: 16px;
   }
 
   .report-cover {
