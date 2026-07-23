@@ -1832,20 +1832,6 @@
     $("#calendar-prev-month")?.addEventListener("click", () => setCalendarView(-1));
     $("#calendar-next-month")?.addEventListener("click", () => setCalendarView(1));
 
-    document.querySelectorAll("[data-actor-scope]").forEach((button) => {
-      button.addEventListener("click", () => {
-        state.actorScope = button.dataset.actorScope || "responsable";
-        renderCalendarSlicer(state);
-        renderAdvancedDashboard(state);
-        renderManagementDashboard(state);
-        showToast(
-          state.actorScope === "direction"
-            ? "Vue acteur: Direction."
-            : "Vue acteur: Responsable de pole."
-        );
-      });
-    });
-
     dateInput?.addEventListener("change", () => {
       const selectedDate = parseCompactDate(dateInput.value);
       if (!selectedDate) {

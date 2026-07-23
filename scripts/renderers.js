@@ -977,10 +977,6 @@
     document.querySelectorAll("[data-calendar-preset]").forEach((button) => {
       button.classList.toggle("active", button.dataset.calendarPreset === calendar.preset);
     });
-    document.querySelectorAll("[data-actor-scope]").forEach((button) => {
-      button.classList.toggle("active", button.dataset.actorScope === (state.actorScope || "responsable"));
-    });
-
     if (poleFilter) {
       const accessContext = getPoleAccessContext(state);
       const authorizedPoles = accessContext.isRestricted ? accessContext.poles : PMS_DATA.reporting.poles;

@@ -763,7 +763,7 @@ body[data-active-view="management"] .powerbi-filter-row {
   border: 2px solid rgba(31, 56, 100, 0.12);
   border-radius: 18px 18px 8px 8px;
   display: grid;
-  grid-template-columns: minmax(310px, 1.2fr) minmax(260px, 0.9fr) minmax(240px, 0.8fr) minmax(160px, 0.5fr);
+  grid-template-columns: minmax(360px, 1.35fr) minmax(260px, 0.8fr) minmax(170px, 0.5fr);
   min-height: 82px;
   overflow: visible;
   position: relative;
@@ -831,46 +831,9 @@ body[data-active-view="management"] .powerbi-filter-row {
   margin: 8px 8px 0;
 }
 
-.powerbi-actors {
-  border-left: 2px solid #050505;
-  border-right: 2px solid #050505;
-  display: grid;
-  grid-template-rows: 30px 1fr;
-  text-align: center;
-}
-
-.powerbi-actors > span {
-  border-bottom: 1px dotted rgba(5, 5, 5, 0.55);
-  color: #050505;
-  font-size: 18px;
-  font-weight: 900;
-  padding-top: 4px;
-}
-
-.powerbi-actors div {
-  align-items: center;
-  display: grid;
-  gap: 4px;
-  grid-template-columns: 1fr 1fr;
-  padding: 8px 28px;
-}
-
-.actor-toggle {
-  border: 2px solid rgba(31, 56, 100, 0.75);
-  background: #fffef5;
-  color: var(--palladium-blue);
-  font-weight: 900;
-  min-height: 34px;
-}
-
-.actor-toggle.active {
-  background: #2b2d31;
-  border-color: #5c5f66;
-  color: #fff;
-}
-
 .powerbi-date-card {
   align-content: center;
+  border-left: 2px solid #050505;
   border-right: 2px solid #050505;
   display: grid;
   gap: 4px;
@@ -5526,13 +5489,11 @@ td small {
     grid-template-columns: 1fr;
   }
 
-  .powerbi-brand-block,
-  .powerbi-actors div {
+  .powerbi-brand-block {
     grid-template-columns: 1fr;
     justify-items: start;
   }
 
-  .powerbi-actors,
   .powerbi-date-card {
     border-left: 0;
     border-right: 0;
