@@ -68,6 +68,44 @@
   const defaultObjectiveKoboSource = defaultKoboSources.find((source) => source.role === "referentielKpi") || null;
   const defaultMonthlyObjectiveKoboSource = defaultKoboSources.find((source) => source.role === "objectifsMensuels") || null;
   const defaultCalculationKoboSource = defaultKoboSources.find((source) => source.role === "donneesCalcul") || null;
+  const KOBO_SOURCE_STORAGE_KEY = "pmsGmcKoboSources";
+
+  function normalizedKoboSource(source) {
+    if (!source?.role || !OPERATIONAL_KOBO_ROLES.has(source.role)) return null;
+    return {
+      role: source.role,
+      serverUrl: source.serverUrl || source.origin || "https://kf.kobotoolbox.org",
+      formId: source.formId || source.uid || source.name || "",
+      title: source.title || source.name || "",
+      mode: source.mode || "",
+      status: source.status || "Actif",
+      mappedFields: source.mappedFields || {},
+    };
+  }
+
+  function loadStoredKoboSources() {
+    try {
+      const sources = JSON.parse(window.localStorage.getItem(KOBO_SOURCE_STORAGE_KEY) || "[]");
+      return Array.isArray(sources) ? sources.map(normalizedKoboSource).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  const storedKoboSources = loadStoredKoboSources();
+
+  function initialKoboSource(role, fallback) {
+    const storedSource = storedKoboSources.find((source) => source.role === role);
+    if (!storedSource) return fallback ? clone(fallback) : null;
+    return {
+      ...(fallback ? clone(fallback) : {}),
+      ...storedSource,
+      mappedFields: {
+        ...(fallback?.mappedFields || {}),
+        ...(storedSource.mappedFields || {}),
+      },
+    };
+  }
 
   function resetReportingToBaseline() {
     Object.keys(PMS_DATA.reporting).forEach((key) => {
@@ -790,9 +828,9 @@
     currentUser: null,
     currentPermissions: {},
     userAccessScope: [],
-    objectiveKoboSource: defaultObjectiveKoboSource ? clone(defaultObjectiveKoboSource) : null,
-    monthlyObjectiveKoboSource: defaultMonthlyObjectiveKoboSource ? clone(defaultMonthlyObjectiveKoboSource) : null,
-    calculationKoboSource: defaultCalculationKoboSource ? clone(defaultCalculationKoboSource) : null,
+    objectiveKoboSource: initialKoboSource("referentielKpi", defaultObjectiveKoboSource),
+    monthlyObjectiveKoboSource: initialKoboSource("objectifsMensuels", defaultMonthlyObjectiveKoboSource),
+    calculationKoboSource: initialKoboSource("donneesCalcul", defaultCalculationKoboSource),
     koboAutoSync: null,
     koboDataAudit: null,
     koboAnomalies: [],
@@ -824,6 +862,7 @@
       state.objectiveKoboSource = null;
       state.monthlyObjectiveKoboSource = null;
       state.calculationKoboSource = null;
+      rememberKoboSources();
       return;
     }
     const referenceSource = sources.find((source) => source.role === "referentielKpi");
@@ -837,6 +876,22 @@
     }
     if (calculationSource) {
       state.calculationKoboSource = calculationSource;
+    }
+    rememberKoboSources();
+  }
+
+  function rememberKoboSources() {
+    const sources = [
+      state.objectiveKoboSource,
+      state.monthlyObjectiveKoboSource,
+      state.calculationKoboSource,
+    ]
+      .map(normalizedKoboSource)
+      .filter((source) => source?.formId);
+    try {
+      window.localStorage.setItem(KOBO_SOURCE_STORAGE_KEY, JSON.stringify(sources));
+    } catch (error) {
+      console.warn("Sauvegarde locale des UID Kobo indisponible.", error);
     }
   }
 
@@ -2318,7 +2373,8 @@
       }
 
       $(serverInputId).value = serverUrl;
-      state[stateKey] = { role, serverUrl, formId, mappedFields };
+      state[stateKey] = { role, serverUrl, formId, mappedFields, mode, status: "Actif", detail };
+      rememberKoboSources();
       if (api?.saveKoboForm) {
         try {
           await api.saveKoboForm({
