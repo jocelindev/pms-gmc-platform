@@ -137,33 +137,33 @@ ENV_KOBO_SOURCE_DEFINITIONS = (
         "cadence": "Selon periode",
         "field_type": "Champ referentiel KPI",
         "fields": {
-            "id": "id_kpi",
+            "id": "id_kpi_final",
             "branch": "pays_filiale",
-            "category": "categorie_organisationnelle",
+            "category": "categorie",
             "entity": "entite_direction",
             "subEntity": "sous_entite_pole_filiale",
-            "pole": "groupe_de_rattachement",
+            "pole": "pole",
             "path": "chemin_organisationnel",
-            "title": "intitule_du_kpi",
-            "definition": "description_definition",
+            "title": "intitule_kpi",
+            "definition": "interpretation_usage",
             "type": "type_de_kpi",
-            "unit": "unite_de_mesure",
+            "unit": "unite",
             "formula": "formule_de_calcul",
-            "target": "valeur_cible",
+            "target": "seuil_cible",
             "performanceDirection": "sens_performance",
-            "collectionFrequency": "frequence_de_collecte",
-            "reportingFrequency": "periodicite_du_reporting",
+            "collectionFrequency": "frequence",
+            "reportingFrequency": "frequence",
             "sourceData": "source_de_la_donnee",
-            "owner": "responsable_du_kpi",
+            "owner": "responsable_validation",
             "respondent": "repondant",
             "respondentFunction": "fonction_du_repondant",
             "year": "annee",
-            "validation": "validation_hierarchique",
+            "validation": "validation_referentiel",
             "validator": "validateur",
-            "comments": "commentaires",
+            "comments": "commentaire",
             "submittedAt": "date_de_soumission",
             "sourceReference": "reference_source",
-            "documentStatus": "statut_documentaire",
+            "documentStatus": "statut_kpi",
             "attention": "points_d_attention",
         },
     },
@@ -178,16 +178,16 @@ ENV_KOBO_SOURCE_DEFINITIONS = (
         "field_type": "Champ objectifs mensuels",
         "fields": {
             "branch": "pays_filiale",
-            "pole": "pole_id",
+            "pole": "pole",
             "kpi": "id_kpi",
             "period": "periode_objectif",
             "target": "objectif_mensuel",
-            "unit": "unite_mesure",
-            "frequency": "frequence_objectif",
+            "unit": "unite",
+            "frequency": "frequence",
             "distributionMode": "mode_repartition",
             "sourceData": "source_objectif",
             "responsible": "responsable_objectif",
-            "validation": "validation_hierarchique",
+            "validation": "validation_direction",
         },
     },
     {
@@ -252,7 +252,7 @@ DATABASE_TABLE_LABELS = {
 KOBO_FIELD_ALIASES = {
     "pole_id": ["pole_id", "pole", "id_pole", "pole_name", "pole_responsable"],
     "branch": ["pays_filiale", "branch_id", "branch", "filiale", "pays", "bu", "business_unit"],
-    "kpi_name": ["kpi_id", "id_kpi", "kpi", "kpi_name", "nom_kpi", "indicateur"],
+    "kpi_name": ["kpi_id", "id_kpi_final", "id_kpi", "intitule_kpi", "kpi", "kpi_name", "nom_kpi", "indicateur"],
     "collector": ["_submitted_by", "submitted_by", "collector", "collecteur", "username", "responsable"],
     "submitted_at": ["_submission_time", "_date_submitted", "submission_time", "submitted_at", "end", "today"],
     "period": ["periode_reporting", "periode", "period", "periode_objectif", "mois", "date_reporting"],
@@ -297,6 +297,8 @@ CATALOG_POLE_ALIASES = {
     "direction finance comptabilite": "DFC",
     "direction finance et comptabilite": "DFC",
     "dfc": "DFC",
+    "dfc consolide": "DFC",
+    "dfc finance pilotage groupe": "DFC",
     "pole systeme management qualite": "PSMQ",
     "pole systeme de management de la qualite": "PSMQ",
     "psmq": "PSMQ",
@@ -1059,14 +1061,14 @@ def objective_record_to_front(record: dict, pole_names: dict[str, str] | None = 
         "sourceServer": record.get("sourceServer") or "",
         "sourceForm": record.get("sourceForm") or "",
         "sourceFields": {
-            "pole": "pole_id",
+            "pole": "pole",
             "kpi": "id_kpi",
             "target": "objectif_mensuel",
             "period": "periode_objectif",
-            "unit": "unite_mesure",
-            "frequency": "frequence_objectif",
+            "unit": "unite",
+            "frequency": "frequence",
             "source": "source_objectif",
-            "validation": "validation_hierarchique",
+            "validation": "validation_direction",
         },
     }
 
@@ -3507,7 +3509,12 @@ def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source
         distribution_raw = mapped_submission_value(objective_source, payload, "distributionMode", ["mode_repartition", "repartition_objectif", "type_objectif"])
         source_raw = mapped_submission_value(objective_source, payload, "sourceData", ["source_objectif", "source_donnee", "source_de_la_donnee"])
         responsible_raw = mapped_submission_value(objective_source, payload, "responsible", ["responsable_objectif", "responsable_du_kpi", "responsable"])
-        validation_raw = mapped_submission_value(objective_source, payload, "validation", ["validation_hierarchique", "validation_status", "statut_validation"])
+        validation_raw = mapped_submission_value(
+            objective_source,
+            payload,
+            "validation",
+            ["validation_direction", "validation_hierarchique", "validation_status", "statut_validation"],
+        )
         status_raw = mapped_submission_value(objective_source, payload, "documentStatus", ["statut_objectif", "statut_documentaire", "statut"])
         attention_raw = mapped_submission_value(objective_source, payload, "attention", ["commentaires", "points_d_attention", "observation"])
 
@@ -3873,9 +3880,11 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             ["groupe_de_rattachement", "sous_entite_pole_filiale", "direction_pole", "direction", "pole_id", "pole"],
         )
         pole_id = resolve_catalog_pole_id(conn, pole_raw or row["pole_id"])
-        kpi_code = canonical_kpi_code(mapped_submission_value(reference_source, payload, "id", ["id_kpi", "kpi_id", "code", "n", "numero"]))
+        kpi_code = canonical_kpi_code(
+            mapped_submission_value(reference_source, payload, "id", ["id_kpi_final", "id_kpi", "id_kpi_manuel", "kpi_id", "code", "n", "numero"])
+        )
         kpi_name = text_or_empty(
-            mapped_submission_value(reference_source, payload, "title", ["intitule_du_kpi", "indicateur_kpi", "indicateur", "kpi_name", "kpi"])
+            mapped_submission_value(reference_source, payload, "title", ["intitule_kpi", "intitule_du_kpi", "indicateur_kpi", "indicateur", "kpi_name", "kpi"])
         )
         if not pole_id or not (kpi_code or kpi_name):
             quality["warnings"].append("Reference KPI ignoree: pole ou KPI non reconnu.")
@@ -3899,7 +3908,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             continue
 
         formula = text_or_empty(mapped_submission_value(reference_source, payload, "formula", ["formule_de_calcul", "formule"]))
-        target = text_or_empty(mapped_submission_value(reference_source, payload, "target", ["valeur_cible", "seuil_cible", "objectif", "objectif_cible"]))
+        target = text_or_empty(mapped_submission_value(reference_source, payload, "target", ["seuil_cible", "valeur_cible", "objectif", "objectif_cible"]))
         raw_performance_direction = text_or_empty(
             mapped_submission_value(
                 reference_source,
@@ -3917,17 +3926,17 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "formula": formula,
             "target": target,
             "performanceDirection": infer_performance_direction(raw_performance_direction, kpi_name, formula, target),
-            "type": text_or_empty(mapped_submission_value(reference_source, payload, "type", ["type_de_kpi", "type_kpi"])),
-            "unit": text_or_empty(mapped_submission_value(reference_source, payload, "unit", ["unite_de_mesure", "unite"])),
+            "type": text_or_empty(mapped_submission_value(reference_source, payload, "type", ["type_de_kpi", "type_kpi", "categorie"])),
+            "unit": text_or_empty(mapped_submission_value(reference_source, payload, "unit", ["unite", "unite_de_mesure", "unite_mesure"])),
             "sourceData": text_or_empty(
                 mapped_submission_value(reference_source, payload, "sourceData", ["source_de_la_donnee", "source_donnee"])
             ),
-            "owner": text_or_empty(mapped_submission_value(reference_source, payload, "owner", ["responsable_du_kpi"])),
+            "owner": text_or_empty(mapped_submission_value(reference_source, payload, "owner", ["responsable_validation", "responsable_du_kpi"])),
             "collectionFrequency": text_or_empty(
-                mapped_submission_value(reference_source, payload, "collectionFrequency", ["frequence_de_collecte", "frequence"])
+                mapped_submission_value(reference_source, payload, "collectionFrequency", ["frequence", "frequence_de_collecte"])
             ),
             "reportingFrequency": text_or_empty(
-                mapped_submission_value(reference_source, payload, "reportingFrequency", ["periodicite_du_reporting"])
+                mapped_submission_value(reference_source, payload, "reportingFrequency", ["frequence", "periodicite_du_reporting"])
             ),
         }
         references.append(record)

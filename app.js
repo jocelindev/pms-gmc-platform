@@ -324,7 +324,9 @@
     let poleIds = PMS_DATA.reporting.poles
       .map((pole) => pole.id)
       .filter((poleId) => (!authorizedPoleIds.size || authorizedPoleIds.has(poleId)) && countryPoleIds.has(poleId));
-    const selectedPole = state.calendarPoleFilter || state.currentPoleMonitor;
+    const selectedPole = document.body?.dataset.activeView === "management"
+      ? "Tous"
+      : state.calendarPoleFilter || state.currentPoleMonitor;
     if (selectedPole && selectedPole !== "Tous") {
       poleIds = poleIds.filter((poleId) => poleId === selectedPole);
     }
@@ -2238,33 +2240,33 @@
     };
 
     const referenceKoboFields = [
-      { mappedTo: "id", inputId: "#admin-kobo-reference-id-field", defaultValue: "id_kpi" },
+      { mappedTo: "id", inputId: "#admin-kobo-reference-id-field", defaultValue: "id_kpi_final" },
       { mappedTo: "branch", inputId: "#admin-kobo-reference-branch-field", defaultValue: "pays_filiale" },
-      { mappedTo: "category", inputId: "#admin-kobo-reference-category-field", defaultValue: "categorie_organisationnelle" },
+      { mappedTo: "category", inputId: "#admin-kobo-reference-category-field", defaultValue: "categorie" },
       { mappedTo: "entity", inputId: "#admin-kobo-reference-entity-field", defaultValue: "entite_direction" },
       { mappedTo: "subEntity", inputId: "#admin-kobo-reference-subentity-field", defaultValue: "sous_entite_pole_filiale" },
-      { mappedTo: "pole", inputId: "#admin-kobo-reference-pole-field", defaultValue: "groupe_de_rattachement" },
+      { mappedTo: "pole", inputId: "#admin-kobo-reference-pole-field", defaultValue: "pole" },
       { mappedTo: "path", inputId: "#admin-kobo-reference-path-field", defaultValue: "chemin_organisationnel" },
-      { mappedTo: "title", inputId: "#admin-kobo-reference-title-field", defaultValue: "intitule_du_kpi" },
-      { mappedTo: "definition", inputId: "#admin-kobo-reference-definition-field", defaultValue: "description_definition" },
+      { mappedTo: "title", inputId: "#admin-kobo-reference-title-field", defaultValue: "intitule_kpi" },
+      { mappedTo: "definition", inputId: "#admin-kobo-reference-definition-field", defaultValue: "interpretation_usage" },
       { mappedTo: "type", inputId: "#admin-kobo-reference-type-field", defaultValue: "type_de_kpi" },
-      { mappedTo: "unit", inputId: "#admin-kobo-reference-unit-field", defaultValue: "unite_de_mesure" },
+      { mappedTo: "unit", inputId: "#admin-kobo-reference-unit-field", defaultValue: "unite" },
       { mappedTo: "formula", inputId: "#admin-kobo-reference-formula-field", defaultValue: "formule_de_calcul" },
-      { mappedTo: "target", inputId: "#admin-kobo-reference-target-field", defaultValue: "valeur_cible" },
+      { mappedTo: "target", inputId: "#admin-kobo-reference-target-field", defaultValue: "seuil_cible" },
       { mappedTo: "performanceDirection", inputId: "#admin-kobo-reference-performance-direction-field", defaultValue: "sens_performance" },
-      { mappedTo: "collectionFrequency", inputId: "#admin-kobo-reference-collection-frequency-field", defaultValue: "frequence_de_collecte" },
-      { mappedTo: "reportingFrequency", inputId: "#admin-kobo-reference-reporting-frequency-field", defaultValue: "periodicite_du_reporting" },
+      { mappedTo: "collectionFrequency", inputId: "#admin-kobo-reference-collection-frequency-field", defaultValue: "frequence" },
+      { mappedTo: "reportingFrequency", inputId: "#admin-kobo-reference-reporting-frequency-field", defaultValue: "frequence" },
       { mappedTo: "sourceData", inputId: "#admin-kobo-reference-source-field", defaultValue: "source_de_la_donnee" },
-      { mappedTo: "owner", inputId: "#admin-kobo-reference-owner-field", defaultValue: "responsable_du_kpi" },
+      { mappedTo: "owner", inputId: "#admin-kobo-reference-owner-field", defaultValue: "responsable_validation" },
       { mappedTo: "respondent", inputId: "#admin-kobo-reference-respondent-field", defaultValue: "repondant" },
       { mappedTo: "respondentFunction", inputId: "#admin-kobo-reference-respondent-function-field", defaultValue: "fonction_du_repondant" },
       { mappedTo: "year", inputId: "#admin-kobo-reference-year-field", defaultValue: "annee" },
-      { mappedTo: "validation", inputId: "#admin-kobo-reference-validation-field", defaultValue: "validation_hierarchique" },
+      { mappedTo: "validation", inputId: "#admin-kobo-reference-validation-field", defaultValue: "validation_referentiel" },
       { mappedTo: "validator", inputId: "#admin-kobo-reference-validator-field", defaultValue: "validateur" },
-      { mappedTo: "comments", inputId: "#admin-kobo-reference-comments-field", defaultValue: "commentaires" },
+      { mappedTo: "comments", inputId: "#admin-kobo-reference-comments-field", defaultValue: "commentaire" },
       { mappedTo: "submittedAt", inputId: "#admin-kobo-reference-submitted-at-field", defaultValue: "date_de_soumission" },
       { mappedTo: "sourceReference", inputId: "#admin-kobo-reference-source-reference-field", defaultValue: "reference_source" },
-      { mappedTo: "documentStatus", inputId: "#admin-kobo-reference-document-status-field", defaultValue: "statut_documentaire" },
+      { mappedTo: "documentStatus", inputId: "#admin-kobo-reference-document-status-field", defaultValue: "statut_kpi" },
       { mappedTo: "attention", inputId: "#admin-kobo-reference-attention-field", defaultValue: "points_d_attention" },
     ];
     const calculationKoboFields = [
@@ -2279,16 +2281,16 @@
     ];
     const monthlyObjectiveKoboFields = [
       { mappedTo: "branch", inputId: "#admin-kobo-monthly-objective-branch-field", defaultValue: "pays_filiale" },
-      { mappedTo: "pole", inputId: "#admin-kobo-monthly-objective-pole-field", defaultValue: "pole_id" },
+      { mappedTo: "pole", inputId: "#admin-kobo-monthly-objective-pole-field", defaultValue: "pole" },
       { mappedTo: "kpi", inputId: "#admin-kobo-monthly-objective-kpi-field", defaultValue: "id_kpi" },
       { mappedTo: "period", inputId: "#admin-kobo-monthly-objective-period-field", defaultValue: "periode_objectif" },
       { mappedTo: "target", inputId: "#admin-kobo-monthly-objective-target-field", defaultValue: "objectif_mensuel" },
-      { mappedTo: "unit", inputId: "#admin-kobo-monthly-objective-unit-field", defaultValue: "unite_mesure" },
-      { mappedTo: "frequency", inputId: "#admin-kobo-monthly-objective-frequency-field", defaultValue: "frequence_objectif" },
+      { mappedTo: "unit", inputId: "#admin-kobo-monthly-objective-unit-field", defaultValue: "unite" },
+      { mappedTo: "frequency", inputId: "#admin-kobo-monthly-objective-frequency-field", defaultValue: "frequence" },
       { mappedTo: "distributionMode", inputId: "#admin-kobo-monthly-objective-distribution-field", defaultValue: "mode_repartition" },
       { mappedTo: "sourceData", inputId: "#admin-kobo-monthly-objective-source-field", defaultValue: "source_objectif" },
       { mappedTo: "responsible", inputId: "#admin-kobo-monthly-objective-responsible-field", defaultValue: "responsable_objectif" },
-      { mappedTo: "validation", inputId: "#admin-kobo-monthly-objective-validation-field", defaultValue: "validation_hierarchique" },
+      { mappedTo: "validation", inputId: "#admin-kobo-monthly-objective-validation-field", defaultValue: "validation_direction" },
     ];
 
     const saveAdminKoboSource = async ({

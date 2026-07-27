@@ -843,7 +843,9 @@
     const activeCountry = getActiveCountry(state);
     const scopedPoles = getCountryScopedPoles(state, PMS_DATA.reporting.poles || []);
     let poleIds = scopedPoles.map((pole) => pole.id);
-    const selectedPole = state.calendarPoleFilter || state.currentPoleMonitor;
+    const selectedPole = document.body?.dataset.activeView === "management"
+      ? "Tous"
+      : state.calendarPoleFilter || state.currentPoleMonitor;
     if (selectedPole && selectedPole !== "Tous") {
       poleIds = poleIds.filter((poleId) => poleId === selectedPole);
     }
@@ -1161,12 +1163,14 @@
     return 1;
   }
 
-  function getDashboardContext(state = {}) {
+  function getDashboardContext(state = {}, options = {}) {
     const activeCountry = getActiveCountry(state);
     const isGroup = isGroupCountry(activeCountry);
     const accessContext = getPoleAccessContext(state);
     const countryScopedPoles = getCountryScopedPoles(state, accessContext.poles);
-    const selectedPoleFilter = state.calendarPoleFilter && state.calendarPoleFilter !== "Tous" ? state.calendarPoleFilter : "";
+    const selectedPoleFilter = options.includePoleFilter && state.calendarPoleFilter && state.calendarPoleFilter !== "Tous"
+      ? state.calendarPoleFilter
+      : "";
     const visiblePoles = selectedPoleFilter
       ? countryScopedPoles.filter((pole) => pole.id === selectedPoleFilter)
       : countryScopedPoles;
@@ -1473,6 +1477,8 @@
   }
 
   function managementDirectionScores(rows = [], context = {}) {
+    if (!rows.length) return [];
+
     const rowsByPole = rows.reduce((grouped, row) => {
       const key = row.pole?.id;
       if (!key) return grouped;
@@ -1481,8 +1487,10 @@
       grouped.set(key, items);
       return grouped;
     }, new Map());
+    const dataPoleIds = new Set(rows.map((row) => row.pole?.id).filter(Boolean));
 
     return [...(context.visiblePoles || [])]
+      .filter((pole) => dataPoleIds.has(pole.id))
       .map((pole) => {
         const poleRows = rowsByPole.get(pole.id) || [];
         const score = managementScoreFromRows(poleRows);
@@ -2133,10 +2141,10 @@
     const targetAchievement = averageTargetAchievement(dataRows.filter(targetKnown));
     const globalClass = !dataRows.length ? "gray" : redRows.length ? "red" : amberRows.length ? "amber" : score === null ? "gray" : scoreClass(score);
     const activeScope = context.isGroup ? "Groupe consolide" : context.activeCountry.name;
-    const activePoleScope = state.calendarPoleFilter && state.calendarPoleFilter !== "Tous"
-      ? context.visiblePoles.find((pole) => pole.id === state.calendarPoleFilter)?.name || state.calendarPoleFilter
-      : "Tous les poles";
     const activePeriodScope = state.calendar?.label || calendarPeriodLabel(state.calendar || {});
+    const activeDataScope = dataRows.length
+      ? `${dataRows.length} KPI Kobo calcule${dataRows.length > 1 ? "s" : ""}`
+      : "Aucune donnee Kobo calculee";
     const scoreBreakdown = dataRows.length
       ? `${greenRows.length} vert / ${amberRows.length} orange / ${redRows.length} rouge`
       : "donnees Kobo attendues";
@@ -2159,12 +2167,12 @@
     }
     const filterScope = $("#management-filter-scope");
     if (filterScope) {
-      filterScope.textContent = `${activeScope} | ${activePeriodScope} | ${activePoleScope}`;
+      filterScope.textContent = `${activeScope} | ${activePeriodScope} | ${activeDataScope}`;
     }
 
     const summary = $("#management-summary-cards");
     if (summary) {
-      const totalKpis = dataRows.length || context.kpiRows.length;
+      const totalKpis = dataRows.length;
       const trendMetrics = dataRows.flatMap((row) => kpiTrendMetrics(row.kpi, row.pole));
       const negativeTrends = trendMetrics.filter((metric) => metric.className === "negative").length;
       const cards = [
@@ -2189,7 +2197,7 @@
         {
           label: "Tendances defavorables",
           value: negativeTrends,
-          hint: `${totalKpis} KPI visibles`,
+          hint: `${totalKpis} KPI calcule${totalKpis > 1 ? "s" : ""}`,
           className: negativeTrends ? "amber" : dataRows.length ? "green" : "gray",
         },
       ];
@@ -2211,7 +2219,9 @@
     if (directionScoreStatus) {
       const scoredCount = directionScores.filter((item) => item.hasData).length;
       directionScoreStatus.className = `status-pill ${scoredCount ? (scoredCount === directionScores.length ? "green" : "amber") : "gray"}`;
-      directionScoreStatus.textContent = `${scoredCount}/${directionScores.length} avec score`;
+      directionScoreStatus.textContent = directionScores.length
+        ? `${scoredCount}/${directionScores.length} avec score`
+        : "Aucune donnee";
     }
     if (directionScoreBody) {
       directionScoreBody.innerHTML = directionScores.length
@@ -2262,17 +2272,23 @@
               `;
             })
             .join("")
-        : `<tr><td colspan="7">Aucune direction autorisee sur le perimetre actif.</td></tr>`;
+        : `<tr><td colspan="7">Aucune donnee Kobo calculee pour le pays et la periode selectionnes.</td></tr>`;
     }
 
     const heatmapHead = $("#management-heatmap-head");
     const heatmapBody = $("#management-heatmap-body");
     const heatmapStatus = $("#management-heatmap-status");
     if (heatmapHead && heatmapBody) {
-      const countries = (context.visibleCountries.length
-        ? context.visibleCountries
-        : getAuthorizedCountryOptions(state).filter((country) => !isGroupCountry(country))).slice(0, 8);
-      const poles = context.visiblePoles;
+      const dataPoleIds = new Set(dataRows.map((row) => row.pole.id).filter(Boolean));
+      const dataCountries = context.isGroup
+        ? context.visibleCountries.filter((country) => dataRows.some((row) => managementResultMatchesCountry(row.result, country)))
+        : dataRows.length
+          ? [context.activeCountry]
+          : [];
+      const countries = (dataCountries.length
+        ? dataCountries
+        : []).slice(0, 8);
+      const poles = dataRows.length ? context.visiblePoles.filter((pole) => dataPoleIds.has(pole.id)) : [];
       const cellProfiles = new Map();
       const getCellProfile = (pole, country) => {
         const key = `${pole.id}:${countryFilterValue(country)}`;
