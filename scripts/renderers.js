@@ -982,19 +982,21 @@
     });
     if (poleFilter) {
       const accessContext = getPoleAccessContext(state);
-      const authorizedPoles = accessContext.isRestricted ? accessContext.poles : PMS_DATA.reporting.poles;
+      const accessPoles = accessContext.isRestricted ? accessContext.poles : PMS_DATA.reporting.poles;
+      const authorizedPoles = getCountryScopedPoles(state, accessPoles);
       const canSelectAllPoles = !accessContext.isRestricted || authorizedPoles.length > 1;
+      const requestedPoleId = state.calendarPoleFilter || "Tous";
       const selectedPoleId =
-        canSelectAllPoles && state.calendarPoleFilter === "Tous"
+        canSelectAllPoles && requestedPoleId === "Tous"
           ? "Tous"
-          : authorizedPoles.find((pole) => pole.id === state.calendarPoleFilter)?.id ||
-            authorizedPoles.find((pole) => pole.id === state.currentPoleMonitor)?.id ||
-            authorizedPoles[0]?.id ||
-            "";
+          : authorizedPoles.find((pole) => pole.id === requestedPoleId)?.id ||
+            (canSelectAllPoles ? "Tous" : authorizedPoles[0]?.id || "");
       if (selectedPoleId) {
         state.calendarPoleFilter = selectedPoleId;
         if (selectedPoleId !== "Tous") {
           state.currentPoleMonitor = selectedPoleId;
+        } else if (!authorizedPoles.some((pole) => pole.id === state.currentPoleMonitor)) {
+          state.currentPoleMonitor = authorizedPoles[0]?.id || state.currentPoleMonitor;
         }
       }
       const poleOptions = [
@@ -1152,6 +1154,28 @@
     return rows.filter((row) => hasKpiData(row.kpi));
   }
 
+  function dashboardStatusMatches(row = {}, statusFilter = "Tous") {
+    const normalizedFilter = normalizeLookup(statusFilter || "Tous");
+    if (!normalizedFilter || normalizedFilter === "tous") return true;
+    const status = row.kpi?.status || "gray";
+    const aliases = {
+      vert: "green",
+      verte: "green",
+      green: "green",
+      orange: "amber",
+      amber: "amber",
+      rouge: "red",
+      red: "red",
+      attente: "gray",
+      "en attente": "gray",
+      kobo: "gray",
+      gray: "gray",
+      gris: "gray",
+    };
+    const requestedStatus = aliases[normalizedFilter] || normalizedFilter;
+    return status === requestedStatus || normalizeLookup(ragLabel(status)) === normalizedFilter;
+  }
+
   function dashboardKpiKey(pole = {}, kpi = {}, index = 0) {
     return `${pole.id || "POLE"}:${normalizeLookup(kpi.id || kpi.name)}:${index}`;
   }
@@ -1179,7 +1203,7 @@
       ? authorizedCountries
       : authorizedCountries.filter((country) => country.name === activeCountry.name);
     const safeCountries = visibleCountries.length ? visibleCountries : authorizedCountries;
-    const kpiRows = visiblePoles.flatMap((pole) =>
+    const rawKpiRows = visiblePoles.flatMap((pole) =>
       (PMS_DATA.reporting.kpisByPole[pole.id] || []).map((kpi, index) => ({
         key: dashboardKpiKey(pole, kpi, index),
         pole,
@@ -1187,18 +1211,30 @@
         index,
       }))
     );
+    const statusFilter = state.calendarStatusFilter || "Tous";
+    const kpiRows = rawKpiRows.filter((row) => dashboardStatusMatches(row, statusFilter));
     return {
       activeCountry,
       isGroup,
       accessContext,
       visiblePoles,
       visibleCountries: safeCountries,
+      statusFilter,
+      rawKpiRows,
       kpiRows,
     };
   }
 
   function getDashboardPoleContext(state = {}) {
     const context = getDashboardContext(state);
+    const allPolesSelected = !state.calendarPoleFilter || state.calendarPoleFilter === "Tous";
+    if (allPolesSelected) {
+      return {
+        ...context,
+        selectedPole: null,
+        selectedAllPoles: true,
+      };
+    }
     const requestedPole =
       state.calendarPoleFilter && state.calendarPoleFilter !== "Tous"
         ? state.calendarPoleFilter
@@ -1214,12 +1250,48 @@
           kpi,
           index,
         }))
+        .filter((row) => dashboardStatusMatches(row, context.statusFilter))
       : [];
     return {
       ...context,
       selectedPole,
+      selectedAllPoles: false,
       visiblePoles: selectedPole ? [selectedPole] : [],
       kpiRows,
+    };
+  }
+
+  function dashboardScopeMetrics(context = {}) {
+    const rows = context.kpiRows || [];
+    const dataRows = scopedKpiDataRows(rows);
+    const dataPoles = (context.visiblePoles || []).filter(hasPoleData);
+    const score = context.selectedPole
+      ? hasPoleData(context.selectedPole) ? Number(context.selectedPole.score || 0) : null
+      : managementScoreFromRows(dataRows);
+    const quality = context.selectedPole
+      ? hasPoleData(context.selectedPole) ? Number(context.selectedPole.quality || 0) : null
+      : dataPoles.length ? averageNumber(dataPoles.map((pole) => pole.quality)) : null;
+    const lateSubmissions = context.selectedPole
+      ? Number(context.selectedPole.lateSubmissions || 0)
+      : dataPoles.reduce((sum, pole) => sum + Number(pole.lateSubmissions || 0), 0);
+    const redCount = rows.filter((row) => row.kpi.status === "red").length;
+    const amberCount = rows.filter((row) => row.kpi.status === "amber").length;
+    const greenCount = rows.filter((row) => row.kpi.status === "green").length;
+    const pendingCount = rows.filter((row) => row.kpi.pendingCalculation || row.kpi.status === "gray").length;
+    const scopeClass = !dataRows.length ? "gray" : redCount ? "red" : amberCount ? "amber" : scoreClass(score);
+    return {
+      rows,
+      dataRows,
+      dataPoles,
+      hasData: dataRows.length > 0,
+      score,
+      quality,
+      lateSubmissions,
+      redCount,
+      amberCount,
+      greenCount,
+      pendingCount,
+      scopeClass,
     };
   }
 
@@ -1584,21 +1656,26 @@
     const target = $("#dashboard-control-cards");
     if (!target) return;
     const selectedPole = context.selectedPole;
+    const scope = dashboardScopeMetrics(context);
     const title = $("#dashboard-focus-title");
     const status = $("#dashboard-pole-status");
     if (title) {
       title.textContent = selectedPole
         ? `Resume performance - ${selectedPole.name}`
-        : "Resume du pole selectionne";
+        : `Resume performance - ${context.activeCountry.name}`;
     }
     if (status) {
-      status.className = `status-pill ${escapeHtml(selectedPole?.rag || "gray")}`;
-      status.textContent = selectedPole ? ragLabel(selectedPole.rag) : "Aucun pole";
+      status.className = `status-pill ${escapeHtml(selectedPole?.rag || scope.scopeClass || "gray")}`;
+      status.textContent = selectedPole
+        ? ragLabel(selectedPole.rag)
+        : scope.hasData
+          ? ragLabel(scope.scopeClass)
+          : "En attente Kobo";
     }
     const totalKpis = context.kpiRows.length;
-    const redCount = context.kpiRows.filter((row) => row.kpi.status === "red").length;
-    const amberCount = context.kpiRows.filter((row) => row.kpi.status === "amber").length;
-    const pendingCount = context.kpiRows.filter((row) => row.kpi.pendingCalculation || row.kpi.status === "gray").length;
+    const redCount = scope.redCount;
+    const amberCount = scope.amberCount;
+    const pendingCount = scope.pendingCount;
     const knownTargets = context.kpiRows.filter(targetKnown);
     const reachedTargets = knownTargets.filter(targetReached).length;
     const objectiveRate = knownTargets.length ? Math.round((reachedTargets / knownTargets.length) * 100) : 0;
@@ -1610,16 +1687,21 @@
         : targetAchievement >= 90
           ? "amber"
           : "red";
-    const hasData = selectedPole ? hasPoleData(selectedPole) : false;
-    const score = hasData ? Number(selectedPole.score || 0) : null;
-    const quality = hasData ? Number(selectedPole.quality || 0) : null;
-    const lateSubmissions = selectedPole ? Number(selectedPole.lateSubmissions || 0) : 0;
+    const hasData = scope.hasData;
+    const score = scope.score;
+    const quality = scope.quality;
+    const lateSubmissions = scope.lateSubmissions;
+    const scopeHint = selectedPole
+      ? selectedPole?.owner || "Responsable a definir"
+      : hasData
+        ? `${scope.dataPoles.length}/${context.visiblePoles.length} pole(s) avec donnees`
+        : `${context.visiblePoles.length} pole(s) dans le filtre`;
     const cards = [
       {
-        label: "Score du pole",
-        value: metricValueOrPending(selectedPole, score),
-        hint: hasData ? selectedPole?.owner || "Responsable a definir" : "donnees Kobo attendues",
-        className: metricClassOrPending(selectedPole, score),
+        label: selectedPole ? "Score du pole" : "Score du filtre",
+        value: hasData && Number.isFinite(Number(score)) ? score : "--",
+        hint: hasData ? scopeHint : "donnees Kobo attendues",
+        className: hasData ? scoreClass(score) : "gray",
         scoreToggle: true,
       },
       { label: "KPI suivis", value: totalKpis, hint: `${pendingCount} en attente Kobo`, className: pendingCount ? "amber" : "green" },
@@ -1638,7 +1720,7 @@
       },
       {
         label: "Qualite Kobo",
-        value: metricValueOrPending(selectedPole, quality, "%"),
+        value: hasData && Number.isFinite(Number(quality)) ? `${quality}%` : "--",
         hint: hasData ? (lateSubmissions ? `${lateSubmissions} retard(s)` : "collecte a jour") : "aucune soumission calculee",
         className: hasData ? (lateSubmissions ? "amber" : scoreClass(quality)) : "gray",
       },
@@ -1646,7 +1728,9 @@
     const ipgScore = $("#dashboard-ipg-score");
     const ipgLabel = $("#dashboard-ipg-label");
     if (ipgScore) ipgScore.textContent = hasData ? score || "--" : "--";
-    if (ipgLabel) ipgLabel.textContent = `${context.activeCountry.name} - ${totalKpis} KPI visibles`;
+    if (ipgLabel) {
+      ipgLabel.textContent = `${context.activeCountry.name} - ${context.selectedAllPoles ? "Tous les poles" : selectedPole?.name || "Pole"} - ${totalKpis} KPI visibles`;
+    }
     target.innerHTML = cards
       .map(
         (card) => `
@@ -1664,6 +1748,7 @@
     const target = $("#dashboard-score-detail");
     if (!target) return;
     const selectedPole = context.selectedPole;
+    const scope = dashboardScopeMetrics(context);
     const isOpen = Boolean(state.dashboardScoreDetailOpen);
     target.hidden = !isOpen;
     const toggle = $('[data-dashboard-score-toggle]');
@@ -1676,32 +1761,33 @@
     }
 
     const rows = context.kpiRows || [];
-    const dataRows = rows.filter((row) => hasKpiData(row.kpi));
-    const greenCount = dataRows.filter((row) => row.kpi.status === "green").length;
-    const amberCount = dataRows.filter((row) => row.kpi.status === "amber").length;
-    const redCount = dataRows.filter((row) => row.kpi.status === "red").length;
-    const pendingCount = rows.filter((row) => row.kpi.pendingCalculation || row.kpi.status === "gray").length;
+    const dataRows = scope.dataRows;
+    const greenCount = scope.greenCount;
+    const amberCount = scope.amberCount;
+    const redCount = scope.redCount;
+    const pendingCount = scope.pendingCount;
     const knownTargets = rows.filter(targetKnown);
     const reachedTargets = knownTargets.filter(targetReached).length;
-    const score = selectedPole && hasPoleData(selectedPole) ? Number(selectedPole.score || 0) : null;
+    const score = scope.hasData ? scope.score : null;
     const scoreLabel = score === null ? "--" : `${Math.round(score)}/100`;
     const scoreStatus = score === null ? "En attente Kobo" : ragLabel(scoreClass(score));
-    const quality = selectedPole && hasPoleData(selectedPole) ? Number(selectedPole.quality || 0) : null;
-    const lateSubmissions = selectedPole ? Number(selectedPole.lateSubmissions || 0) : 0;
+    const quality = scope.hasData ? scope.quality : null;
+    const lateSubmissions = scope.lateSubmissions;
+    const scopeLabel = selectedPole ? selectedPole.name : `${context.activeCountry.name} / tous les poles`;
     const explanation = score === null
-      ? "Le score sera calcule des que les donnees Kobo du pole seront disponibles."
+      ? "Le score sera calcule des que les donnees Kobo du filtre actif seront disponibles."
       : redCount
-        ? "Le score est tire vers le bas par les KPI rouges du pole."
+        ? "Le score est tire vers le bas par les KPI rouges du filtre actif."
         : amberCount
           ? "Le score reste en vigilance a cause des KPI orange ou des objectifs partiellement atteints."
           : pendingCount
             ? "Le score est lisible, mais certaines donnees Kobo restent a alimenter."
-            : "Le score est stable sur les KPI calcules du pole.";
+            : "Le score est stable sur les KPI calcules du filtre actif.";
 
     target.innerHTML = `
       <div class="score-detail-main">
         <div>
-          <span>Lecture du score</span>
+          <span>Lecture du score - ${escapeHtml(scopeLabel)}</span>
           <strong>${escapeHtml(scoreLabel)} - ${escapeHtml(scoreStatus)}</strong>
           <p>${escapeHtml(explanation)}</p>
         </div>
@@ -2095,22 +2181,25 @@
     if (count) {
       const dataRows = scopedKpiDataRows(rows);
       count.className = `status-pill ${dataRows.length ? "green" : rows.length ? "amber" : "gray"}`;
+      const statusSuffix = context.statusFilter && context.statusFilter !== "Tous" ? ` - ${context.statusFilter}` : "";
       count.textContent = dataRows.length
-        ? `${dataRows.length}/${rows.length} KPI calcule${dataRows.length > 1 ? "s" : ""}`
-        : `${rows.length} KPI en attente`;
+        ? `${dataRows.length}/${rows.length} KPI calcule${dataRows.length > 1 ? "s" : ""}${statusSuffix}`
+        : `${rows.length} KPI en attente${statusSuffix}`;
     }
     if (!rows.length) {
-      table.innerHTML = `<tr><td colspan="8">Aucun KPI disponible pour le pole selectionne.</td></tr>`;
+      const scopeLabel = context.selectedPole ? context.selectedPole.name : `${context.activeCountry.name} / tous les poles`;
+      table.innerHTML = `<tr><td colspan="8">Aucun KPI disponible pour le filtre actif: ${escapeHtml(scopeLabel)}.</td></tr>`;
       return;
     }
     table.innerHTML = rows
+      .sort((left, right) => String(left.pole.name).localeCompare(String(right.pole.name)) || statusWeight(right.kpi.status) - statusWeight(left.kpi.status))
       .map((row) => {
         const targetMetric = metricFromTarget(row.kpi);
         return `
           <tr>
             <td>
               <strong>${escapeHtml(row.kpi.name)}</strong>
-              <br><small>${escapeHtml(row.kpi.id || row.pole.id)}</small>
+              <br><small>${escapeHtml(row.pole.name)} - ${escapeHtml(row.kpi.id || row.pole.id)}</small>
             </td>
             <td>${escapeHtml(dayValueLabel(row.kpi))}</td>
             <td><strong>${escapeHtml(monthToDateValueLabel(row.kpi))}</strong></td>

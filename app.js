@@ -371,6 +371,20 @@
     return new Set(poleIds);
   }
 
+  function alignCalendarPoleFilterWithCountry() {
+    const authorizedPoleIds = new Set(getAuthorizedPoleIds(state.calendarBranchFilter));
+    const countryPoleIds = new Set(selectedCountryPoleIds(state.calendarBranchFilter));
+    const allowedPoleIds = PMS_DATA.reporting.poles
+      .map((pole) => pole.id)
+      .filter((poleId) => (!authorizedPoleIds.size || authorizedPoleIds.has(poleId)) && countryPoleIds.has(poleId));
+    if (!allowedPoleIds.length) return;
+    const currentPole = state.calendarPoleFilter || "Tous";
+    if (currentPole === "Tous" || allowedPoleIds.includes(currentPole)) return;
+    state.calendarPoleFilter = allowedPoleIds.length > 1 ? "Tous" : allowedPoleIds[0];
+    state.currentPoleMonitor = allowedPoleIds.includes(state.currentPoleMonitor) ? state.currentPoleMonitor : allowedPoleIds[0];
+    state.currentReportPole = allowedPoleIds.includes(state.currentReportPole) ? state.currentReportPole : allowedPoleIds[0];
+  }
+
   function availableCalendarDateIsos({ anchorDate = null, sameMonth = false } = {}) {
     const allowedPoleIds = calendarDateScopePoleIds();
     const activeCountry = ensureAllowedCountry(state.calendarBranchFilter);
@@ -1801,6 +1815,7 @@
 
   function applyCountryScope(countryValue, toastMessage) {
     state.calendarBranchFilter = ensureAllowedCountry(countryValue || "Groupe");
+    alignCalendarPoleFilterWithCountry();
     ensureCalendarDateFromAvailableData();
     applyCalculatedKpisToReporting();
     renderCalendarSlicer(state);
@@ -1952,6 +1967,8 @@
     statusFilter?.addEventListener("change", () => {
       state.calendarStatusFilter = statusFilter.value;
       renderCalendarSlicer(state);
+      renderAdvancedDashboard(state);
+      renderManagementDashboard(state);
       showToast(
         statusFilter.value === "Tous"
           ? "Tous les statuts sont visibles."
