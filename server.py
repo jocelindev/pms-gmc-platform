@@ -114,18 +114,22 @@ KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS_DEFAULT = 8
 KOBO_AUTO_SYNC_ROLES = ("referentielKpi", "objectifsMensuels", "donneesCalcul")
 KOBO_TOKEN_ENV_KEYS = ("PMS_KOBO_API_TOKEN", "KOBO_API_TOKEN")
 KOBO_SERVER_ENV_KEYS = ("PMS_KOBO_SERVER_URL", "KOBO_SERVER_URL")
-REFERENCE_KOBO_CURRENT_UID = "ay5PAFNfJ8mzMUEnQELEsp"
-REFERENCE_KOBO_OLD_UIDS = ("agJCJ2VqwMGNk586NHJ39W", "auGyH8vhCsK9KKtG2fu2u5")
+REFERENCE_KOBO_CURRENT_UID = "aJSryGjJv4Jzz9YRcP8D67"
+REFERENCE_KOBO_OLD_UIDS = ("ay5PAFNfJ8mzMUEnQELEsp", "agJCJ2VqwMGNk586NHJ39W", "auGyH8vhCsK9KKtG2fu2u5")
 REFERENCE_KOBO_TITLE = "PMS GMC - Formulaire 1 - Referentiel KPI et formules"
 REFERENCE_KOBO_SOURCE_TYPE = "KoboCollect Referentiel KPI"
 REFERENCE_KOBO_DEFAULT_SERVER = "https://kf.kobotoolbox.org"
-OBJECTIVES_KOBO_DEFAULT_UID = "ae7vJ2AjmXXHQtbFhE2uy3"
-CALCULATION_KOBO_DEFAULT_UID = "aWSxs5BEweHPnubKNb7a3g"
+OBJECTIVES_KOBO_DEFAULT_UID = "aNdbykKVWBW8KeprR5M2Uj"
+CALCULATION_KOBO_DEFAULT_UID = "aCdB3YF8vSppFsVBroKm9W"
 KOBO_UID_REPLACEMENTS = {
     "agJCJ2VqwMGNk586NHJ39W": REFERENCE_KOBO_CURRENT_UID,
     "auGyH8vhCsK9KKtG2fu2u5": REFERENCE_KOBO_CURRENT_UID,
+    "ay5PAFNfJ8mzMUEnQELEsp": REFERENCE_KOBO_CURRENT_UID,
+    "ae7vJ2AjmXXHQtbFhE2uy3": OBJECTIVES_KOBO_DEFAULT_UID,
+    "aWSxs5BEweHPnubKNb7a3g": CALCULATION_KOBO_DEFAULT_UID,
     "aZ5JcFjcL9YvnQozqHWrqN": CALCULATION_KOBO_DEFAULT_UID,
 }
+CURRENT_KOBO_UIDS = {REFERENCE_KOBO_CURRENT_UID, OBJECTIVES_KOBO_DEFAULT_UID, CALCULATION_KOBO_DEFAULT_UID}
 ENV_KOBO_SOURCE_DEFINITIONS = (
     {
         "role": "referentielKpi",
@@ -679,51 +683,20 @@ def migrate_reference_kobo_uid(conn: sqlite3.Connection) -> bool:
         return False
 
     changed = False
-    current = conn.execute(
-        "SELECT id FROM kobo_forms WHERE uid = ?",
-        (REFERENCE_KOBO_CURRENT_UID,),
-    ).fetchone()
-    old_rows = conn.execute(
-        f"""
-        SELECT id, uid
-        FROM kobo_forms
-        WHERE uid IN ({",".join("?" for _ in REFERENCE_KOBO_OLD_UIDS)})
-        """,
-        REFERENCE_KOBO_OLD_UIDS,
-    ).fetchall()
-
-    if old_rows and not current:
-        conn.execute(
-            f"""
-            UPDATE kobo_forms
-            SET uid = ?,
-                title = ?,
-                server_url = COALESCE(NULLIF(server_url, ''), ?),
-                source_type = ?,
-                status = 'Actif',
-                updated_at = CURRENT_TIMESTAMP
-            WHERE uid IN ({",".join("?" for _ in REFERENCE_KOBO_OLD_UIDS)})
-            """,
-            (
-                REFERENCE_KOBO_CURRENT_UID,
-                REFERENCE_KOBO_TITLE,
-                REFERENCE_KOBO_DEFAULT_SERVER,
-                REFERENCE_KOBO_SOURCE_TYPE,
-                *REFERENCE_KOBO_OLD_UIDS,
-            ),
-        )
-        changed = True
-    elif old_rows and current:
-        conn.execute(
+    retired_uids = tuple(uid for uid in KOBO_UID_REPLACEMENTS if uid not in CURRENT_KOBO_UIDS)
+    if retired_uids:
+        archive_cursor = conn.execute(
             f"""
             UPDATE kobo_forms
             SET source_type = 'KoboCollect Archive',
-                status = 'Archive'
-            WHERE uid IN ({",".join("?" for _ in REFERENCE_KOBO_OLD_UIDS)})
+                status = 'Archive',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE uid IN ({",".join("?" for _ in retired_uids)})
+              AND status NOT IN ('Archive', 'Inactif')
             """,
-            REFERENCE_KOBO_OLD_UIDS,
+            retired_uids,
         )
-        changed = True
+        changed = bool(archive_cursor.rowcount) or changed
 
     current = conn.execute(
         "SELECT id FROM kobo_forms WHERE uid = ?",

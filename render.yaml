@@ -14,10 +14,10 @@ services:
       - key: PMS_KOBO_SERVER_URL
         value: https://kf.kobotoolbox.org
       - key: PMS_KOBO_REFERENCE_FORM_UID
-        value: ay5PAFNfJ8mzMUEnQELEsp
+        value: aJSryGjJv4Jzz9YRcP8D67
       - key: PMS_KOBO_OBJECTIVES_FORM_UID
-        value: ae7vJ2AjmXXHQtbFhE2uy3
+        value: aNdbykKVWBW8KeprR5M2Uj
       - key: PMS_KOBO_CALCULATION_FORM_UID
-        value: aWSxs5BEweHPnubKNb7a3g
+        value: aCdB3YF8vSppFsVBroKm9W
       - key: PMS_KOBO_API_TOKEN
         sync: false
