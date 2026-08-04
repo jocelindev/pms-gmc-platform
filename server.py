@@ -146,28 +146,28 @@ ENV_KOBO_SOURCE_DEFINITIONS = (
             "category": "categorie",
             "entity": "entite_direction",
             "subEntity": "sous_entite_pole_filiale",
-            "pole": "pole",
+            "pole": "groupe_de_rattachement",
             "path": "chemin_organisationnel",
-            "title": "intitule_kpi",
-            "definition": "interpretation_usage",
+            "title": "intitule_du_kpi",
+            "definition": "description_definition",
             "type": "type_de_kpi",
-            "unit": "unite",
+            "unit": "unite_de_mesure",
             "formula": "formule_de_calcul",
-            "target": "seuil_cible",
+            "target": "valeur_cible",
             "performanceDirection": "sens_performance",
-            "collectionFrequency": "frequence",
-            "reportingFrequency": "frequence",
+            "collectionFrequency": "frequence_de_collecte",
+            "reportingFrequency": "periodicite_du_reporting",
             "sourceData": "source_de_la_donnee",
-            "owner": "responsable_validation",
+            "owner": "responsable_du_kpi",
             "respondent": "repondant",
             "respondentFunction": "fonction_du_repondant",
             "year": "annee",
-            "validation": "validation_referentiel",
+            "validation": "validation_hierarchique",
             "validator": "validateur",
-            "comments": "commentaire",
+            "comments": "commentaires",
             "submittedAt": "date_de_soumission",
             "sourceReference": "reference_source",
-            "documentStatus": "statut_kpi",
+            "documentStatus": "statut_documentaire",
             "attention": "points_d_attention",
         },
     },
@@ -2685,6 +2685,15 @@ def canonical_kpi_code(value) -> str:
     return text
 
 
+def semantic_kobo_element_label(value) -> str:
+    raw = text_or_empty(value)
+    if not raw:
+        return ""
+    readable = raw.replace("_", " ").replace("-", " ")
+    readable = re.sub(r"^kpi\s*\d{1,3}\s*\d{1,2}\s*", "", readable, flags=re.IGNORECASE).strip()
+    return re.sub(r"\s+", " ", readable) or raw
+
+
 def branch_lookup_key(value) -> str:
     normalized = normalize_match_key(value)
     if not normalized:
@@ -3241,7 +3250,7 @@ def aggregate_numeric_elements(elements: list[dict]) -> tuple[dict[str, float], 
         if number is None:
             continue
         raw_numbers.append(number)
-        label = normalize_match_key(element.get("label") or "valeur")
+        label = normalize_match_key(semantic_kobo_element_label(element.get("label") or "valeur"))
         if not label:
             label = "valeur"
         values[label] = values.get(label, 0.0) + number
@@ -3399,6 +3408,7 @@ def upsert_kpi_daily_data(
     collector: str,
     raw_payload_json: str,
 ) -> None:
+    element_label = semantic_kobo_element_label(element_label or "valeur")
     element_key = normalize_submission_key(element_label or "valeur")
     if not element_key:
         element_key = "valeur"
@@ -3653,6 +3663,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         "configured": bool(reference_source),
         "objectiveFormConfigured": bool(objective_source),
         "calculationFormConfigured": bool(calculation_source),
+        "referenceSubmissionCount": 0,
         "referenceCount": 0,
         "objectiveRecords": 0,
         "objectiveCount": 0,
@@ -3791,6 +3802,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     objective_records, objective_warnings = extract_monthly_objective_records(conn, objective_source)
     objective_lookup, objective_by_pole_kpi_month, objective_by_kpi_month = build_objective_lookup(objective_records)
 
+    quality["referenceSubmissionCount"] = len(reference_rows)
     quality["referenceCount"] = len(reference_rows)
     quality["objectiveRecords"] = len(objective_records)
     quality["objectiveCount"] = len(objective_records)
@@ -3890,6 +3902,18 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 ["sens_performance", "sens_de_performance", "orientation_performance", "orientation", "sens"],
             )
         )
+        validation_raw = mapped_submission_value(
+            reference_source,
+            payload,
+            "validation",
+            ["validation_hierarchique", "validation_referentiel", "validation_status", "statut_validation", "validation"],
+        )
+        document_status_raw = mapped_submission_value(
+            reference_source,
+            payload,
+            "documentStatus",
+            ["statut_documentaire", "statut_kpi", "statut", "document_status"],
+        )
         record = {
             "branch": branch,
             "branchKey": branch_key,
@@ -3911,6 +3935,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "reportingFrequency": text_or_empty(
                 mapped_submission_value(reference_source, payload, "reportingFrequency", ["frequence", "periodicite_du_reporting"])
             ),
+            "validation": text_or_empty(validation_raw or row["validation_status"] or "A valider"),
+            "documentStatus": text_or_empty(document_status_raw or "A preciser"),
         }
         references.append(record)
         if not record["formula"]:
@@ -4126,7 +4152,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 period=period_label,
             )
         element = {
-            "label": text_or_empty(element_raw or "valeur"),
+            "label": semantic_kobo_element_label(element_raw or "valeur"),
             "value": raw_calculation_value,
             "branch": branch,
             "validation": text_or_empty(validation_raw or row["validation_status"]),
@@ -4199,7 +4225,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             continue
         branch = text_or_empty(row["branch"] or "Groupe") or "Groupe"
         element = {
-            "label": text_or_empty(row["element_label"] or row["element_key"] or "valeur"),
+            "label": semantic_kobo_element_label(row["element_label"] or row["element_key"] or "valeur"),
             "value": row["raw_value"] if row["raw_value"] not in (None, "") else row["numeric_value"],
             "branch": branch,
             "validation": text_or_empty(row["validation_status"]),
@@ -4231,6 +4257,79 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     quality["calculationGroups"] = len(groups)
 
     dated_entries = [entry for entry in calculation_entries if entry["periodDate"]]
+    daily_elements_by_scope: dict[tuple[str, str, dt.date], list[dict]] = {}
+    for entry in dated_entries:
+        daily_elements_by_scope.setdefault((entry["branchKey"], entry["poleId"], entry["periodDate"]), []).append(
+            {
+                "kpiKey": entry["kpiKey"],
+                "element": entry["element"],
+            }
+        )
+
+    def reference_matches_branch(record: dict, branch_key: str) -> bool:
+        return record.get("branchKey") == branch_key or branch_is_group(record.get("branch"))
+
+    def shared_elements_for_reference(record: dict, scoped_elements: list[dict]) -> list[dict]:
+        formula_key = normalize_match_key(record.get("formula") or "")
+        if not formula_key:
+            return []
+        selected = []
+        selected_labels = set()
+        for shared in scoped_elements:
+            element = dict(shared.get("element") or {})
+            label_key = normalize_match_key(semantic_kobo_element_label(element.get("label") or ""))
+            if not label_key or label_key in selected_labels:
+                continue
+            if any(term in label_key for term in ("valeur realisee", "resultat kpi", "valeur kpi")):
+                continue
+            if label_key in formula_key:
+                element["sharedFromOtherKpi"] = shared.get("kpiKey") != normalize_match_key(record.get("kpiId"))
+                selected.append(element)
+                selected_labels.add(label_key)
+        return selected
+
+    inferred_calculation_entries: list[dict] = []
+    for (branch_key, pole_id, period_date), scoped_elements in daily_elements_by_scope.items():
+        sample_element = next((item.get("element") or {} for item in scoped_elements if item.get("element")), {})
+        branch = text_or_empty(sample_element.get("branch") or "Groupe") or "Groupe"
+        for reference in references:
+            if reference.get("poleId") != pole_id or not reference_matches_branch(reference, branch_key):
+                continue
+            kpi_key = normalize_match_key(reference.get("kpiId"))
+            if not kpi_key:
+                continue
+            group_key = (branch_key, pole_id, kpi_key, normalize_match_key(period_date.isoformat()))
+            if group_key in groups:
+                continue
+            matching_elements = shared_elements_for_reference(reference, scoped_elements)
+            if not matching_elements:
+                continue
+            for element in matching_elements:
+                add_calculation_group(
+                    pole_id,
+                    kpi_key,
+                    reference.get("kpiId") or reference.get("kpiName"),
+                    period_date.isoformat(),
+                    element,
+                    branch=branch,
+                    period_start=period_date.isoformat(),
+                    period_end=period_date.isoformat(),
+                    period_type="day",
+                )
+                inferred_calculation_entries.append(
+                    {
+                        "branch": branch,
+                        "branchKey": branch_key,
+                        "poleId": pole_id,
+                        "kpiKey": kpi_key,
+                        "kpiRaw": reference.get("kpiId") or reference.get("kpiName"),
+                        "periodDate": period_date,
+                        "element": element,
+                    }
+                )
+
+    dated_entries.extend(inferred_calculation_entries)
+
     scope_dates: dict[tuple[str, str, str], set[dt.date]] = {}
     for entry in dated_entries:
         scope_dates.setdefault((entry["branchKey"], entry["poleId"], entry["kpiKey"]), set()).add(entry["periodDate"])
@@ -4266,6 +4365,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     period_end=target_date.isoformat(),
                     period_type="monthToDate",
                 )
+
+    quality["calculationGroups"] = len(groups)
 
     results: list[dict] = []
     pole_names = {row["id"]: row["name"] for row in conn.execute("SELECT id, name FROM poles").fetchall()}
@@ -4353,6 +4454,9 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     "owner": record["owner"],
                     "collectionFrequency": record["collectionFrequency"],
                     "reportingFrequency": record["reportingFrequency"],
+                    "validation": record.get("validation", ""),
+                    "documentStatus": record.get("documentStatus", ""),
+                    "validationClass": status_class_from_validation(record.get("validation", "")),
                     "status": "gray",
                     "valueLabel": "En attente calcul",
                     "method": "Reference Kobo, donnees de calcul attendues",
@@ -4362,6 +4466,44 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         ],
         key=lambda item: (item["branch"], item["poleName"], item["kpiName"]),
     )
+    quality["referenceCount"] = len(references)
+
+    def shared_element_can_help(reference: dict, element: dict) -> bool:
+        label_key = normalize_match_key(semantic_kobo_element_label(element.get("label") or ""))
+        if not label_key:
+            return False
+        if any(term in label_key for term in ("valeur realisee", "resultat kpi", "valeur kpi")):
+            return False
+        formula_key = normalize_match_key(reference.get("formula") or "")
+        return bool(formula_key and label_key in formula_key)
+
+    def enriched_elements_for_group(group: dict, reference: dict) -> list[dict]:
+        elements = list(group.get("elements") or [])
+        if group.get("periodType") != "day":
+            return elements
+
+        day_date = parse_daily_period_date(group.get("periodEnd") or group.get("period") or "")
+        if not day_date:
+            return elements
+
+        existing_labels = {
+            normalize_match_key(semantic_kobo_element_label(element.get("label") or ""))
+            for element in elements
+            if element.get("label")
+        }
+        scope_key = (group.get("branchKey") or "groupe", group["poleId"], day_date)
+        for shared in daily_elements_by_scope.get(scope_key, []):
+            if shared.get("kpiKey") == group.get("kpiKey"):
+                continue
+            element = dict(shared.get("element") or {})
+            label_key = normalize_match_key(semantic_kobo_element_label(element.get("label") or ""))
+            if not label_key or label_key in existing_labels:
+                continue
+            if shared_element_can_help(reference, element):
+                element["sharedFromOtherKpi"] = True
+                elements.append(element)
+                existing_labels.add(label_key)
+        return elements
 
     daily_actual_points: dict[tuple[str, str, str], list[dict]] = {}
 
@@ -4392,6 +4534,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         target_info = effective_target_for_group(reference, objective, group)
         aggregation_mode = actual_aggregation_mode(reference, objective)
         result_unit = (objective.get("unit") or reference["unit"]) if objective else reference["unit"]
+        evaluation_elements = enriched_elements_for_group(group, reference)
         formula_context = {}
         if target_info["numeric"] is not None:
             formula_context = {
@@ -4429,14 +4572,14 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             else:
                 value, method, formula_warnings = evaluate_kpi_formula(
                     reference["formula"],
-                    group["elements"],
+                    evaluation_elements,
                     context_values=formula_context,
                     unit=result_unit,
                 )
         else:
             value, method, formula_warnings = evaluate_kpi_formula(
                 reference["formula"],
-                group["elements"],
+                evaluation_elements,
                 context_values=formula_context,
                 unit=result_unit,
             )
@@ -4530,7 +4673,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "formula": reference["formula"] or "Formule a completer",
             "sourceData": reference["sourceData"],
             "method": method,
-            "elementsCount": len(group["elements"]),
+            "elementsCount": len(evaluation_elements),
             "warnings": formula_warnings,
         }
         results.append(result)
