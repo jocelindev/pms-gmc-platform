@@ -846,6 +846,7 @@
     monthlyObjectiveKoboSource: initialKoboSource("objectifsMensuels", defaultMonthlyObjectiveKoboSource),
     calculationKoboSource: initialKoboSource("donneesCalcul", defaultCalculationKoboSource),
     koboAutoSync: null,
+    lastAutoSyncRefreshKey: "",
     koboDataAudit: null,
     koboAnomalies: [],
     databaseOverview: null,
@@ -968,6 +969,7 @@
     mergeKoboSources(payload.koboSources);
     if (payload.koboAutoSync) {
       state.koboAutoSync = payload.koboAutoSync;
+      scheduleAutoSyncRefresh(payload.koboAutoSync);
     }
     if (payload.koboDataAudit) {
       state.koboDataAudit = payload.koboDataAudit;
@@ -987,6 +989,58 @@
       console.warn("Base PMS indisponible, mode local active.", error);
       state.databaseConnected = false;
       return false;
+    }
+  }
+
+  let autoSyncRefreshTimer = null;
+  let autoSyncRefreshPolls = 0;
+  let autoSyncRefreshKey = "";
+  const AUTO_SYNC_REFRESH_DELAY_MS = 7000;
+  const AUTO_SYNC_MAX_REFRESH_POLLS = 10;
+
+  function autoSyncKey(autoSync = {}) {
+    autoSync = autoSync || {};
+    return [autoSync.lastAttemptAt || "", autoSync.lastReason || ""].join("|");
+  }
+
+  function scheduleAutoSyncRefresh(autoSync = {}) {
+    autoSync = autoSync || {};
+    if (!api?.koboAutoStatus || !api?.bootstrap || !state.currentPermissions?.administration || !autoSync.enabled) return;
+    const key = autoSyncKey(autoSync);
+    if (!autoSync.running && (!key || key === state.lastAutoSyncRefreshKey)) return;
+    if (key && key !== autoSyncRefreshKey) {
+      autoSyncRefreshKey = key;
+      autoSyncRefreshPolls = 0;
+    }
+    if (autoSyncRefreshTimer) return;
+    autoSyncRefreshTimer = window.setTimeout(pollAutoSyncRefresh, AUTO_SYNC_REFRESH_DELAY_MS);
+  }
+
+  async function pollAutoSyncRefresh() {
+    autoSyncRefreshTimer = null;
+    if (!api?.koboAutoStatus || !api?.bootstrap || !state.currentPermissions?.administration) return;
+    autoSyncRefreshPolls += 1;
+    try {
+      const status = await api.koboAutoStatus();
+      state.koboAutoSync = status;
+      if (status.running && autoSyncRefreshPolls < AUTO_SYNC_MAX_REFRESH_POLLS) {
+        scheduleAutoSyncRefresh(status);
+        renderAdmin(state);
+        return;
+      }
+
+      const key = autoSyncKey(status);
+      if (key && key !== state.lastAutoSyncRefreshKey) {
+        state.lastAutoSyncRefreshKey = key;
+        const refreshed = await hydrateFromDatabase();
+        if (refreshed) {
+          renderAll(state);
+          renderKoboActiveForm();
+          showToast(status.lastError ? "Synchronisation Kobo terminee avec alerte." : "Synchronisation Kobo automatique terminee.");
+        }
+      }
+    } catch (error) {
+      console.warn("Suivi de la synchronisation automatique indisponible.", error);
     }
   }
 
@@ -1297,6 +1351,7 @@
     renderKoboActiveForm();
     showApplication();
     activateView("dashboard");
+    scheduleAutoSyncRefresh(state.koboAutoSync);
 
     if (options.toast !== false) {
       showToast(`Bienvenue ${state.currentUser.fullName}.`);
