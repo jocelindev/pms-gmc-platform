@@ -1051,12 +1051,11 @@ def list_objectives(conn: sqlite3.Connection) -> list[dict]:
     objective_source = next((source for source in sources if source.get("role") == "objectifsMensuels"), None)
     if objective_source:
         records, _warnings = extract_monthly_objective_records(conn, objective_source)
-        if records:
-            pole_names = {row["id"]: row["name"] for row in conn.execute("SELECT id, name FROM poles").fetchall()}
-            return [
-                objective_record_to_front(record, pole_names)
-                for record in sorted(records, key=lambda item: (item.get("periodMonth", ""), item.get("poleId", ""), item.get("kpiKey", "")), reverse=True)
-            ]
+        pole_names = {row["id"]: row["name"] for row in conn.execute("SELECT id, name FROM poles").fetchall()}
+        return [
+            objective_record_to_front(record, pole_names)
+            for record in sorted(records, key=lambda item: (item.get("periodMonth", ""), item.get("poleId", ""), item.get("kpiKey", "")), reverse=True)
+        ]
 
     rows = conn.execute(
         """
@@ -4812,8 +4811,23 @@ def sync_kobo_form(payload: dict) -> dict:
             )
 
         imported = 0
-        for submission in submissions[:KOBO_SUBMISSION_LIMIT]:
-            uid = submission_uid(submission)
+        incoming_uids = [submission_uid(submission) for submission in submissions[:KOBO_SUBMISSION_LIMIT]]
+        if not data_warning and len(submissions) < KOBO_SUBMISSION_LIMIT:
+            if incoming_uids:
+                placeholders = ",".join("?" for _uid in incoming_uids)
+                conn.execute(
+                    f"DELETE FROM kobo_submissions WHERE form_uid = ? AND submission_uid NOT IN ({placeholders})",
+                    (form_uid, *incoming_uids),
+                )
+                conn.execute(
+                    f"DELETE FROM kpi_daily_data WHERE source_form_uid = ? AND source_submission_uid NOT IN ({placeholders})",
+                    (form_uid, *incoming_uids),
+                )
+            else:
+                conn.execute("DELETE FROM kobo_submissions WHERE form_uid = ?", (form_uid,))
+                conn.execute("DELETE FROM kpi_daily_data WHERE source_form_uid = ?", (form_uid,))
+
+        for submission, uid in zip(submissions[:KOBO_SUBMISSION_LIMIT], incoming_uids):
             values = {key: submission_value(submission, aliases) for key, aliases in KOBO_FIELD_ALIASES.items()}
             pole_id = resolve_submission_pole_id(conn, values.get("pole_id"))
             conn.execute(
