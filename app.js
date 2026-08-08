@@ -607,6 +607,95 @@
     select.value = value;
   }
 
+  function calendarMonthKey(calendar = {}) {
+    const date = fromIsoDate(calendar.end || calendar.selectedDate || calendar.start);
+    if (!date) return "";
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function monthSortValue(monthKey = "") {
+    const match = String(monthKey || "").match(/^(20\d{2})-(\d{2})/);
+    return match ? Number(`${match[1]}${match[2]}`) : 0;
+  }
+
+  function objectiveMatchesReferenceKpi(objective = {}, reference = {}) {
+    const referenceKeys = [
+      reference.kpiId,
+      reference.id,
+      reference.kpiName,
+      reference.name,
+    ].map(normalizeLookup).filter(Boolean);
+    const objectiveKeys = [
+      objective.catalogId,
+      objective.kpiId,
+      objective.idKpi,
+      objective.kpiName,
+      objective.name,
+    ].map(normalizeLookup).filter(Boolean);
+    if (!referenceKeys.length || !objectiveKeys.length) return false;
+    return objectiveKeys.some((key) => referenceKeys.includes(key));
+  }
+
+  function objectiveCountryPriority(objective = {}, activeCountry = "Groupe") {
+    const objectiveBranch = objective.branch || objective.countryName || objective.country || "Groupe";
+    if (isGroupCountryValue(activeCountry)) {
+      return isGroupCountryValue(objectiveBranch) ? 2 : 1;
+    }
+    if (countryMatches(objectiveBranch, activeCountry)) return 3;
+    if (isGroupCountryValue(objectiveBranch)) return 2;
+    return 0;
+  }
+
+  function objectiveTargetForReference(reference = {}, activeCountry = "Groupe") {
+    const monthlyObjectives = Array.isArray(state.kpiCalculationQuality?.monthlyObjectives)
+      ? state.kpiCalculationQuality.monthlyObjectives
+      : [];
+    const candidates = monthlyObjectives
+      .filter((objective) => objective.poleId === reference.poleId)
+      .filter((objective) => objectiveMatchesReferenceKpi(objective, reference))
+      .map((objective) => ({
+        ...objective,
+        countryPriority: objectiveCountryPriority(objective, activeCountry),
+      }))
+      .filter((objective) => objective.countryPriority > 0);
+
+    if (!candidates.length) return null;
+
+    const activeMonth = calendarMonthKey(state.calendar);
+    const monthCandidates = activeMonth
+      ? candidates.filter((objective) => objective.periodMonth === activeMonth)
+      : [];
+    const pool = monthCandidates.length ? monthCandidates : candidates;
+    const maxPriority = Math.max(...pool.map((objective) => objective.countryPriority));
+    const priorityPool = pool.filter((objective) => objective.countryPriority === maxPriority);
+
+    if (isGroupCountryValue(activeCountry) && maxPriority === 1) {
+      const targets = [...new Set(priorityPool.map((objective) => objective.target).filter(Boolean))];
+      if (targets.length === 1) {
+        return {
+          target: targets[0],
+          monthlyTarget: targets[0],
+          source: "Objectif Kobo pays",
+        };
+      }
+      return {
+        target: `${priorityPool.length} objectifs pays disponibles`,
+        monthlyTarget: "",
+        source: "Objectifs Kobo par pays",
+      };
+    }
+
+    const selected = [...priorityPool]
+      .sort((left, right) => monthSortValue(left.periodMonth) - monthSortValue(right.periodMonth))
+      .pop();
+    if (!selected) return null;
+    return {
+      target: selected.target,
+      monthlyTarget: selected.target,
+      source: selected.sourceForm || "Objectif Kobo mensuel",
+    };
+  }
+
   function applyCalculatedKpisToReporting() {
     resetReportingToBaseline();
     const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
@@ -654,13 +743,15 @@
       .filter((kpi) => !calculatedKeys.has(`${kpi.poleId}:${kpi.kpiId}`))
       .forEach((kpi) => {
         if (!kpi.poleId) return;
+        const objectiveTarget = objectiveTargetForReference(kpi, activeCountry);
         upsertKpiItem(byPole, kpi.poleId, {
           id: kpi.kpiId,
           name: kpi.kpiName,
           branch: kpi.branch || activeCountry || "Groupe",
           value: kpi.valueLabel || "En attente calcul",
-          target: kpi.target || "A completer",
-          monthlyTarget: kpi.monthlyTarget || "",
+          target: objectiveTarget?.target || "Objectif Kobo mensuel attendu",
+          monthlyTarget: objectiveTarget?.monthlyTarget || "",
+          objectiveSource: objectiveTarget?.source || "",
           trend: "Reference Kobo",
           status: "gray",
           source: kpi.source || "KoboCollect",
