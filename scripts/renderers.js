@@ -4427,10 +4427,42 @@
     const anomalyTable = $("#admin-kobo-anomaly-table");
     const blockingAnomalies = anomalies.filter((item) => item.severity === "Bloquant");
     const warningAnomalies = anomalies.filter((item) => item.severity === "A corriger");
+    const groupedAnomalies = (() => {
+      const byKey = new Map();
+      anomalies.forEach((item) => {
+        const key = [
+          item.severity || "",
+          item.sourceRole || "",
+          item.sourceForm || "",
+          item.poleId || item.poleName || "",
+          item.kpi || "",
+          item.period || "",
+          item.issue || "",
+          item.action || "",
+          item.detail || "",
+        ].map(normalizeLookup).join("|");
+        const branch = item.branch || "";
+        const group = byKey.get(key) || {
+          ...item,
+          count: 0,
+          branches: new Set(),
+        };
+        group.count += 1;
+        if (branch) group.branches.add(branch);
+        byKey.set(key, group);
+      });
+      return [...byKey.values()].map((group) => ({
+        ...group,
+        branches: [...group.branches].filter(Boolean),
+      }));
+    })();
     const anomalyStatusClass = blockingAnomalies.length ? "red" : warningAnomalies.length ? "amber" : "green";
     if (anomalyCount) {
       anomalyCount.className = `status-pill ${anomalyStatusClass}`;
-      anomalyCount.textContent = `${anomalies.length} anomalie${anomalies.length > 1 ? "s" : ""}`;
+      const groupedSuffix = groupedAnomalies.length && groupedAnomalies.length !== anomalies.length
+        ? ` - ${groupedAnomalies.length} groupe${groupedAnomalies.length > 1 ? "s" : ""}`
+        : "";
+      anomalyCount.textContent = `${anomalies.length} anomalie${anomalies.length > 1 ? "s" : ""}${groupedSuffix}`;
     }
     if (anomalySummary) {
       const forms = ["referentielKpi", "objectifsMensuels", "donneesCalcul"].map((role) => {
@@ -4466,27 +4498,37 @@
     }
     if (anomalyTable) {
       anomalyTable.innerHTML = anomalies.length
-        ? anomalies
+        ? groupedAnomalies
             .slice(0, 30)
             .map(
-              (item) => `
-                <tr>
-                  <td>${statusPill(item.severity || "Info", item.statusClass || "gray")}</td>
-                  <td>
-                    <strong>${escapeHtml(item.form || "KoboCollect")}</strong>
-                    <small>${escapeHtml(item.sourceForm || item.submissionUid || "")}</small>
-                  </td>
-                  <td>
-                    <strong>${escapeHtml(item.poleName || item.poleId || "Pole a verifier")}</strong>
-                    <small>${escapeHtml(item.kpi || "KPI a verifier")} - ${escapeHtml(item.period || "Periode a verifier")}</small>
-                  </td>
-                  <td>
-                    <strong>${escapeHtml(item.issue || "Anomalie a verifier")}</strong>
-                    ${item.detail ? `<small>${escapeHtml(item.detail)}</small>` : ""}
-                  </td>
-                  <td>${escapeHtml(item.action || "Corriger la ligne Kobo puis synchroniser.")}</td>
-                </tr>
-              `
+              (item) => {
+                const branchSummary = item.branches.length
+                  ? `${item.branches.length} pays/perimetre${item.branches.length > 1 ? "s" : ""}: ${item.branches.slice(0, 6).join(", ")}${item.branches.length > 6 ? "..." : ""}`
+                  : "";
+                const countSummary = item.count > 1 ? `${item.count} lignes concernees` : "";
+                return `
+                  <tr>
+                    <td>
+                      ${statusPill(item.severity || "Info", item.statusClass || "gray")}
+                      ${countSummary ? `<small>${escapeHtml(countSummary)}</small>` : ""}
+                    </td>
+                    <td>
+                      <strong>${escapeHtml(item.form || "KoboCollect")}</strong>
+                      <small>${escapeHtml(item.sourceForm || item.submissionUid || "")}</small>
+                    </td>
+                    <td>
+                      <strong>${escapeHtml(item.poleName || item.poleId || "Pole a verifier")}</strong>
+                      <small>${escapeHtml(item.kpi || "KPI a verifier")} - ${escapeHtml(item.period || "Periode a verifier")}</small>
+                      ${branchSummary ? `<small>${escapeHtml(branchSummary)}</small>` : ""}
+                    </td>
+                    <td>
+                      <strong>${escapeHtml(item.issue || "Anomalie a verifier")}</strong>
+                      ${item.detail ? `<small>${escapeHtml(item.detail)}</small>` : ""}
+                    </td>
+                    <td>${escapeHtml(item.action || "Corriger la ligne Kobo puis synchroniser.")}</td>
+                  </tr>
+                `;
+              }
             )
             .join("")
         : `<tr><td colspan="5">Aucune anomalie Kobo detectee. Les trois formulaires sont prets pour le calcul.</td></tr>`;
