@@ -696,6 +696,46 @@
     };
   }
 
+  function targetLabelIsMissing(value) {
+    const normalized = normalizeLookup(value);
+    if (!normalized) return true;
+    return [
+      "objectif kobo manquant",
+      "objectif manquant",
+      "objectif kobo mensuel attendu",
+      "a completer",
+      "objectif a renseigner",
+    ].some((term) => normalized.includes(term));
+  }
+
+  function resultHasObjective(result = {}) {
+    if (Number.isFinite(Number(result.targetValue))) return true;
+    if (result.targetMode && !targetLabelIsMissing(result.targetMode) && normalizeLookup(result.targetMode) !== "manquant") {
+      return true;
+    }
+    return [result.monthlyTarget, result.target].some((value) => value && !targetLabelIsMissing(value));
+  }
+
+  function objectiveTargetForResult(result = {}, activeCountry = "Groupe") {
+    if (resultHasObjective(result)) {
+      return {
+        target: result.target || result.monthlyTarget,
+        monthlyTarget: result.monthlyTarget || result.target,
+        source: result.objectiveSource || "Objectif Kobo mensuel",
+      };
+    }
+    return objectiveTargetForReference(
+      {
+        poleId: result.poleId,
+        kpiId: result.kpiId,
+        id: result.kpiId,
+        kpiName: result.kpiName,
+        name: result.kpiName,
+      },
+      activeCountry
+    );
+  }
+
   function applyCalculatedKpisToReporting() {
     resetReportingToBaseline();
     const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
@@ -712,6 +752,9 @@
     const countryScopedResults = sortedResults.filter((result) => resultMatchesCountry(result, activeCountry));
     const countryScopedReferences = referenceKpis.filter((kpi) => referenceKpiMatchesCountry(kpi, activeCountry));
     const scopedResults = calendarScopedResults(countryScopedResults, state.calendar);
+    const scopedResultsWithObjectives = scopedResults
+      .map((result) => ({ result, objectiveTarget: objectiveTargetForResult(result, activeCountry) }))
+      .filter(({ objectiveTarget }) => Boolean(objectiveTarget?.target));
     const historyByKpi = new Map();
     const trendResults = countryScopedResults.filter((result) => result.periodType !== "monthToDate");
     (trendResults.length ? trendResults : countryScopedResults).forEach((result) => {
@@ -738,12 +781,13 @@
     const byPole = new Map(
       PMS_DATA.reporting.poles.map((pole) => [pole.id, [...(PMS_DATA.reporting.kpisByPole[pole.id] || [])]])
     );
-    const calculatedKeys = new Set(scopedResults.map((result) => `${result.poleId}:${result.kpiId}`));
+    const calculatedKeys = new Set(scopedResultsWithObjectives.map(({ result }) => `${result.poleId}:${result.kpiId}`));
     countryScopedReferences
       .filter((kpi) => !calculatedKeys.has(`${kpi.poleId}:${kpi.kpiId}`))
       .forEach((kpi) => {
         if (!kpi.poleId) return;
         const objectiveTarget = objectiveTargetForReference(kpi, activeCountry);
+        if (!objectiveTarget?.target) return;
         upsertKpiItem(byPole, kpi.poleId, {
           id: kpi.kpiId,
           name: kpi.kpiName,
@@ -767,7 +811,7 @@
         });
       });
 
-    scopedResults.forEach((result) => {
+    scopedResultsWithObjectives.forEach(({ result, objectiveTarget }) => {
       if (!result.poleId) return;
       const selectedEnd = fromIsoDate(state.calendar?.end);
       const scopedHistory = (historyByKpi.get(kpiHistoryKey(result)) || []).filter((point) => {
@@ -784,15 +828,15 @@
         dayValueLabel: result.dayValueLabel || result.actualValueLabel || result.valueLabel,
         monthToDateValue: result.monthToDateValue ?? result.actualValue ?? result.value,
         monthToDateValueLabel: result.monthToDateValueLabel || result.actualValueLabel || result.valueLabel,
-        target: result.target || "A completer",
-        monthlyTarget: result.monthlyTarget || "",
+        target: objectiveTarget.target,
+        monthlyTarget: objectiveTarget.monthlyTarget || result.monthlyTarget || "",
         targetValue: result.targetValue,
         targetMode: result.targetMode || "",
         vsTargetValue: result.vsTargetValue,
         vsTargetLabel: result.vsTargetLabel,
         vsTargetClass: result.vsTargetClass,
         aggregationMode: result.aggregationMode || "",
-        objectiveSource: result.objectiveSource || "",
+        objectiveSource: objectiveTarget.source || result.objectiveSource || "",
         trend: result.trend || "Calcul Kobo",
         status: result.status || "gray",
         source: result.source || "KoboCollect",
@@ -815,7 +859,7 @@
       refreshPoleMetrics(poleId, kpis, {
         quality: Number.isFinite(matchRate) ? matchRate : undefined,
         readiness: Number.isFinite(calculationRate) ? calculationRate : undefined,
-        lastReport: latestPeriod(scopedResults.filter((item) => item.poleId === poleId)) || state.calendar?.label || "Reference Kobo",
+        lastReport: latestPeriod(scopedResultsWithObjectives.map((item) => item.result).filter((item) => item.poleId === poleId)) || state.calendar?.label || "Reference Kobo",
         lateSubmissions: state.kpiCalculationQuality?.unmatchedCalculationCount || 0,
       });
     });
