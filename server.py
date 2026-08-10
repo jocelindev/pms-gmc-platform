@@ -981,7 +981,7 @@ def objective_to_front(row: sqlite3.Row) -> dict:
         "poleId": row["pole_id"],
         "poleName": row["pole_name"],
         "kpiName": row["kpi_name"],
-        "target": row["target"],
+        "target": format_objective_target(row["target"], row["unit"] or ""),
         "unit": row["unit"] or "",
         "period": row["period"],
         "frequency": row["frequency"] or "",
@@ -3119,6 +3119,28 @@ def format_calculated_value(value: float, unit: str) -> str:
     return format_number(value)
 
 
+def format_objective_target(target: str, unit: str) -> str:
+    raw_target = text_or_empty(target)
+    if not raw_target:
+        return ""
+
+    normalized_unit = normalize_match_key(unit)
+    normalized_target = normalize_match_key(raw_target)
+    target_has_number = parse_number(raw_target) is not None
+    if not target_has_number:
+        return raw_target
+
+    if "pourcentage" in normalized_unit or normalized_unit == "%" or "%" in str(unit or ""):
+        return raw_target if "%" in raw_target else f"{raw_target}%"
+
+    if "jour" in normalized_unit:
+        if "jour" in normalized_target or re.search(r"\bj\b", normalized_target):
+            return raw_target
+        return f"{raw_target} jours"
+
+    return raw_target
+
+
 def parse_target_rule(target: str, kpi_name: str = "", formula: str = "", performance_direction: str = "") -> dict:
     target_text = str(target or "")
     normalized = normalize_match_key(target_text)
@@ -3510,6 +3532,8 @@ def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source
 
         month_key, _year, _month = period_month
         branch = text_or_empty(branch_raw or row["branch"] or "Groupe") or "Groupe"
+        unit_text = text_or_empty(unit_raw)
+        display_target = format_objective_target(target_text, unit_text)
         records.append(
             {
                 "id": f"OBJ-KOBO-{row['id']}",
@@ -3521,9 +3545,9 @@ def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source
                 "kpiName": text_or_empty(kpi_raw or row["kpi_name"]),
                 "period": text_or_empty(period_raw or row["period"]),
                 "periodMonth": month_key,
-                "target": target_text,
+                "target": display_target or target_text,
                 "targetNumeric": parse_number(target_text),
-                "unit": text_or_empty(unit_raw),
+                "unit": unit_text,
                 "frequency": text_or_empty(frequency_raw or "Mensuelle"),
                 "distributionMode": text_or_empty(distribution_raw or "Automatique"),
                 "sourceData": text_or_empty(source_raw),
