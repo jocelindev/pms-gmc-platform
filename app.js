@@ -428,6 +428,49 @@
       .map(([iso]) => iso);
   }
 
+  function objectiveAvailableDateIso(objective = {}) {
+    const periodValue = String(objective.periodMonth || objective.period || "");
+    const monthKey = periodValue.match(/\b(20\d{2})-(\d{2})/);
+    if (!monthKey) {
+      const timestamp = periodSortValue(periodValue);
+      if (!timestamp) return "";
+      return toIsoDate(endOfMonth(new Date(timestamp)));
+    }
+    const year = Number(monthKey[1]);
+    const month = Number(monthKey[2]);
+    if (!year || !month) return "";
+    return toIsoDate(new Date(year, month, 0));
+  }
+
+  function latestAvailableDataDateIso() {
+    const candidates = [];
+    const dailyDates = Array.isArray(state.kpiDailyDates) ? state.kpiDailyDates : [];
+    dailyDates.forEach((item) => {
+      if (fromIsoDate(item.date)) candidates.push(item.date);
+    });
+
+    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    results.forEach((result) => {
+      const iso = resultCalendarDateIso(result);
+      if (iso) candidates.push(iso);
+    });
+
+    const monthlyObjectives = Array.isArray(state.kpiCalculationQuality?.monthlyObjectives)
+      ? state.kpiCalculationQuality.monthlyObjectives
+      : Array.isArray(state.kpiObjectives)
+        ? state.kpiObjectives
+        : [];
+    monthlyObjectives.forEach((objective) => {
+      const iso = objectiveAvailableDateIso(objective);
+      if (iso) candidates.push(iso);
+    });
+
+    return candidates
+      .filter(Boolean)
+      .sort((left, right) => periodSortValue(left) - periodSortValue(right))
+      .pop() || "";
+  }
+
   function hasAvailableCalendarDate(date) {
     if (!date) return false;
     return availableCalendarDateIsos().includes(toIsoDate(date));
@@ -435,7 +478,11 @@
 
   function ensureCalendarDateFromAvailableData() {
     const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
-    if (!results.length) {
+    const hasDailyDates = Array.isArray(state.kpiDailyDates) && state.kpiDailyDates.length;
+    const hasMonthlyObjectives =
+      (Array.isArray(state.kpiCalculationQuality?.monthlyObjectives) && state.kpiCalculationQuality.monthlyObjectives.length) ||
+      (Array.isArray(state.kpiObjectives) && state.kpiObjectives.length);
+    if (!results.length && !hasDailyDates && !hasMonthlyObjectives) {
       state.calendarDateDropdownOpen = false;
       return false;
     }
@@ -444,7 +491,7 @@
     const monthDates = availableCalendarDateIsos({ anchorDate: currentDate || new Date(), sameMonth: true });
     if (currentIso && monthDates.includes(currentIso)) return true;
 
-    const fallbackIso = monthDates[0] || availableCalendarDateIsos()[0];
+    const fallbackIso = monthDates[0] || availableCalendarDateIsos()[0] || latestAvailableDataDateIso();
     if (!fallbackIso) {
       state.calendarDateDropdownOpen = false;
       return false;
@@ -2080,10 +2127,14 @@
     document.querySelectorAll("[data-calendar-preset]").forEach((button) => {
       button.addEventListener("click", () => {
         const preset = button.dataset.calendarPreset;
-        const anchor =
+        let anchor =
           preset === "today"
             ? new Date()
             : new Date(state.calendar.viewYear, state.calendar.viewMonth, 1);
+        if (preset === "today" && !hasAvailableCalendarDate(anchor)) {
+          const fallbackIso = availableCalendarDateIsos()[0] || latestAvailableDataDateIso();
+          anchor = fromIsoDate(fallbackIso) || anchor;
+        }
         applyCalendarSelection(
           preset === "today" ? buildMonthToDateSelection(anchor) : buildCalendarSelection(preset, anchor),
           `Periode ${button.textContent.trim().toLowerCase()} appliquee au reporting.`
