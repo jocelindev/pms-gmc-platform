@@ -3389,6 +3389,10 @@ def evaluate_kpi_formula(
             direct_value, direct_method = direct_value_from_elements(element_values)
             if direct_value is not None:
                 return direct_value, direct_method, warnings
+        realized_value, realized_method = realized_value_from_elements(element_values)
+        if realized_value is not None:
+            warnings.append("Formule non appliquee; valeur realisee Kobo utilisee comme realise du jour.")
+            return realized_value, f"{realized_method}; formule a completer si calcul detaille requis", warnings
         missing_tokens = missing_formula_tokens(expression)
         missing_label = ", ".join(missing_tokens[:5]) if missing_tokens else "libelles non reconnus"
         return None, "Formule Kobo non interpretee", [
