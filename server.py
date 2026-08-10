@@ -260,7 +260,20 @@ KOBO_FIELD_ALIASES = {
     "collector": ["_submitted_by", "submitted_by", "collector", "collecteur", "username", "responsable"],
     "submitted_at": ["_submission_time", "_date_submitted", "submission_time", "submitted_at", "end", "today"],
     "period": ["periode_reporting", "periode", "period", "periode_objectif", "mois", "date_reporting"],
-    "value": ["kpi_value", "valeur", "value", "valeur_kpi", "resultat", "score", "realisation"],
+    "value": [
+        "kpi_value",
+        "valeur",
+        "value",
+        "valeur_kpi",
+        "resultat",
+        "score",
+        "realisation",
+        "valeur_realisee",
+        "taux_realisation",
+        "taux_realise",
+        "realise_kpi",
+        "valeur_finale_kpi",
+    ],
     "target": ["objectif_mensuel", "valeur_objectif", "objectif_kpi", "objectif", "valeur_cible", "cible"],
     "unit": ["unite_mesure", "unite_de_mesure", "unite"],
     "distribution_mode": ["mode_repartition", "repartition_objectif", "type_objectif"],
@@ -3288,20 +3301,31 @@ def add_formula_context_values(element_values: dict[str, float], context_values:
             element_values.setdefault(key, number)
 
 
-def direct_value_from_elements(element_values: dict[str, float]) -> tuple[float | None, str]:
-    for preferred in ("resultat", "valeur kpi", "kpi value", "realisation", "realise", "score"):
+def direct_value_from_elements(element_values: dict[str, float], *, allow_singleton: bool = True) -> tuple[float | None, str]:
+    for preferred in (
+        "resultat",
+        "resultat kpi",
+        "valeur kpi",
+        "kpi value",
+        "valeur realisee",
+        "valeur du jour",
+        "realisation",
+        "realise",
+        "score",
+        "actual",
+    ):
         preferred_key = normalize_match_key(preferred)
         for label, value in element_values.items():
             if preferred_key in label:
                 return value, "Valeur KPI directe"
 
-    if len(element_values) == 1:
+    if allow_singleton and len(element_values) == 1:
         label, value = next(iter(element_values.items()))
         return value, f"Valeur unique Kobo: {label}"
     return None, "Calcul a verifier"
 
 
-def realized_value_from_elements(element_values: dict[str, float]) -> tuple[float | None, str]:
+def realized_value_from_elements(element_values: dict[str, float], *, allow_singleton: bool = False) -> tuple[float | None, str]:
     for preferred in (
         "realise",
         "realisation",
@@ -3315,7 +3339,7 @@ def realized_value_from_elements(element_values: dict[str, float]) -> tuple[floa
         for label, value in element_values.items():
             if preferred_key in label:
                 return value, "Realise Kobo direct"
-    return direct_value_from_elements(element_values)
+    return direct_value_from_elements(element_values, allow_singleton=allow_singleton)
 
 
 def formula_compares_realized_to_target(formula: str) -> bool:
@@ -3359,11 +3383,6 @@ def evaluate_kpi_formula(
         return sum(raw_numbers) / len(raw_numbers), "Moyenne des elements Kobo", warnings
 
     if formula:
-        if len(raw_numbers) == 1:
-            single_value = raw_numbers[0]
-            for alias in ("realise", "realisation", "valeur realisee", "valeur du jour"):
-                element_values.setdefault(normalize_match_key(alias), single_value)
-
         if formula_compares_realized_to_target(formula):
             realized_value, realized_method = realized_value_from_elements(element_values)
             if realized_value is not None:
@@ -4080,6 +4099,81 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         )
         group["elements"].append(element)
 
+    def calculation_submission_elements(payload: dict, row: sqlite3.Row) -> list[dict]:
+        elements = []
+
+        direct_value = mapped_submission_value(
+            calculation_source,
+            payload,
+            "directValue",
+            [
+                "valeur_realisee",
+                "taux_realisation",
+                "taux_realise",
+                "realise_kpi",
+                "valeur_finale_kpi",
+                "valeur_du_jour",
+                "resultat_kpi",
+            ],
+        )
+        if direct_value not in (None, ""):
+            elements.append({"label": "valeur realisee", "value": direct_value})
+
+        for index in range(1, 4):
+            element_raw = mapped_submission_value(
+                calculation_source,
+                payload,
+                f"element{index}",
+                [
+                    f"element_id_{index}",
+                    f"element_{index}",
+                    f"variable_{index}",
+                    f"donnee_calcul_{index}",
+                    f"libelle_element_{index}",
+                ],
+            )
+            value_raw = mapped_submission_value(
+                calculation_source,
+                payload,
+                f"value{index}",
+                [
+                    f"valeur_element_{index}",
+                    f"valeur_{index}",
+                    f"value_{index}",
+                    f"montant_element_{index}",
+                    f"nombre_element_{index}",
+                ],
+            )
+            if value_raw not in (None, ""):
+                elements.append({"label": element_raw or f"element {index}", "value": value_raw})
+
+        legacy_element = mapped_submission_value(
+            calculation_source,
+            payload,
+            "element",
+            ["element_id", "element", "variable", "rubrique", "donnees_a_collecter", "indicateur_financier", "indicateur_wfm", "parametre"],
+        )
+        legacy_value = mapped_submission_value(
+            calculation_source,
+            payload,
+            "value",
+            ["valeur_element", "value", "valeur", "valeur_j", "valeur_du_jour_j", "score", "resultat"],
+        )
+        if legacy_value in (None, ""):
+            legacy_value = row["value"]
+        if legacy_value not in (None, ""):
+            elements.append({"label": legacy_element or "valeur", "value": legacy_value})
+
+        deduped = []
+        seen = set()
+        for element in elements:
+            key = (normalize_match_key(str(element.get("label") or "")), text_or_empty(element.get("value")))
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(element)
+        return deduped
+
     for row in calculation_rows:
         payload = parse_raw_payload(row)
         pole_raw = mapped_submission_value(
@@ -4100,18 +4194,6 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             payload,
             "period",
             ["periode_reporting", "periode", "period", "date_collecte", "mois", "semaine"],
-        )
-        element_raw = mapped_submission_value(
-            calculation_source,
-            payload,
-            "element",
-            ["element_id", "element", "variable", "rubrique", "donnees_a_collecter", "indicateur_financier", "indicateur_wfm", "parametre"],
-        )
-        value_raw = mapped_submission_value(
-            calculation_source,
-            payload,
-            "value",
-            ["valeur_element", "value", "valeur", "valeur_j", "valeur_du_jour_j", "score", "resultat"],
         )
         branch_raw = mapped_submission_value(calculation_source, payload, "branch", ["pays_filiale", "filiale", "branch", "pays"])
         validation_raw = mapped_submission_value(
@@ -4148,13 +4230,14 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         period_date = parse_daily_period_date(period_label)
         kpi_raw_text = text_or_empty(kpi_raw or row["kpi_name"])
         branch = text_or_empty(branch_raw or row["branch"] or "Groupe") or "Groupe"
-        raw_calculation_value = value_raw if value_raw not in (None, "") else row["value"]
-        if parse_number(raw_calculation_value) is None:
+        submission_elements = calculation_submission_elements(payload, row)
+        numeric_elements = [element for element in submission_elements if parse_number(element.get("value")) is not None]
+        if not numeric_elements:
             add_anomaly(
                 "Donnees calcul",
                 "Bloquant",
                 "Valeur de calcul non numerique.",
-                "Renseigner une valeur numerique dans valeur_element.",
+                "Renseigner une valeur numerique dans valeur_realisee ou dans les champs valeur_element_1/2/3.",
                 role="donneesCalcul",
                 source=calculation_source,
                 row=row,
@@ -4162,8 +4245,9 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 pole_id=pole_id,
                 kpi=kpi_raw_text,
                 period=period_label,
-                detail=text_or_empty(raw_calculation_value),
+                detail=", ".join(text_or_empty(element.get("value")) for element in submission_elements) or "Aucune valeur",
             )
+            continue
         if not period_date:
             add_anomaly(
                 "Donnees calcul",
@@ -4178,51 +4262,56 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 kpi=kpi_raw_text,
                 period=period_label,
             )
-        element = {
-            "label": semantic_kobo_element_label(element_raw or "valeur"),
-            "value": raw_calculation_value,
-            "branch": branch,
-            "validation": text_or_empty(validation_raw or row["validation_status"]),
-        }
+        elements = [
+            {
+                "label": semantic_kobo_element_label(element.get("label") or "valeur"),
+                "value": element.get("value"),
+                "branch": branch,
+                "validation": text_or_empty(validation_raw or row["validation_status"]),
+            }
+            for element in numeric_elements
+        ]
         if period_date:
-            upsert_kpi_daily_data(
-                conn,
-                data_date=period_date,
-                pole_id=pole_id,
-                branch=branch,
-                kpi_key=kpi_key,
-                kpi_raw=kpi_raw_text,
-                element_label=element["label"],
-                raw_value=element["value"],
-                validation_status=element["validation"],
-                source_form_uid=calculation_source["formId"],
-                source_submission_uid=text_or_empty(row["submission_uid"] or str(row["id"])),
-                submitted_at=text_or_empty(row["submitted_at"]),
-                collector=text_or_empty(row["collector"]),
-                raw_payload_json=text_or_empty(row["raw_payload_json"]),
-            )
+            for element in elements:
+                upsert_kpi_daily_data(
+                    conn,
+                    data_date=period_date,
+                    pole_id=pole_id,
+                    branch=branch,
+                    kpi_key=kpi_key,
+                    kpi_raw=kpi_raw_text,
+                    element_label=element["label"],
+                    raw_value=element["value"],
+                    validation_status=element["validation"],
+                    source_form_uid=calculation_source["formId"],
+                    source_submission_uid=text_or_empty(row["submission_uid"] or str(row["id"])),
+                    submitted_at=text_or_empty(row["submitted_at"]),
+                    collector=text_or_empty(row["collector"]),
+                    raw_payload_json=text_or_empty(row["raw_payload_json"]),
+                )
             continue
 
-        calculation_entries.append(
-            {
-                "branch": branch,
-                "branchKey": branch_lookup_key(branch),
-                "poleId": pole_id,
-                "kpiKey": kpi_key,
-                "kpiRaw": kpi_raw_text,
-                "periodDate": None,
-                "element": element,
-            }
-        )
-        add_calculation_group(
-            pole_id,
-            kpi_key,
-            kpi_raw_text,
-            period_label,
-            element,
-            branch=branch,
-            period_type="period",
-        )
+        for element in elements:
+            calculation_entries.append(
+                {
+                    "branch": branch,
+                    "branchKey": branch_lookup_key(branch),
+                    "poleId": pole_id,
+                    "kpiKey": kpi_key,
+                    "kpiRaw": kpi_raw_text,
+                    "periodDate": None,
+                    "element": element,
+                }
+            )
+            add_calculation_group(
+                pole_id,
+                kpi_key,
+                kpi_raw_text,
+                period_label,
+                element,
+                branch=branch,
+                period_type="period",
+            )
 
     daily_rows = []
     if calculation_source:
