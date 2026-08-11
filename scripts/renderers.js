@@ -4585,13 +4585,21 @@
       server: "#admin-kobo-calculation-server",
       form: "#admin-kobo-calculation-form-id",
       fields: {
+        branch: "#admin-kobo-calculation-branch-field",
         pole: "#admin-kobo-calculation-pole-field",
         kpi: "#admin-kobo-calculation-kpi-field",
         period: "#admin-kobo-calculation-period-field",
+        date: "#admin-kobo-calculation-date-field",
+        entryMode: "#admin-kobo-calculation-entry-mode-field",
+        directValue: "#admin-kobo-calculation-direct-value-field",
+        element1: "#admin-kobo-calculation-element1-field",
+        value1: "#admin-kobo-calculation-value1-field",
+        element2: "#admin-kobo-calculation-element2-field",
+        value2: "#admin-kobo-calculation-value2-field",
+        element3: "#admin-kobo-calculation-element3-field",
+        value3: "#admin-kobo-calculation-value3-field",
         element: "#admin-kobo-calculation-element-field",
         value: "#admin-kobo-calculation-value-field",
-        branch: "#admin-kobo-calculation-branch-field",
-        date: "#admin-kobo-calculation-date-field",
         validation: "#admin-kobo-calculation-validation-field",
       },
     });
@@ -4700,7 +4708,7 @@
       const fieldGroups = [
         { title: "Formulaire 1 - KPI et formules", fields: objectiveTemplate.requiredFields || [] },
         { title: "Formulaire Objectifs - Cibles mensuelles", fields: objectiveTemplate.objectiveFields || [] },
-        { title: "Formulaire Donnees - Elements de calcul", fields: objectiveTemplate.calculationFields || [] },
+        { title: "Formulaire 3 - Donnees flexibles", fields: objectiveTemplate.calculationFields || [] },
       ];
       const fieldGroupsMarkup = fieldGroups
         .map(

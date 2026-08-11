@@ -2583,13 +2583,21 @@
       { mappedTo: "attention", inputId: "#admin-kobo-reference-attention-field", defaultValue: "points_d_attention" },
     ];
     const calculationKoboFields = [
+      { mappedTo: "branch", inputId: "#admin-kobo-calculation-branch-field", defaultValue: "pays_filiale" },
       { mappedTo: "pole", inputId: "#admin-kobo-calculation-pole-field", defaultValue: "pole_id" },
       { mappedTo: "kpi", inputId: "#admin-kobo-calculation-kpi-field", defaultValue: "id_kpi" },
       { mappedTo: "period", inputId: "#admin-kobo-calculation-period-field", defaultValue: "periode_reporting" },
+      { mappedTo: "date", inputId: "#admin-kobo-calculation-date-field", defaultValue: "date_collecte" },
+      { mappedTo: "entryMode", inputId: "#admin-kobo-calculation-entry-mode-field", defaultValue: "mode_saisie_donnee" },
+      { mappedTo: "directValue", inputId: "#admin-kobo-calculation-direct-value-field", defaultValue: "valeur_realisee" },
+      { mappedTo: "element1", inputId: "#admin-kobo-calculation-element1-field", defaultValue: "element_id_1" },
+      { mappedTo: "value1", inputId: "#admin-kobo-calculation-value1-field", defaultValue: "valeur_element_1" },
+      { mappedTo: "element2", inputId: "#admin-kobo-calculation-element2-field", defaultValue: "element_id_2" },
+      { mappedTo: "value2", inputId: "#admin-kobo-calculation-value2-field", defaultValue: "valeur_element_2" },
+      { mappedTo: "element3", inputId: "#admin-kobo-calculation-element3-field", defaultValue: "element_id_3" },
+      { mappedTo: "value3", inputId: "#admin-kobo-calculation-value3-field", defaultValue: "valeur_element_3" },
       { mappedTo: "element", inputId: "#admin-kobo-calculation-element-field", defaultValue: "element_id" },
       { mappedTo: "value", inputId: "#admin-kobo-calculation-value-field", defaultValue: "valeur_element" },
-      { mappedTo: "branch", inputId: "#admin-kobo-calculation-branch-field", defaultValue: "filiale" },
-      { mappedTo: "date", inputId: "#admin-kobo-calculation-date-field", defaultValue: "date_collecte" },
       { mappedTo: "validation", inputId: "#admin-kobo-calculation-validation-field", defaultValue: "validation_hierarchique" },
     ];
     const monthlyObjectiveKoboFields = [

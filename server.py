@@ -199,18 +199,26 @@ ENV_KOBO_SOURCE_DEFINITIONS = (
         "env_keys": ("PMS_KOBO_CALCULATION_FORM_UID", "PMS_KOBO_DATA_FORM_UID", "KOBO_CALCULATION_FORM_UID"),
         "server_env_keys": ("PMS_KOBO_CALCULATION_SERVER_URL", "PMS_KOBO_DATA_SERVER_URL"),
         "default_uid": CALCULATION_KOBO_DEFAULT_UID,
-        "title": "PMS GMC - Formulaire 2 - Donnees de calcul journalieres",
+        "title": "PMS GMC - Formulaire 3 - Donnees de calcul flexibles",
         "source_type": "KoboCollect Donnees de calcul",
         "cadence": "Journalier",
         "field_type": "Champ donnees de calcul",
         "fields": {
+            "branch": "pays_filiale",
             "pole": "pole_id",
             "kpi": "id_kpi",
             "period": "periode_reporting",
+            "date": "date_collecte",
+            "entryMode": "mode_saisie_donnee",
+            "directValue": "valeur_realisee",
+            "element1": "element_id_1",
+            "value1": "valeur_element_1",
+            "element2": "element_id_2",
+            "value2": "valeur_element_2",
+            "element3": "element_id_3",
+            "value3": "valeur_element_3",
             "element": "element_id",
             "value": "valeur_element",
-            "branch": "filiale",
-            "date": "date_collecte",
             "validation": "validation_hierarchique",
         },
     },
@@ -306,10 +314,9 @@ KOBO_AUDIT_REQUIRED_FIELDS = {
         ("pole", "Pole"),
         ("kpi", "ID KPI"),
         ("date", "Date collecte"),
-        ("element", "Element de calcul"),
-        ("value", "Valeur element"),
     ),
 }
+KOBO_CALCULATION_VALUE_PATH_LABEL = "Valeur realisee ou element de calcul + valeur"
 CATALOG_POLE_ALIASES = {
     "direction finance comptabilite": "DFC",
     "direction finance et comptabilite": "DFC",
@@ -1173,6 +1180,96 @@ def kobo_source_role(source_type: str) -> str:
     return "autre"
 
 
+def infer_kobo_field_mapping(source_type: str, field_name: str) -> str:
+    role = kobo_source_role(source_type)
+    field_key = normalize_submission_key(field_name)
+    if not field_key:
+        return ""
+
+    for definition in ENV_KOBO_SOURCE_DEFINITIONS:
+        if definition["role"] != role:
+            continue
+        for mapped_to, expected_field in definition["fields"].items():
+            if field_key == normalize_submission_key(expected_field):
+                return mapped_to
+
+    role_aliases = {
+        "donneesCalcul": {
+            "pays_filiale": "branch",
+            "filiale": "branch",
+            "pays": "branch",
+            "branch": "branch",
+            "pole_id": "pole",
+            "pole": "pole",
+            "id_kpi": "kpi",
+            "kpi_id": "kpi",
+            "kpi": "kpi",
+            "periode_reporting": "period",
+            "periode": "period",
+            "period": "period",
+            "date_collecte": "date",
+            "date_reporting": "date",
+            "mode_saisie_donnee": "entryMode",
+            "mode_saisie": "entryMode",
+            "valeur_realisee": "directValue",
+            "taux_realisation": "directValue",
+            "taux_realise": "directValue",
+            "realise_kpi": "directValue",
+            "valeur_finale_kpi": "directValue",
+            "resultat_kpi": "directValue",
+            "element_id": "element",
+            "valeur_element": "value",
+            "validation_hierarchique": "validation",
+            "validation_status": "validation",
+        },
+        "objectifsMensuels": {
+            "pays_filiale": "branch",
+            "filiale": "branch",
+            "pays": "branch",
+            "pole_id": "pole",
+            "pole": "pole",
+            "id_kpi": "kpi",
+            "kpi_id": "kpi",
+            "periode_objectif": "period",
+            "mois_objectif": "period",
+            "objectif_mensuel": "target",
+            "unite": "unit",
+            "unite_mesure": "unit",
+            "frequence": "frequency",
+            "mode_repartition": "distributionMode",
+            "source_objectif": "sourceData",
+            "responsable_objectif": "responsible",
+            "validation_direction": "validation",
+            "validation_hierarchique": "validation",
+        },
+        "referentielKpi": {
+            "id_kpi": "id",
+            "id_kpi_final": "id",
+            "kpi_id": "id",
+            "pays_filiale": "branch",
+            "groupe_de_rattachement": "pole",
+            "pole_id": "pole",
+            "intitule_du_kpi": "title",
+            "formule_de_calcul": "formula",
+            "unite_de_mesure": "unit",
+            "valeur_cible": "target",
+            "sens_performance": "performanceDirection",
+            "frequence_de_collecte": "collectionFrequency",
+            "periodicite_du_reporting": "reportingFrequency",
+            "source_de_la_donnee": "sourceData",
+            "responsable_du_kpi": "owner",
+            "validation_hierarchique": "validation",
+        },
+    }
+    if role == "donneesCalcul":
+        for index in range(1, 4):
+            if field_key == f"element_id_{index}":
+                return f"element{index}"
+            if field_key == f"valeur_element_{index}":
+                return f"value{index}"
+    return role_aliases.get(role, {}).get(field_key, "")
+
+
 def list_kobo_sources(conn: sqlite3.Connection) -> list[dict]:
     forms = conn.execute(
         """
@@ -1215,6 +1312,25 @@ def list_kobo_sources(conn: sqlite3.Connection) -> list[dict]:
     return sources
 
 
+def calculation_mapping_has_value_path(mapped_fields: dict) -> bool:
+    direct_value_fields = ("directValue", "value", "value1", "value2", "value3")
+    if any(mapped_fields.get(field) for field in direct_value_fields):
+        return True
+    return False
+
+
+def kobo_missing_fields_for_role(source: dict | None, role: str) -> list[str]:
+    mapped_fields = (source or {}).get("mappedFields") or {}
+    missing_fields = [
+        field_label
+        for field_key, field_label in KOBO_AUDIT_REQUIRED_FIELDS.get(role, ())
+        if not mapped_fields.get(field_key)
+    ]
+    if role == "donneesCalcul" and not calculation_mapping_has_value_path(mapped_fields):
+        missing_fields.append(KOBO_CALCULATION_VALUE_PATH_LABEL)
+    return missing_fields
+
+
 def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = None) -> dict:
     sources = list_kobo_sources(conn)
     source_by_role: dict[str, dict] = {}
@@ -1249,8 +1365,8 @@ def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = Non
             connected_count += 1
             form_status = source.get("status") or "Actif"
             mapped_fields = source.get("mappedFields") or {}
-            missing_fields = [field_label for field_key, field_label in required_fields if not mapped_fields.get(field_key)]
-            mapped_count = len(required_fields) - len(missing_fields)
+            missing_fields = kobo_missing_fields_for_role(source, role)
+            mapped_count = max(0, len(required_fields) - len([field_label for field_label in missing_fields if field_label != KOBO_CALCULATION_VALUE_PATH_LABEL]))
 
             form_row = conn.execute(
                 """
@@ -1310,7 +1426,7 @@ def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = Non
                 status_label = "A alimenter"
                 status_class = "amber"
             elif role == "donneesCalcul" and not daily_rows:
-                action = "Verifier date_collecte, id_kpi, pole et element_id pour creer les donnees journalieres."
+                action = "Verifier date_collecte, id_kpi, pole et valeur_realisee ou valeur_element_1 pour creer les donnees journalieres."
                 status_label = "Donnees non datables"
                 status_class = "amber"
             else:
@@ -3802,15 +3918,14 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             continue
         missing_fields = [
             label
-            for mapped_to, label in KOBO_AUDIT_REQUIRED_FIELDS.get(role, ())
-            if not (source.get("mappedFields") or {}).get(mapped_to)
+            for label in kobo_missing_fields_for_role(source, role)
         ]
         if missing_fields:
             add_anomaly(
                 "Mapping",
                 "Bloquant",
                 f"Mapping incomplet: {', '.join(missing_fields[:5])}.",
-                "Completer les champs attendus dans le mapping avance.",
+                "Completer les champs attendus dans le mapping avance ou utiliser la structure flexible du formulaire 3.",
                 role=role,
                 source=source,
             )
@@ -4919,12 +5034,13 @@ def sync_kobo_form(payload: dict) -> dict:
         form_id = conn.execute("SELECT id FROM kobo_forms WHERE uid = ?", (form_uid,)).fetchone()["id"]
         conn.execute("DELETE FROM kobo_form_fields WHERE form_id = ?", (form_id,))
         for field in fields:
+            mapped_to = existing_mappings.get(field["name"]) or infer_kobo_field_mapping(source_type, field["name"]) or None
             conn.execute(
                 """
                 INSERT INTO kobo_form_fields (form_id, field_name, field_label, field_type, mapped_to)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (form_id, field["name"], field["label"], field["type"], existing_mappings.get(field["name"])),
+                (form_id, field["name"], field["label"], field["type"], mapped_to),
             )
 
         imported = 0
@@ -5189,6 +5305,7 @@ def save_kobo_form(payload: dict) -> dict:
             field_name = str(field.get("name") or "").strip()
             if not field_name:
                 continue
+            mapped_to = str(field.get("mappedTo") or "").strip() or infer_kobo_field_mapping(mode, field_name) or None
             conn.execute(
                 """
                 INSERT INTO kobo_form_fields (form_id, field_name, field_label, field_type, mapped_to)
@@ -5203,7 +5320,7 @@ def save_kobo_form(payload: dict) -> dict:
                     field_name,
                     field.get("label"),
                     field.get("type"),
-                    field.get("mappedTo"),
+                    mapped_to,
                 ),
             )
         audit(conn, "Connexion formulaire Kobo", "kobo_form", uid, {"name": name, "mode": mode, "fields": len(fields)})
