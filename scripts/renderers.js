@@ -2236,7 +2236,7 @@
     }
     if (!rows.length) {
       const scopeLabel = context.selectedPole ? context.selectedPole.name : `${context.activeCountry.name} / tous les poles`;
-      table.innerHTML = `<tr><td colspan="9">Aucun KPI disponible pour le filtre actif: ${escapeHtml(scopeLabel)}.</td></tr>`;
+      table.innerHTML = `<tr><td colspan="8">Aucun KPI disponible pour le filtre actif: ${escapeHtml(scopeLabel)}.</td></tr>`;
       return;
     }
     table.innerHTML = rows
@@ -2257,7 +2257,6 @@
             <td>${escapeHtml(row.kpi.target || "A completer")}</td>
             <td><strong class="${escapeHtml(targetMetric.className)}">${escapeHtml(targetMetric.display)}</strong></td>
             <td>${escapeHtml(trendSummaryLabel(row.kpi, row.pole))}</td>
-            <td>${escapeHtml(row.kpi.source || "KoboCollect")}</td>
             <td>${statusPill(ragLabel(row.kpi.status || "gray"), row.kpi.status || "gray")}</td>
           </tr>
         `;
