@@ -3221,6 +3221,39 @@ def target_achievement_percent(value: float | None, target_value: float | None, 
     return (realized / target) * 100
 
 
+def direct_achievement_percent_from_elements(elements: list[dict]) -> float | None:
+    direct_terms = (
+        "valeur realisee",
+        "taux realisation",
+        "taux realise",
+        "taux d atteinte",
+        "atteinte objectif",
+        "vs target",
+        "realise kpi",
+        "valeur finale kpi",
+        "resultat kpi",
+    )
+    for element in elements:
+        label_key = normalize_match_key(semantic_kobo_element_label(element.get("label") or ""))
+        if not label_key:
+            continue
+        if any(term in label_key for term in direct_terms):
+            number = parse_number(element.get("value"))
+            if number is not None:
+                return float(number)
+    return None
+
+
+def rag_status_from_achievement(achievement: float | None) -> str:
+    if achievement is None:
+        return "gray"
+    if achievement >= 100:
+        return "green"
+    if achievement >= 90:
+        return "amber"
+    return "red"
+
+
 def format_target_achievement(value: float | None) -> str:
     if value is None:
         return "--"
@@ -4778,6 +4811,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "target": target_info["numeric"],
             }
         day_point = None
+        direct_achievement = direct_achievement_percent_from_elements(evaluation_elements)
         if is_month_to_date:
             point_key = (group.get("branchKey") or "groupe", group["poleId"], group["kpiKey"])
             period_start_date = parse_daily_period_date(group.get("periodStart") or "")
@@ -4801,6 +4835,14 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 day_point = next((point for point in points if period_end_date and point["date"] == period_end_date), None)
                 if not day_point and points:
                     day_point = sorted(points, key=lambda point: point["date"]).pop()
+                direct_achievement_values = [
+                    point.get("directAchievement")
+                    for point in points
+                    if point.get("directAchievement") is not None
+                ]
+                if direct_achievement_values:
+                    direct_achievement = sum(direct_achievement_values) / len(direct_achievement_values)
+                    method = "Cumul mensuel a date: moyenne des taux de realisation Kobo"
             else:
                 value, method, formula_warnings = evaluate_kpi_formula(
                     reference["formula"],
@@ -4815,6 +4857,13 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 context_values=formula_context,
                 unit=result_unit,
             )
+        if direct_achievement is not None:
+            method = (
+                "Taux de realisation Kobo utilise comme Vs Target"
+                if not is_month_to_date
+                else method
+            )
+            formula_warnings = []
         if value is None:
             if not is_month_to_date:
                 quality["uncalculatedCount"] += 1
@@ -4850,19 +4899,35 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 detail=reference.get("kpiName", ""),
             )
         status = (
-            rag_status(
-                value,
-                target_info["label"],
-                reference["kpiName"],
-                reference["formula"],
-                reference.get("performanceDirection", ""),
+            rag_status_from_achievement(direct_achievement)
+            if direct_achievement is not None
+            else (
+                rag_status(
+                    value,
+                    target_info["label"],
+                    reference["kpiName"],
+                    reference["formula"],
+                    reference.get("performanceDirection", ""),
+                )
+                if target_info["statusReady"]
+                else "gray"
             )
-            if target_info["statusReady"]
-            else "gray"
         )
-        achievement = target_achievement_percent(value, target_info["numeric"], reference.get("performanceDirection", ""))
+        achievement = (
+            direct_achievement
+            if direct_achievement is not None
+            else target_achievement_percent(value, target_info["numeric"], reference.get("performanceDirection", ""))
+        )
         achievement_label = format_target_achievement(achievement)
-        achievement_class = "positive" if achievement is not None and achievement >= 100 else "negative" if achievement is not None else "empty"
+        achievement_class = (
+            "positive"
+            if achievement is not None and achievement >= 100
+            else "neutral"
+            if achievement is not None and achievement >= 90
+            else "negative"
+            if achievement is not None
+            else "empty"
+        )
         value_label = format_calculated_value(value, result_unit)
         day_value = day_point.get("value") if day_point else value if group.get("periodType") == "day" else None
         day_value_label = day_point.get("valueLabel") if day_point else value_label if group.get("periodType") == "day" else ""
@@ -4918,6 +4983,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                         "date": day_date,
                         "value": value,
                         "valueLabel": value_label,
+                        "directAchievement": achievement if direct_achievement is not None else None,
                     }
                 )
 

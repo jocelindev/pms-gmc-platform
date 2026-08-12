@@ -131,8 +131,8 @@ def main() -> None:
         row(
             "decimal",
             "valeur_realisee",
-            "Taux / valeur realisee du KPI",
-            "A utiliser si vous connaissez directement le taux, score, montant ou valeur finale du KPI. Exemple: 91 pour 91%.",
+            "Taux realise / Vs Target direct",
+            "A utiliser si vous connaissez directement le taux de realisation du KPI. La plateforme l'utilise comme Vs Target sans recalcul realise / objectif. Exemple: 91 pour 91%.",
             "yes",
             "",
             "",
@@ -271,7 +271,7 @@ def main() -> None:
         if values and values[0] is not None and values[1] is not None
     }
     for choice in [
-        ("modes_saisie_donnees", "valeur_directe", "Je connais le taux / realise du KPI"),
+        ("modes_saisie_donnees", "valeur_directe", "Je connais le taux realise / Vs Target du KPI"),
         ("modes_saisie_donnees", "elements_calcul", "Je renseigne les donnees de calcul de la formule"),
         ("yes_no", "oui", "Oui"),
         ("yes_no", "non", "Non"),
