@@ -2180,7 +2180,7 @@
           <p>${escapeHtml(selected.pole.name)} - ${escapeHtml(selected.pole.owner)}</p>
         </div>
         <div class="kpi-detail-value">
-          <span>Realise periode</span>
+          <span>Realise</span>
           <strong>${escapeHtml(dayValueLabel(selected.kpi))}</strong>
           <small>${escapeHtml(kpiRealizedPeriodLabel(selected.kpi))}</small>
         </div>
@@ -2216,7 +2216,7 @@
     }
     if (!rows.length) {
       const scopeLabel = context.selectedPole ? context.selectedPole.name : `${context.activeCountry.name} / tous les poles`;
-      table.innerHTML = `<tr><td colspan="8">Aucun KPI disponible pour le filtre actif: ${escapeHtml(scopeLabel)}.</td></tr>`;
+      table.innerHTML = `<tr><td colspan="9">Aucun KPI disponible pour le filtre actif: ${escapeHtml(scopeLabel)}.</td></tr>`;
       return;
     }
     table.innerHTML = rows
@@ -2229,9 +2229,9 @@
               <strong>${escapeHtml(row.kpi.name)}</strong>
               <br><small>${escapeHtml(row.pole.name)} - ${escapeHtml(row.kpi.id || row.pole.id)}</small>
             </td>
+            <td class="period-cell">${escapeHtml(kpiRealizedPeriodLabel(row.kpi))}</td>
             <td class="realized-period-cell">
               <strong>${escapeHtml(dayValueLabel(row.kpi))}</strong>
-              <small>${escapeHtml(kpiRealizedPeriodLabel(row.kpi))}</small>
             </td>
             <td><strong>${escapeHtml(monthToDateValueLabel(row.kpi))}</strong></td>
             <td>${escapeHtml(row.kpi.target || "A completer")}</td>
