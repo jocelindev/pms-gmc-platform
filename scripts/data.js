@@ -150,7 +150,7 @@
         { key: "date_collecte", label: "Date de collecte", source: "Jour exact de la donnee ou fin de semaine", block: "Temps" },
         { key: "periode_reporting", label: "Periode de reporting", source: "Calculee depuis la date de collecte", block: "Temps" },
         { key: "mode_saisie_donnee", label: "Mode de saisie", source: "Taux realise direct ou elements de formule", block: "Calcul" },
-        { key: "valeur_realisee", label: "Taux realise / Vs Target direct", source: "Taux de realisation deja connu, sans recalcul realise / objectif", block: "Calcul" },
+        { key: "valeur_realisee", label: "Taux realise direct", source: "Taux de realisation deja connu, sans recalcul realise / objectif", block: "Calcul" },
         { key: "element_id_1", label: "Element de calcul 1", source: "Variable utilisee dans la formule", block: "Calcul" },
         { key: "valeur_element_1", label: "Valeur element 1", source: "Numerateur, denominateur ou valeur brute", block: "Calcul" },
         { key: "element_id_2", label: "Element de calcul 2 optionnel", source: "Deuxieme variable si necessaire", block: "Calcul" },
@@ -165,7 +165,7 @@
         "Formulaire Objectifs : declare les cibles mensuelles officielles par pays / filiale, pole, KPI et mois.",
         "Formulaire Donnees : collecte soit le taux realise deja connu, soit un a trois elements bruts necessaires a la formule.",
         "La plateforme rapproche les trois formulaires par pays / filiale, pole, KPI et periode.",
-        "Le PMS calcule la valeur realisee, l'objectif a date, le Vs Target et le statut de performance.",
+        "Le PMS calcule la valeur realisee, l'objectif a date, le taux realise et le statut de performance.",
       ],
       referentials: {
         types: ["Financier", "Commercial", "Productivite", "Qualite", "Satisfaction Client", "Operationnel", "Strategique"],

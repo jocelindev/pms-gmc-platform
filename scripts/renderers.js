@@ -417,7 +417,7 @@
     if (kpi.vsTargetLabel && kpi.vsTargetLabel !== "--") {
       const ratio = Number(kpi.vsTargetValue);
       return {
-        label: "Vs Target",
+        label: "Taux realise",
         display: kpi.vsTargetLabel,
         className: kpi.vsTargetClass || (Number.isFinite(ratio) ? (ratio >= 100 ? "positive" : "negative") : "empty"),
       };
@@ -429,7 +429,7 @@
         : currentMetricValue(kpi);
     const target = Number.isFinite(Number(kpi.targetValue)) ? Number(kpi.targetValue) : targetValueForKpi(kpi);
     if (!Number.isFinite(current) || !Number.isFinite(target)) {
-      return { label: "Vs Target", display: "--", className: "empty" };
+      return { label: "Taux realise", display: "--", className: "empty" };
     }
     const lowerBetter = isLowerBetterKpi(kpi);
     const ratio = lowerBetter
@@ -440,10 +440,10 @@
         ? current === 0 ? 100 : null
         : (current / target) * 100;
     if (!Number.isFinite(ratio)) {
-      return { label: "Vs Target", display: "--", className: "empty" };
+      return { label: "Taux realise", display: "--", className: "empty" };
     }
     return {
-      label: "Vs Target",
+      label: "Taux realise",
       display: formatRatioPercent(ratio),
       className: ratio >= 100 ? "positive" : "negative",
     };
@@ -492,7 +492,7 @@
       : metricFromPoints("WoW", latest, wowReference, lowerBetter);
     const mom = metricFromPoints("MoM", latest, momReference, lowerBetter);
     return [dod, wow, mom, metricFromTarget(kpi)].map((metric) =>
-      metric.display === "--" && metric.label !== "Vs Target" ? fallbackTrendMetric(kpi, pole, metric.label) : metric
+      metric.display === "--" && metric.label !== "Taux realise" ? fallbackTrendMetric(kpi, pole, metric.label) : metric
     );
   }
 
@@ -1715,7 +1715,7 @@
       {
         label: "Atteinte moyenne",
         value: hasData && Number.isFinite(targetAchievement) ? formatRatioPercent(targetAchievement) : "--",
-        hint: hasData ? "moyenne des Vs Target" : "calcul apres collecte",
+        hint: hasData ? "moyenne des taux realises" : "calcul apres collecte",
         className: hasData ? targetAchievementClass : "gray",
       },
       {
@@ -2454,7 +2454,7 @@
                     <small>Objectif: ${escapeHtml(row.kpi.target || "A definir")}</small>
                   </div>
                   <div class="management-priority-meta">
-                    <span>Vs target</span>
+                    <span>Taux realise</span>
                     <strong class="${escapeHtml(targetMetric.className)}">${escapeHtml(targetMetric.display)}</strong>
                     <small>${escapeHtml(actionRecommendation(row))}</small>
                   </div>
@@ -2512,7 +2512,7 @@
         className: negative ? "red" : positive ? "green" : metrics.length ? "amber" : "gray",
       };
     };
-    const trendBlocks = ["DoD", "WoW", "MoM", "Vs Target"].map(trendRollup);
+    const trendBlocks = ["DoD", "WoW", "MoM", "Taux realise"].map(trendRollup);
     const allNegativeTrends = trendBlocks.reduce((sum, block) => sum + block.negative, 0);
     const allPositiveTrends = trendBlocks.reduce((sum, block) => sum + block.positive, 0);
     const trendStatus = $("#management-trend-status");
@@ -3211,7 +3211,7 @@
         return {
           className: "amber",
           title: "Objectifs mensuels attendus",
-          text: "Synchroniser le formulaire objectifs pour calculer l'objectif a date et le Vs Target.",
+          text: "Synchroniser le formulaire objectifs pour calculer l'objectif a date et le taux realise.",
         };
       }
       if (!calculationGroups && !dailyRows && !calculationRecords) {

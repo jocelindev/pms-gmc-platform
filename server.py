@@ -3535,7 +3535,7 @@ def evaluate_kpi_formula(
         if formula_compares_realized_to_target(formula):
             realized_value, realized_method = realized_value_from_elements(element_values)
             if realized_value is not None:
-                return realized_value, f"{realized_method}; Vs Target calcule separement", warnings
+                return realized_value, f"{realized_method}; taux realise calcule separement", warnings
 
         expression = normalize_formula_expression(formula)
         variables: dict[str, float] = {}
@@ -4859,7 +4859,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             )
         if direct_achievement is not None:
             method = (
-                "Taux de realisation Kobo utilise comme Vs Target"
+                "Taux de realisation Kobo utilise directement"
                 if not is_month_to_date
                 else method
             )
@@ -5007,7 +5007,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     if quality["unmatchedObjectiveCount"]:
         quality["proposals"].append("Corriger les objectifs mensuels dont l'ID KPI n'existe pas dans le referentiel du Formulaire 1.")
     if quality["missingMonthlyObjectiveCount"]:
-        quality["proposals"].append("Renseigner les objectifs mensuels Kobo pour calculer le Vs Target et le statut vert/orange/rouge.")
+        quality["proposals"].append("Renseigner les objectifs mensuels Kobo pour calculer le taux realise et le statut vert/orange/rouge.")
     if quality["missingFormulaCount"]:
         quality["proposals"].append("Formaliser les formules restantes avec les memes libelles que les elements collectes.")
     if references and not objective_source:

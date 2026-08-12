@@ -34,7 +34,7 @@ Ce formulaire sert a declarer les cibles officielles du mois :
 - mode de repartition : automatique, fixe, prorata jours ou hebdomadaire ;
 - validation hierarchique.
 
-La plateforme utilise ce formulaire pour calculer automatiquement l'objectif a date et le `Vs Target`.
+La plateforme utilise ce formulaire pour calculer automatiquement l'objectif a date et le taux realise.
 
 ## 3. Formulaire donnees de calcul journalieres
 
