@@ -4473,6 +4473,83 @@
       : Array.isArray(state.kpiCalculationQuality?.anomalies)
         ? state.kpiCalculationQuality.anomalies
         : [];
+    const correctionKey = (...items) => items.map((item) => normalizeLookup(item)).join("|");
+    const quality = state.kpiCalculationQuality || {};
+    const referenceKpis = Array.isArray(quality.referenceKpis) ? quality.referenceKpis : [];
+    const monthlyObjectives = Array.isArray(quality.monthlyObjectives)
+      ? quality.monthlyObjectives
+      : Array.isArray(state.kpiObjectives)
+        ? state.kpiObjectives
+        : [];
+    const calculationResults = Array.isArray(state.kpiCalculationResults)
+      ? state.kpiCalculationResults.filter((item) => item.periodType !== "monthToDate")
+      : [];
+    const referenceByKpi = new Map();
+    referenceKpis.forEach((kpi) => {
+      const kpiId = kpi.kpiId || kpi.catalogId || kpi.id || kpi.name;
+      const key = correctionKey(kpi.poleId, kpiId);
+      if (!key || key === "|") return;
+      if (!referenceByKpi.has(key)) referenceByKpi.set(key, kpi);
+    });
+    const objectivesByKpi = new Map();
+    const objectivesByCountryKpi = new Map();
+    monthlyObjectives.forEach((objective) => {
+      const kpiId = objective.catalogId || objective.kpiId || objective.idKpi || objective.kpiName;
+      const kpiKey = correctionKey(objective.poleId, kpiId);
+      const countryKey = correctionKey(objective.branch || "Groupe", objective.poleId, kpiId);
+      if (kpiKey && kpiKey !== "|") objectivesByKpi.set(kpiKey, true);
+      if (countryKey && countryKey !== "||") objectivesByCountryKpi.set(countryKey, true);
+    });
+    const resultsByCountryKpi = new Map();
+    calculationResults.forEach((result) => {
+      const countryKey = correctionKey(result.branch || "Groupe", result.poleId, result.kpiId);
+      if (countryKey && countryKey !== "||") resultsByCountryKpi.set(countryKey, true);
+    });
+    const activeObjectiveMonth = (() => {
+      const dateValue = state.calendar?.end || state.calendar?.selectedDate || state.calendar?.start || "";
+      const match = String(dateValue || "").match(/^(20\d{2}-\d{2})/);
+      return match ? match[1] : "Mois a renseigner";
+    })();
+    const kpiCorrectionItems = [];
+    referenceByKpi.forEach((kpi, key) => {
+      if (objectivesByKpi.has(key)) return;
+      kpiCorrectionItems.push({
+        severity: "A corriger",
+        statusClass: "amber",
+        form: "Objectifs mensuels",
+        sourceRole: "objectifsMensuels",
+        sourceForm: monthlyObjectiveSource?.formId || "",
+        poleId: kpi.poleId || "",
+        poleName: kpi.poleName || kpi.poleId || "Pole a verifier",
+        branch: kpi.branch || "Groupe",
+        kpi: kpi.kpiId || kpi.catalogId || kpi.id || "KPI a verifier",
+        period: activeObjectiveMonth,
+        issue: "KPI sans objectif mensuel",
+        detail: kpi.kpiName || kpi.name || "",
+        action: "Renseigner le formulaire 2 objectifs mensuels pour ce KPI.",
+      });
+    });
+    monthlyObjectives.forEach((objective) => {
+      const kpiId = objective.catalogId || objective.kpiId || objective.idKpi || objective.kpiName;
+      const countryKey = correctionKey(objective.branch || "Groupe", objective.poleId, kpiId);
+      if (resultsByCountryKpi.has(countryKey)) return;
+      const reference = referenceByKpi.get(correctionKey(objective.poleId, kpiId)) || {};
+      kpiCorrectionItems.push({
+        severity: "A corriger",
+        statusClass: "amber",
+        form: "Donnees de calcul",
+        sourceRole: "donneesCalcul",
+        sourceForm: calculationSource?.formId || "",
+        poleId: objective.poleId || "",
+        poleName: objective.poleName || objective.poleId || "Pole a verifier",
+        branch: objective.branch || "Groupe",
+        kpi: kpiId || "KPI a verifier",
+        period: objective.periodMonth || objective.period || "Periode a verifier",
+        issue: "Objectif sans donnees de calcul",
+        detail: `${reference.kpiName || objective.kpiName || ""}${objective.target ? ` - objectif: ${objective.target}` : ""}`.trim(),
+        action: "Renseigner le formulaire 3 donnees de calcul pour ce pays, pole, KPI et date.",
+      });
+    });
     const anomalyCount = $("#admin-kobo-anomaly-count");
     const anomalySummary = $("#admin-kobo-anomaly-summary");
     const anomalyTable = $("#admin-kobo-anomaly-table");
@@ -4507,54 +4584,58 @@
         branches: [...group.branches].filter(Boolean),
       }));
     })();
-    const anomalyStatusClass = blockingAnomalies.length ? "red" : warningAnomalies.length ? "amber" : "green";
+    const missingObjectiveItems = kpiCorrectionItems.filter((item) => item.issue === "KPI sans objectif mensuel");
+    const missingCalculationItems = kpiCorrectionItems.filter((item) => item.issue === "Objectif sans donnees de calcul");
+    const displayCorrectionRows = [
+      ...groupedAnomalies,
+      ...kpiCorrectionItems,
+    ];
+    const totalCorrectionCount = anomalies.length + kpiCorrectionItems.length;
+    const anomalyStatusClass = blockingAnomalies.length ? "red" : totalCorrectionCount ? "amber" : "green";
     if (anomalyCount) {
       anomalyCount.className = `status-pill ${anomalyStatusClass}`;
       const groupedSuffix = groupedAnomalies.length && groupedAnomalies.length !== anomalies.length
         ? ` - ${groupedAnomalies.length} groupe${groupedAnomalies.length > 1 ? "s" : ""}`
         : "";
-      anomalyCount.textContent = `${anomalies.length} anomalie${anomalies.length > 1 ? "s" : ""}${groupedSuffix}`;
+      anomalyCount.textContent = `${totalCorrectionCount} ligne${totalCorrectionCount > 1 ? "s" : ""} a corriger${groupedSuffix}`;
     }
     if (anomalySummary) {
-      const forms = ["referentielKpi", "objectifsMensuels", "donneesCalcul"].map((role) => {
-        const count = anomalies.filter((item) => item.sourceRole === role).length;
-        return {
-          label: role === "referentielKpi" ? "Referentiel" : role === "objectifsMensuels" ? "Objectifs" : "Donnees",
-          count,
-        };
-      });
       anomalySummary.innerHTML = `
         <div class="admin-kobo-anomaly-stat status-${escapeHtml(blockingAnomalies.length ? "red" : "green")}">
           <span>Bloquantes</span>
           <strong>${escapeHtml(blockingAnomalies.length)}</strong>
           <small>empechent le calcul ou le rapprochement</small>
         </div>
-        <div class="admin-kobo-anomaly-stat status-${escapeHtml(warningAnomalies.length ? "amber" : "green")}">
-          <span>A corriger</span>
-          <strong>${escapeHtml(warningAnomalies.length)}</strong>
-          <small>reduisent la qualite du dashboard</small>
+        <div class="admin-kobo-anomaly-stat status-${escapeHtml(missingObjectiveItems.length ? "amber" : "green")}">
+          <span>KPI sans objectif</span>
+          <strong>${escapeHtml(missingObjectiveItems.length)}</strong>
+          <small>a completer dans le formulaire 2</small>
         </div>
-        ${forms
-          .map(
-            (form) => `
-              <div class="admin-kobo-anomaly-stat">
-                <span>${escapeHtml(form.label)}</span>
-                <strong>${escapeHtml(form.count)}</strong>
-                <small>anomalie${form.count > 1 ? "s" : ""}</small>
-              </div>
-            `
-          )
-          .join("")}
+        <div class="admin-kobo-anomaly-stat status-${escapeHtml(missingCalculationItems.length ? "amber" : "green")}">
+          <span>Objectifs sans donnees</span>
+          <strong>${escapeHtml(missingCalculationItems.length)}</strong>
+          <small>a completer dans le formulaire 3</small>
+        </div>
+        <div class="admin-kobo-anomaly-stat status-${escapeHtml(warningAnomalies.length ? "amber" : "green")}">
+          <span>Anomalies Kobo</span>
+          <strong>${escapeHtml(anomalies.length)}</strong>
+          <small>issues techniques ou mapping</small>
+        </div>
+        <div class="admin-kobo-anomaly-stat status-${escapeHtml(calculationResults.length ? "green" : "amber")}">
+          <span>Donnees calculees</span>
+          <strong>${escapeHtml(calculationResults.length)}</strong>
+          <small>lignes deja exploitables</small>
+        </div>
       `;
     }
     if (anomalyTable) {
-      anomalyTable.innerHTML = anomalies.length
-        ? groupedAnomalies
-            .slice(0, 30)
+      anomalyTable.innerHTML = displayCorrectionRows.length
+        ? displayCorrectionRows
             .map(
               (item) => {
-                const branchSummary = item.branches.length
-                  ? `${item.branches.length} pays/perimetre${item.branches.length > 1 ? "s" : ""}: ${item.branches.slice(0, 6).join(", ")}${item.branches.length > 6 ? "..." : ""}`
+                const branches = Array.isArray(item.branches) ? item.branches : item.branch ? [item.branch] : [];
+                const branchSummary = branches.length
+                  ? `${branches.length} pays/perimetre${branches.length > 1 ? "s" : ""}: ${branches.slice(0, 6).join(", ")}${branches.length > 6 ? "..." : ""}`
                   : "";
                 const countSummary = item.count > 1 ? `${item.count} lignes concernees` : "";
                 return `
@@ -4582,7 +4663,7 @@
               }
             )
             .join("")
-        : `<tr><td colspan="5">Aucune anomalie Kobo detectee. Les trois formulaires sont prets pour le calcul.</td></tr>`;
+        : `<tr><td colspan="5">Aucun KPI a corriger. Les trois formulaires sont prets pour le calcul complet.</td></tr>`;
     }
 
     const fillKoboSourceForm = (source, config) => {
