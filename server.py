@@ -4262,22 +4262,23 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             if value_raw not in (None, ""):
                 elements.append({"label": element_raw or f"element {index}", "value": value_raw})
 
-        legacy_element = mapped_submission_value(
-            calculation_source,
-            payload,
-            "element",
-            ["element_id", "element", "variable", "rubrique", "donnees_a_collecter", "indicateur_financier", "indicateur_wfm", "parametre"],
-        )
-        legacy_value = mapped_submission_value(
-            calculation_source,
-            payload,
-            "value",
-            ["valeur_element", "value", "valeur", "valeur_j", "valeur_du_jour_j", "score", "resultat"],
-        )
-        if legacy_value in (None, ""):
-            legacy_value = row["value"]
-        if legacy_value not in (None, ""):
-            elements.append({"label": legacy_element or "valeur", "value": legacy_value})
+        if not elements:
+            legacy_element = mapped_submission_value(
+                calculation_source,
+                payload,
+                "element",
+                ["element_id", "element", "variable", "rubrique", "donnees_a_collecter", "indicateur_financier", "indicateur_wfm", "parametre"],
+            )
+            legacy_value = mapped_submission_value(
+                calculation_source,
+                payload,
+                "value",
+                ["valeur_element", "value", "valeur", "valeur_j", "valeur_du_jour_j", "score", "resultat"],
+            )
+            if legacy_value in (None, ""):
+                legacy_value = row["value"]
+            if legacy_value not in (None, ""):
+                elements.append({"label": legacy_element or "valeur", "value": legacy_value})
 
         deduped = []
         seen = set()
