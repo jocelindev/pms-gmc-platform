@@ -4963,6 +4963,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "aggregationMode": aggregation_mode,
             "performanceDirection": reference.get("performanceDirection", "higherBetter"),
             "unit": result_unit,
+            "collectionFrequency": reference.get("collectionFrequency", ""),
+            "reportingFrequency": reference.get("reportingFrequency", ""),
             "status": status,
             "trend": "Calcul Kobo",
             "source": calculation_source["formId"] if calculation_source else reference_source["formId"],

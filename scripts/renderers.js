@@ -1313,7 +1313,27 @@
     return kpi.calculated ? kpi.value || "Calcule" : "En attente Kobo";
   }
 
-  function kpiRealizedPeriodLabel(kpi = {}) {
+  function kpiPeriodFrequencyLabel(kpi = {}, pole = {}) {
+    const rawFrequency = kpi.reportingFrequency || kpi.collectionFrequency || kpi.frequency || kpiCollectionFrequency(kpi, pole);
+    const normalized = normalizeLookup(`${rawFrequency} ${kpi.periodType || ""}`);
+    if (normalized.includes("horaire") || normalized.includes("jour") || normalized.includes("quotid") || normalized.includes("day")) {
+      return "JOURNALIER";
+    }
+    if (normalized.includes("hebdo") || normalized.includes("semaine") || normalized.includes("week")) {
+      return "HEBDOMADAIRE";
+    }
+    if (normalized.includes("mens") || normalized.includes("month")) {
+      return "MENSUEL";
+    }
+    const cadence = normalizeCadence(rawFrequency);
+    const normalizedCadence = normalizeLookup(cadence);
+    if (normalizedCadence.includes("horaire") || normalizedCadence.includes("jour")) return "JOURNALIER";
+    if (normalizedCadence.includes("hebdo")) return "HEBDOMADAIRE";
+    if (normalizedCadence.includes("mens")) return "MENSUEL";
+    return String(cadence || "A PRECISER").toUpperCase();
+  }
+
+  function kpiRealizedDateLabel(kpi = {}) {
     const periodType = normalizeLookup(kpi.periodType || "");
     const start = parseIsoDate(kpi.periodStart);
     const end = parseIsoDate(kpi.periodEnd);
@@ -2182,7 +2202,7 @@
         <div class="kpi-detail-value">
           <span>Realise</span>
           <strong>${escapeHtml(dayValueLabel(selected.kpi))}</strong>
-          <small>${escapeHtml(kpiRealizedPeriodLabel(selected.kpi))}</small>
+          <small>${escapeHtml(kpiRealizedDateLabel(selected.kpi))}</small>
         </div>
       </div>
       ${renderTrendStrip(selected.kpi, selected.pole)}
@@ -2229,7 +2249,7 @@
               <strong>${escapeHtml(row.kpi.name)}</strong>
               <br><small>${escapeHtml(row.pole.name)} - ${escapeHtml(row.kpi.id || row.pole.id)}</small>
             </td>
-            <td class="period-cell">${escapeHtml(kpiRealizedPeriodLabel(row.kpi))}</td>
+            <td class="period-cell">${escapeHtml(kpiPeriodFrequencyLabel(row.kpi, row.pole))}</td>
             <td class="realized-period-cell">
               <strong>${escapeHtml(dayValueLabel(row.kpi))}</strong>
             </td>
