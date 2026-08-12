@@ -1411,6 +1411,20 @@ button.dashboard-control-card {
   min-width: 240px;
 }
 
+.realized-period-cell strong {
+  display: block;
+  color: var(--palladium-blue);
+}
+
+.realized-period-cell small,
+.kpi-detail-value small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
 .dashboard-performance-table td:nth-child(6) {
   max-width: 260px;
 }

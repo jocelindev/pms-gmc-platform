@@ -1313,6 +1313,29 @@
     return kpi.calculated ? kpi.value || "Calcule" : "En attente Kobo";
   }
 
+  function kpiRealizedPeriodLabel(kpi = {}) {
+    const periodType = normalizeLookup(kpi.periodType || "");
+    const start = parseIsoDate(kpi.periodStart);
+    const end = parseIsoDate(kpi.periodEnd);
+    const formatDate = (date) => date.toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+    if ((periodType === "monthtodate" || periodType === "day") && end) {
+      return `Jour du ${formatDate(end)}`;
+    }
+    if (start && end && dateToIso(start) !== dateToIso(end)) {
+      return `Du ${formatDate(start)} au ${formatDate(end)}`;
+    }
+    if (end || start) {
+      return `Jour du ${formatDate(end || start)}`;
+    }
+    const period = String(kpi.periodLabel || kpi.period || "").trim();
+    if (period) return period;
+    return kpi.calculated ? "Periode Kobo" : "Periode a calculer";
+  }
+
   function monthToDateValueLabel(kpi = {}) {
     if (kpi.monthToDateValueLabel) return kpi.monthToDateValueLabel;
     if (Number.isFinite(Number(kpi.monthToDateValue))) return String(kpi.monthToDateValue);
@@ -1482,6 +1505,10 @@
       numericValue: result.monthToDateValue ?? result.actualValue ?? result.value,
       dayValue: result.dayValue ?? result.actualValue ?? result.value,
       dayValueLabel: result.dayValueLabel || result.actualValueLabel || result.valueLabel || "",
+      periodStart: result.periodStart || "",
+      periodEnd: result.periodEnd || "",
+      periodType: result.periodType || "",
+      periodLabel: result.periodLabel || result.period || "",
       monthToDateValue: result.monthToDateValue ?? result.actualValue ?? result.value,
       monthToDateValueLabel: result.monthToDateValueLabel || result.actualValueLabel || result.valueLabel || "",
       target: result.target || "A completer",
@@ -2153,8 +2180,9 @@
           <p>${escapeHtml(selected.pole.name)} - ${escapeHtml(selected.pole.owner)}</p>
         </div>
         <div class="kpi-detail-value">
-          <span>Valeur</span>
-          <strong>${escapeHtml(selected.kpi.value)}</strong>
+          <span>Realise periode</span>
+          <strong>${escapeHtml(dayValueLabel(selected.kpi))}</strong>
+          <small>${escapeHtml(kpiRealizedPeriodLabel(selected.kpi))}</small>
         </div>
       </div>
       ${renderTrendStrip(selected.kpi, selected.pole)}
@@ -2201,7 +2229,10 @@
               <strong>${escapeHtml(row.kpi.name)}</strong>
               <br><small>${escapeHtml(row.pole.name)} - ${escapeHtml(row.kpi.id || row.pole.id)}</small>
             </td>
-            <td>${escapeHtml(dayValueLabel(row.kpi))}</td>
+            <td class="realized-period-cell">
+              <strong>${escapeHtml(dayValueLabel(row.kpi))}</strong>
+              <small>${escapeHtml(kpiRealizedPeriodLabel(row.kpi))}</small>
+            </td>
             <td><strong>${escapeHtml(monthToDateValueLabel(row.kpi))}</strong></td>
             <td>${escapeHtml(row.kpi.target || "A completer")}</td>
             <td><strong class="${escapeHtml(targetMetric.className)}">${escapeHtml(targetMetric.display)}</strong></td>
