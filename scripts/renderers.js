@@ -3666,16 +3666,6 @@
                             </div>
                             <div class="pole-kpi-value">${escapeHtml(kpi.value)}</div>
                             ${renderTrendStrip(kpi, pole)}
-                            <dl>
-                              <div><dt>Categorie</dt><dd>${escapeHtml(kpi.category || "Non classe")}</dd></div>
-                              <div><dt>Objectif</dt><dd>${escapeHtml(kpi.target)}</dd></div>
-                              <div><dt>Tendance</dt><dd>${escapeHtml(kpi.trend)}</dd></div>
-                              <div><dt>Source Kobo</dt><dd>${escapeHtml(kpi.source)}</dd></div>
-                              <div><dt>Frequence collecte</dt><dd>${escapeHtml(kpiCollectionFrequency(kpi, pole))}</dd></div>
-                              <div><dt>Periode</dt><dd>${escapeHtml(kpi.period || "Kobo")}</dd></div>
-                              <div><dt>Methode</dt><dd>${escapeHtml(kpi.method || (kpi.pendingCalculation ? "Donnees de calcul attendues" : "Calcul PMS"))}</dd></div>
-                              <div><dt>Formule</dt><dd>${escapeHtml(kpi.formula || "A completer")}</dd></div>
-                            </dl>
                           </section>
                         `
                       )

@@ -4723,7 +4723,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     "documentStatus": record.get("documentStatus", ""),
                     "validationClass": status_class_from_validation(record.get("validation", "")),
                     "status": "gray",
-                    "valueLabel": "En attente calcul",
+                    "valueLabel": "--",
                     "method": "Reference Kobo, donnees de calcul attendues",
                 }
             )(latest_objective_for_reference(record))

@@ -847,7 +847,7 @@
           id: kpi.kpiId,
           name: kpi.kpiName,
           branch: kpi.branch || activeCountry || "Groupe",
-          value: kpi.valueLabel || "En attente calcul",
+          value: kpi.valueLabel || "--",
           target: objectiveTarget?.target || "Objectif Kobo mensuel attendu",
           monthlyTarget: objectiveTarget?.monthlyTarget || "",
           objectiveSource: objectiveTarget?.source || "",
