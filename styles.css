@@ -2051,6 +2051,72 @@ button.dashboard-control-card {
   line-height: 1.4;
 }
 
+.management-director-brief {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.management-director-brief .director-decisions {
+  min-height: 132px;
+}
+
+.management-director-brief .director-decisions span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(31, 56, 100, 0.08);
+  color: var(--palladium-blue);
+  font-size: 11px;
+  font-weight: 950;
+  margin-bottom: 8px;
+  padding: 5px 9px;
+  text-transform: uppercase;
+}
+
+.management-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.management-comparison-card {
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-left: 4px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 13px;
+}
+
+.management-comparison-card.status-green {
+  border-left-color: var(--green-text);
+}
+
+.management-comparison-card.status-amber {
+  border-left-color: var(--amber-text);
+}
+
+.management-comparison-card.status-red {
+  border-left-color: var(--red-text);
+}
+
+.management-comparison-card.status-gray {
+  background: var(--surface-soft);
+}
+
+.management-comparison-card span,
+.management-comparison-card small {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.management-comparison-card strong {
+  color: var(--palladium-blue);
+  display: block;
+  font-size: 24px;
+  margin: 6px 0;
+}
+
 .dashboard-alerts-list {
   display: grid;
   gap: 9px;
@@ -4955,6 +5021,55 @@ td small {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.report-auto-plan,
+.report-action-plan {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.report-auto-card,
+.report-action-row {
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.report-auto-card {
+  display: grid;
+  gap: 6px;
+}
+
+.report-auto-card strong,
+.report-action-row strong {
+  color: var(--palladium-blue);
+}
+
+.report-auto-card span,
+.report-action-row span,
+.report-action-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.report-action-row {
+  border-left: 4px solid var(--red-text);
+  display: grid;
+  gap: 8px;
+}
+
+.report-action-row.status-amber {
+  border-left-color: var(--amber-text);
+}
+
+.report-action-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .report-kpi-card {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -5566,6 +5681,12 @@ td small {
   .heat-cell,
   .time-cell {
     min-height: 34px;
+  }
+
+  .management-director-brief,
+  .management-comparison-grid,
+  .report-action-meta {
+    grid-template-columns: 1fr;
   }
 }
 

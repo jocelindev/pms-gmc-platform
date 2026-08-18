@@ -1706,6 +1706,127 @@
     return [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\n");
   }
 
+  function reportCriticalKpis(kpis = []) {
+    return [
+      ...kpis.filter((kpi) => kpi.status === "red"),
+      ...kpis.filter((kpi) => kpi.status === "amber"),
+    ].slice(0, 5);
+  }
+
+  function buildReportTableRows(kpis = []) {
+    return kpis
+      .map(
+        (kpi) => `
+          <tr>
+            <td>${escapeHtml(kpi.name)}</td>
+            <td>${escapeHtml(kpi.value)}</td>
+            <td>${escapeHtml(kpi.target)}</td>
+            <td>${escapeHtml(kpi.trend)}</td>
+            <td>${escapeHtml(kpi.status)}</td>
+          </tr>
+        `
+      )
+      .join("");
+  }
+
+  function buildActionPlanRows(context) {
+    const critical = reportCriticalKpis(context.kpis);
+    if (!critical.length) {
+      return `<tr><td colspan="4">Aucun KPI rouge ou orange a transformer en plan d'action.</td></tr>`;
+    }
+    return critical
+      .map((kpi) => {
+        const action = kpi.status === "red"
+          ? "Action corrective obligatoire avant validation."
+          : "Analyse preventive et suivi au prochain reporting.";
+        return `
+          <tr>
+            <td>${escapeHtml(kpi.name)}</td>
+            <td>${escapeHtml(kpi.status)}</td>
+            <td>${escapeHtml(context.pole.owner)}</td>
+            <td>${escapeHtml(action)}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function reportDocumentHtml(context, mode = "pdf") {
+    const title = `Rapport ${context.cycle.value} - ${context.pole.name}`;
+    const criticalCount = reportCriticalKpis(context.kpis).length;
+    const generatedAt = new Date().toLocaleString("fr-FR");
+    return `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>${escapeHtml(title)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #1f3864; margin: 28px; }
+            h1 { margin: 0 0 6px; font-size: ${mode === "ppt" ? "34px" : "26px"}; }
+            h2 { color: #1f3864; font-size: 18px; margin-top: 24px; }
+            .meta { color: #555; margin-bottom: 18px; }
+            .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
+            .card { border: 1px solid #d9d9d9; border-left: 4px solid #d6a838; padding: 10px; }
+            .card strong { display: block; font-size: 22px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th { background: #f2f2f2; color: #1f3864; text-align: left; }
+            th, td { border: 1px solid #d9d9d9; padding: 8px; font-size: 12px; }
+            .comment { border-left: 4px solid #d6a838; background: #fffaf0; padding: 10px; margin-top: 16px; color: #333; }
+            @media print { body { margin: 16mm; } button { display: none; } }
+          </style>
+        </head>
+        <body>
+          <h1>${escapeHtml(title)}</h1>
+          <p class="meta">Periode: ${escapeHtml(context.period)} | Responsable: ${escapeHtml(context.pole.owner)} | Genere le ${escapeHtml(generatedAt)}</p>
+          <div class="summary">
+            <div class="card"><span>Score</span><strong>${escapeHtml(context.pole.score ?? "--")}</strong></div>
+            <div class="card"><span>KPI suivis</span><strong>${escapeHtml(context.kpis.length)}</strong></div>
+            <div class="card"><span>KPI critiques</span><strong>${escapeHtml(criticalCount)}</strong></div>
+            <div class="card"><span>Cycle</span><strong>${escapeHtml(context.cycle.value)}</strong></div>
+          </div>
+          <h2>Lecture KPI</h2>
+          <table>
+            <thead><tr><th>KPI</th><th>Valeur</th><th>Objectif</th><th>Tendance</th><th>Statut</th></tr></thead>
+            <tbody>${buildReportTableRows(context.kpis)}</tbody>
+          </table>
+          <h2>Plan d'action KPI rouges/oranges</h2>
+          <table>
+            <thead><tr><th>KPI</th><th>Statut</th><th>Responsable</th><th>Action proposee</th></tr></thead>
+            <tbody>${buildActionPlanRows(context)}</tbody>
+          </table>
+          <div class="comment"><strong>Commentaire responsable</strong><br>${escapeHtml(context.comment || "A completer par le responsable.")}</div>
+        </body>
+      </html>`;
+  }
+
+  function exportReportPdf(context, slug) {
+    const html = reportDocumentHtml(context, "pdf");
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      downloadTextFile(`rapport-${slug}-pdf.html`, html, "text/html;charset=utf-8");
+      showToast("Fenetre PDF bloquee. Un fichier HTML imprimable a ete telecharge.");
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    showToast("Rapport PDF ouvert. Choisissez 'Enregistrer en PDF' dans l'impression.");
+  }
+
+  function exportReportExcel(context, slug) {
+    const html = reportDocumentHtml(context, "excel");
+    downloadTextFile(`rapport-${slug}.xls`, html, "application/vnd.ms-excel;charset=utf-8");
+    showToast("Export Excel genere.");
+  }
+
+  function exportReportPowerPoint(context, slug) {
+    const html = reportDocumentHtml(context, "ppt");
+    downloadTextFile(`rapport-${slug}.ppt`, html, "application/vnd.ms-powerpoint;charset=utf-8");
+    showToast("Export PowerPoint genere.");
+  }
+
   function bindNavigation() {
     document.querySelectorAll(".nav-item").forEach((button) => {
       button.addEventListener("click", () => activateView(button.dataset.view));
@@ -2452,9 +2573,16 @@
       button.addEventListener("click", () => {
         const context = getCurrentReportContext();
         const slug = `${context.pole.id}-${context.cycle.value}-${context.period}`.replaceAll(" ", "_");
-        if (button.dataset.reportExport === "csv") {
-          downloadTextFile(`rapport-kpi-${slug}.csv`, buildKpiCsv(context), "text/csv;charset=utf-8");
-          showToast("Export CSV des KPI genere.");
+        if (button.dataset.reportExport === "pdf") {
+          exportReportPdf(context, slug);
+          return;
+        }
+        if (button.dataset.reportExport === "excel") {
+          exportReportExcel(context, slug);
+          return;
+        }
+        if (button.dataset.reportExport === "powerpoint") {
+          exportReportPowerPoint(context, slug);
           return;
         }
         const payload = {

@@ -316,6 +316,28 @@
 
           <div class="management-summary-grid" id="management-summary-cards"></div>
 
+          <section class="panel management-brief-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Brief PDG automatique</p>
+                <h3>Ce qui va bien, ce qui bloque, decision attendue</h3>
+              </div>
+              <span class="status-pill gray">Connecte aux donnees</span>
+            </div>
+            <div class="director-brief management-director-brief" id="management-director-brief"></div>
+          </section>
+
+          <section class="panel management-comparison-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Comparaison entre poles</p>
+                <h3>Meilleur score, pole a surveiller et ecart principal</h3>
+              </div>
+              <span class="status-pill gray" id="management-comparison-status">A calculer</span>
+            </div>
+            <div class="management-comparison-grid" id="management-pole-comparison"></div>
+          </section>
+
           <section class="panel management-heatmap-panel">
             <div class="panel-header">
               <div>
@@ -714,15 +736,14 @@
                 <label>
                   Format
                   <select id="report-format-select">
-                    <option>Word COMEX</option>
-                    <option>PDF signe</option>
-                    <option>PowerPoint synthese</option>
-                    <option>Excel donnees</option>
-                    <option>Email HTML</option>
+                    <option value="PDF">PDF</option>
+                    <option value="Excel">Excel donnees</option>
+                    <option value="PowerPoint">PowerPoint synthese</option>
                   </select>
                 </label>
               </div>
               <div class="report-summary" id="report-summary"></div>
+              <div class="report-auto-plan" id="report-auto-plan"></div>
             </section>
 
             <section class="panel report-preview-panel">
@@ -748,6 +769,17 @@
                 <textarea id="report-comment" rows="6" placeholder="Expliquer les KPI orange/rouge, les risques et les actions de correction."></textarea>
               </label>
               <button class="ghost-action" id="save-report-comment">Enregistrer commentaire</button>
+            </section>
+
+            <section class="panel report-action-plan-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Plan d'action</p>
+                  <h3>KPI rouges a traiter</h3>
+                </div>
+                <span class="status-pill gray" id="report-action-plan-status">A calculer</span>
+              </div>
+              <div class="report-action-plan" id="report-action-plan"></div>
             </section>
 
             <section class="panel">
@@ -778,8 +810,9 @@
                 </div>
               </div>
               <div class="export-actions">
-                <button class="primary-action" data-report-export="json">Exporter le rapport JSON</button>
-                <button class="ghost-action" data-report-export="csv">Exporter les KPI CSV</button>
+                <button class="primary-action" data-report-export="pdf">Exporter PDF</button>
+                <button class="ghost-action" data-report-export="excel">Exporter Excel</button>
+                <button class="ghost-action" data-report-export="powerpoint">Exporter PowerPoint</button>
                 <button class="ghost-action" id="schedule-report">Planifier la diffusion</button>
               </div>
               <div class="distribution-list" id="distribution-list"></div>

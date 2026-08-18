@@ -2353,6 +2353,106 @@
         .join("");
     }
 
+    const scoredDirections = directionScores
+      .filter((item) => item.hasData && Number.isFinite(Number(item.score)))
+      .map((item) => ({ ...item, scoreValue: Math.round(Number(item.score)) }))
+      .sort((left, right) => right.scoreValue - left.scoreValue);
+    const bestDirection = scoredDirections[0] || null;
+    const watchDirection = scoredDirections.length
+      ? [...scoredDirections].sort((left, right) => left.scoreValue - right.scoreValue)[0]
+      : null;
+    const topDecisionRow = priorityRows[0] || null;
+    const quality = state.kpiCalculationQuality || {};
+    const koboIssueCount =
+      Number(quality.unmatchedCalculationCount || 0) +
+      Number(quality.unmatchedObjectiveCount || 0) +
+      Number(quality.missingMonthlyObjectiveCount || 0) +
+      Number(quality.missingFormulaCount || 0);
+    const directorBrief = $("#management-director-brief");
+    if (directorBrief) {
+      const goodMessage = dataRows.length
+        ? bestDirection
+          ? `${bestDirection.pole.name} porte le meilleur score du perimetre avec ${bestDirection.scoreValue}/100. ${greenRows.length} KPI sont au vert.`
+          : `${greenRows.length} KPI sont au vert sur le perimetre actif.`
+        : "Les points forts seront identifies apres reception et calcul des donnees Kobo.";
+      const blockMessage = dataRows.length
+        ? redRows.length || amberRows.length
+          ? `${redRows.length} KPI rouge(s), ${amberRows.length} KPI orange(s) et ${koboIssueCount} ecart(s) Kobo restent a traiter.`
+          : koboIssueCount
+            ? `${koboIssueCount} ecart(s) Kobo sont a corriger pour fiabiliser le pilotage.`
+            : "Aucun blocage critique detecte sur les KPI calcules."
+        : "Le blocage principal est l'absence de donnees calculees sur le perimetre actif.";
+      const decisionMessage = topDecisionRow
+        ? `${actionRecommendation(topDecisionRow)} Priorite: ${topDecisionRow.kpi.name} / ${topDecisionRow.pole.name}.`
+        : dataRows.length
+          ? "Maintenir le rythme de collecte et valider les rapports de la periode."
+          : "Demander la synchronisation Kobo et la publication des donnees de calcul.";
+      const briefCards = [
+        { label: "Ce qui va bien", title: bestDirection ? bestDirection.pole.id : "Performance", body: goodMessage },
+        { label: "Ce qui bloque", title: redRows.length ? "Alerte KPI" : koboIssueCount ? "Qualite Kobo" : "Controle", body: blockMessage },
+        { label: "Decision attendue", title: topDecisionRow ? topDecisionRow.pole.id : "Pilotage", body: decisionMessage },
+      ];
+      directorBrief.innerHTML = briefCards
+        .map(
+          (card) => `
+            <div class="director-decisions">
+              <span>${escapeHtml(card.label)}</span>
+              <strong>${escapeHtml(card.title)}</strong>
+              <p>${escapeHtml(card.body)}</p>
+            </div>
+          `
+        )
+        .join("");
+    }
+
+    const comparisonStatus = $("#management-comparison-status");
+    const comparison = $("#management-pole-comparison");
+    if (comparisonStatus) {
+      comparisonStatus.className = `status-pill ${scoredDirections.length ? "green" : "gray"}`;
+      comparisonStatus.textContent = scoredDirections.length ? `${scoredDirections.length} pole(s) compares` : "A calculer";
+    }
+    if (comparison) {
+      const spread = bestDirection && watchDirection ? Math.max(0, bestDirection.scoreValue - watchDirection.scoreValue) : null;
+      const riskDirection = directionScores
+        .filter((item) => item.hasData)
+        .sort((left, right) => (right.red * 3 + right.amber * 2 + right.negativeTrends) - (left.red * 3 + left.amber * 2 + left.negativeTrends))[0];
+      const comparisonCards = scoredDirections.length
+        ? [
+            {
+              label: "Meilleur score",
+              value: `${bestDirection.scoreValue}/100`,
+              hint: bestDirection.pole.name,
+              className: bestDirection.className,
+            },
+            {
+              label: "Pole a surveiller",
+              value: watchDirection ? `${watchDirection.scoreValue}/100` : "--",
+              hint: watchDirection ? `${watchDirection.pole.name} - ${watchDirection.red} rouge(s)` : "donnees attendues",
+              className: watchDirection?.className || "gray",
+            },
+            {
+              label: "Ecart principal",
+              value: spread === null ? "--" : `${spread} pts`,
+              hint: riskDirection ? `Risque: ${riskDirection.pole.name}` : "ecart a calculer",
+              className: spread === null ? "gray" : spread >= 20 ? "red" : spread >= 10 ? "amber" : "green",
+            },
+          ]
+        : [];
+      comparison.innerHTML = comparisonCards.length
+        ? comparisonCards
+            .map(
+              (card) => `
+                <article class="management-comparison-card status-${escapeHtml(card.className)}">
+                  <span>${escapeHtml(card.label)}</span>
+                  <strong>${escapeHtml(card.value)}</strong>
+                  <small>${escapeHtml(card.hint)}</small>
+                </article>
+              `
+            )
+            .join("")
+        : `<div class="empty-kpi-state">La comparaison entre poles sera disponible apres calcul des donnees Kobo.</div>`;
+    }
+
     const directionScoreStatus = $("#management-direction-score-status");
     const directionScoreBody = $("#management-direction-score-body");
     if (directionScoreStatus) {
@@ -3937,6 +4037,10 @@
       $("#report-preview").innerHTML = `<div class="empty-kpi-state">Aucun rapport n'est visible pour ce pays / filiale avec ce profil.</div>`;
       const reportActions = $("#report-actions");
       if (reportActions) reportActions.innerHTML = "";
+      const reportAutoPlan = $("#report-auto-plan");
+      if (reportAutoPlan) reportAutoPlan.innerHTML = "";
+      const reportActionPlan = $("#report-action-plan");
+      if (reportActionPlan) reportActionPlan.innerHTML = "";
       return;
     }
     if (!authorizedPoles.some((item) => item.id === state.currentReportPole)) {
@@ -3979,6 +4083,37 @@
         <small>Deadline: ${escapeHtml(cycle.deadline)}</small>
       </article>
     `;
+
+    const reportAutoPlan = $("#report-auto-plan");
+    if (reportAutoPlan) {
+      const weeklyCycle = reporting.cycles.find((item) => normalizeLookup(item.value).includes("hebdo"));
+      const monthlyCycle = reporting.cycles.find((item) => normalizeLookup(item.value).includes("mensuel"));
+      const autoCards = [
+        {
+          title: "Rapport hebdomadaire automatique",
+          cycle: weeklyCycle,
+          cadence: "Chaque lundi",
+          status: cycle.value === weeklyCycle?.value ? "cycle actif" : "pret a generer",
+        },
+        {
+          title: "Rapport mensuel automatique",
+          cycle: monthlyCycle,
+          cadence: "Chaque debut de mois",
+          status: cycle.value === monthlyCycle?.value ? "cycle actif" : "pret a generer",
+        },
+      ];
+      reportAutoPlan.innerHTML = autoCards
+        .map(
+          (card) => `
+            <div class="report-auto-card">
+              <span>${escapeHtml(card.status)}</span>
+              <strong>${escapeHtml(card.title)}</strong>
+              <small>${escapeHtml(card.cycle ? `${card.cadence} - deadline ${card.cycle.deadline}` : "Cycle a parametrer")}</small>
+            </div>
+          `
+        )
+        .join("");
+    }
 
     $("#report-preview").innerHTML = `
       <div class="report-cover">
@@ -4030,6 +4165,47 @@
         </p>
       </div>
     `;
+
+    const actionStatus = $("#report-action-plan-status");
+    const actionPlan = $("#report-action-plan");
+    if (actionStatus || actionPlan) {
+      const actionKpis = [
+        ...dataKpis.filter((kpi) => kpi.status === "red"),
+        ...dataKpis.filter((kpi) => kpi.status === "amber"),
+      ].slice(0, 5);
+      if (actionStatus) {
+        actionStatus.className = `status-pill ${redCount ? "red" : amberCount ? "amber" : dataKpis.length ? "green" : "gray"}`;
+        actionStatus.textContent = redCount
+          ? `${redCount} KPI rouge${redCount > 1 ? "s" : ""}`
+          : amberCount
+            ? `${amberCount} KPI orange${amberCount > 1 ? "s" : ""}`
+            : dataKpis.length
+              ? "RAS critique"
+              : "En attente Kobo";
+      }
+      if (actionPlan) {
+        actionPlan.innerHTML = actionKpis.length
+          ? actionKpis
+              .map((kpi) => {
+                const action = kpi.status === "red"
+                  ? "Action corrective obligatoire et commentaire responsable avant validation."
+                  : "Analyse preventive et suivi du prochain point de reporting.";
+                return `
+                  <article class="report-action-row status-${escapeHtml(kpi.status)}">
+                    <strong>${escapeHtml(kpi.name)}</strong>
+                    <span>${escapeHtml(action)}</span>
+                    <div class="report-action-meta">
+                      <small>Responsable: ${escapeHtml(pole.owner)}</small>
+                      <small>Echeance: ${escapeHtml(cycle.deadline)}</small>
+                      <small>Statut: ${escapeHtml(kpiStatusText(kpi.status))}</small>
+                    </div>
+                  </article>
+                `;
+              })
+              .join("")
+          : `<div class="empty-kpi-state">${dataKpis.length ? "Aucun KPI rouge ou orange a transformer en plan d'action." : "Le plan d'action sera genere apres reception des donnees Kobo."}</div>`;
+      }
+    }
 
     $("#report-workflow").innerHTML = reporting.workflow
       .map(
