@@ -236,42 +236,81 @@
           <section class="panel dashboard-focus-panel">
             <div class="panel-header">
               <div>
-                <p class="eyebrow">Pilotage performance</p>
-                <h3 id="dashboard-focus-title">Resume du pole selectionne</h3>
+                <p class="eyebrow">Controle groupe</p>
+                <h3 id="dashboard-focus-title">Salle de controle performance</h3>
+                <p>Vue consolidee de la sante globale, des alertes Kobo et des actions prioritaires.</p>
               </div>
-              <span class="status-pill gray" id="dashboard-pole-status">Selection</span>
+              <span class="status-pill gray" id="dashboard-pole-status">Groupe</span>
             </div>
             <div class="dashboard-control-grid dashboard-focus-summary" id="dashboard-control-cards"></div>
             <div class="dashboard-score-detail" id="dashboard-score-detail" hidden></div>
-            <div class="dashboard-alerts-list dashboard-alerts-strip" id="dashboard-alerts-list"></div>
           </section>
 
-          <section class="panel dashboard-kpi-table-panel">
+          <section class="panel dashboard-heatmap-panel">
             <div class="panel-header">
               <div>
-                <p class="eyebrow">Table detaillee</p>
-                <h3>Lecture complete des KPI</h3>
+                <p class="eyebrow">Carte de controle</p>
+                <h3>Carte de chaleur Pays x Pole</h3>
+                <p>Identifier immediatement les zones vertes, orange, rouges ou en attente Kobo.</p>
               </div>
-              <span class="status-pill gray" id="dashboard-kpi-table-count">0 ligne</span>
             </div>
-            <div class="table-wrap dashboard-performance-table-wrap">
-              <table class="dashboard-performance-table">
-                <thead>
-                  <tr>
-                    <th>KPI</th>
-                    <th>Periode</th>
-                    <th>Realise</th>
-                    <th>Cumul a date</th>
-                    <th>Objectif a date</th>
-                    <th>Taux realise</th>
-                    <th>Tendance</th>
-                    <th>Statut</th>
-                  </tr>
-                </thead>
-                <tbody id="dashboard-kpi-detail-table"></tbody>
-              </table>
-            </div>
+            <div class="dashboard-heatmap-wrap" id="dashboard-heatmap"></div>
           </section>
+
+          <div class="dashboard-insights-grid">
+            <section class="panel dashboard-alert-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Alertes groupe</p>
+                  <h3>Top alertes a traiter</h3>
+                </div>
+              </div>
+              <div class="dashboard-alerts-list" id="dashboard-alerts-list"></div>
+            </section>
+
+            <section class="panel dashboard-objective-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Objectifs</p>
+                  <h3>Atteinte des objectifs</h3>
+                </div>
+              </div>
+              <div class="dashboard-objective-list" id="dashboard-objective-summary"></div>
+            </section>
+
+            <section class="panel dashboard-quality-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Qualite Kobo</p>
+                  <h3>Fiabilite des donnees</h3>
+                </div>
+              </div>
+              <div class="dashboard-quality-list" id="dashboard-quality-list"></div>
+            </section>
+          </div>
+
+          <div class="dashboard-insights-grid dashboard-control-bottom">
+            <section class="panel dashboard-ranking-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Comparaison poles</p>
+                  <h3>Top / zones a risque</h3>
+                </div>
+              </div>
+              <div class="dashboard-ranking-list" id="dashboard-pole-ranking"></div>
+            </section>
+
+            <section class="panel dashboard-action-panel span-2">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Actions prioritaires</p>
+                  <h3>Plans d'action proposes</h3>
+                </div>
+                <button class="ghost-action" type="button" data-open-management="true">Ouvrir Management</button>
+              </div>
+              <div class="dashboard-actions-grid" id="dashboard-actions-list"></div>
+            </section>
+          </div>
         </section>
 
         <section class="view" id="management" aria-labelledby="view-title">

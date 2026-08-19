@@ -694,10 +694,12 @@ body[data-active-view="alerts"] .calendar-slicer {
   display: none;
 }
 
+body[data-active-view="dashboard"] .calendar-pole-filter-box,
 body[data-active-view="management"] .calendar-pole-filter-box {
   display: none;
 }
 
+body[data-active-view="dashboard"] .powerbi-filter-row,
 body[data-active-view="management"] .powerbi-filter-row {
   grid-template-columns: minmax(240px, 0.9fr) minmax(250px, 1.1fr) minmax(250px, 1.1fr);
 }

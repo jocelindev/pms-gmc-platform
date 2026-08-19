@@ -1707,17 +1707,11 @@
     const title = $("#dashboard-focus-title");
     const status = $("#dashboard-pole-status");
     if (title) {
-      title.textContent = selectedPole
-        ? `Resume performance - ${selectedPole.name}`
-        : `Resume performance - ${context.activeCountry.name}`;
+      title.textContent = `Salle de controle - ${context.activeCountry.name}`;
     }
     if (status) {
-      status.className = `status-pill ${escapeHtml(selectedPole?.rag || scope.scopeClass || "gray")}`;
-      status.textContent = selectedPole
-        ? ragLabel(selectedPole.rag)
-        : scope.hasData
-          ? ragLabel(scope.scopeClass)
-          : "En attente Kobo";
+      status.className = `status-pill ${escapeHtml(scope.scopeClass || "gray")}`;
+      status.textContent = scope.hasData ? ragLabel(scope.scopeClass) : "En attente Kobo";
     }
     const totalKpis = context.kpiRows.length;
     const redCount = scope.redCount;
@@ -1745,7 +1739,7 @@
         : `${context.visiblePoles.length} pole(s) dans le filtre`;
     const cards = [
       {
-        label: selectedPole ? "Score du pole" : "Score du filtre",
+        label: "Score groupe",
         value: hasData && Number.isFinite(Number(score)) ? score : "--",
         hint: hasData ? scopeHint : "donnees Kobo attendues",
         className: hasData ? scoreClass(score) : "gray",
@@ -1776,7 +1770,7 @@
     const ipgLabel = $("#dashboard-ipg-label");
     if (ipgScore) ipgScore.textContent = hasData ? score || "--" : "--";
     if (ipgLabel) {
-      ipgLabel.textContent = `${context.activeCountry.name} - ${context.selectedAllPoles ? "Tous les poles" : selectedPole?.name || "Pole"} - ${totalKpis} KPI visibles`;
+      ipgLabel.textContent = `${context.activeCountry.name} - Tous les poles - ${totalKpis} KPI visibles`;
     }
     target.innerHTML = cards
       .map(
@@ -1909,7 +1903,7 @@
               `
             )
             .join("")
-        : `<div class="empty-kpi-state">Aucune alerte KPI critique sur le pole selectionne.</div>`;
+      : `<div class="empty-kpi-state">Aucune alerte KPI critique sur le perimetre actif.</div>`;
       return;
     }
     target.innerHTML = rows
@@ -2716,11 +2710,15 @@
   }
 
   function renderAdvancedDashboard(state = {}) {
-    const context = getDashboardPoleContext(state);
+    const context = getDashboardContext(state);
     renderDashboardControlCards(context);
     renderDashboardScoreDetail(context, state);
     renderDashboardAlerts(context, state);
-    renderDashboardKpiTable(context);
+    renderDashboardHeatmap(context);
+    renderDashboardObjectives(context);
+    renderDashboardQuality(context, state);
+    renderDashboardRanking(context);
+    renderDashboardActions(context);
   }
 
   function renderPoleSummaryRows(selector, state) {

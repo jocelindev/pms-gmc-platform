@@ -1844,6 +1844,12 @@
         }
         return;
       }
+      const managementButton = event.target.closest("[data-open-management]");
+      if (managementButton) {
+        activateView("management");
+        showToast("Vue Management ouverte pour approfondir le controle groupe.");
+        return;
+      }
       const detailButton = event.target.closest("[data-dashboard-kpi-detail]");
       if (!detailButton) return;
       state.currentDashboardKpiKey = detailButton.dataset.dashboardKpiDetail;
