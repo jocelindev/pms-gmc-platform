@@ -1500,6 +1500,63 @@ button.dashboard-control-card {
   margin: 7px 0 4px;
 }
 
+.management-command-strip {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(320px, 1.25fr) minmax(240px, 0.85fr);
+  margin: -4px 0 16px;
+}
+
+.management-command-card {
+  background: var(--surface);
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-left: 4px solid var(--palladium-blue);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(31, 56, 100, 0.06);
+  display: grid;
+  gap: 5px;
+  min-height: 126px;
+  padding: 14px 16px;
+}
+
+.management-command-card.status-green {
+  border-left-color: var(--green-text);
+}
+
+.management-command-card.status-amber {
+  border-left-color: var(--amber-text);
+}
+
+.management-command-card.status-red {
+  border-left-color: var(--red-text);
+}
+
+.management-command-card.status-gray {
+  border-left-color: var(--muted);
+}
+
+.management-command-card span,
+.management-command-card small {
+  color: var(--muted);
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.management-command-card strong {
+  color: var(--palladium-blue);
+  font-size: 1.7rem;
+  line-height: 1.05;
+}
+
+.management-command-card p {
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
 .management-filter-stack {
   align-items: flex-end;
   display: grid;
@@ -1535,7 +1592,7 @@ button.dashboard-control-card {
 }
 
 .management-direction-score-table {
-  min-width: 1040px;
+  min-width: 1120px;
 }
 
 .management-direction-score-table td {
@@ -1548,6 +1605,16 @@ button.dashboard-control-card {
   font-size: 0.74rem;
   font-weight: 800;
   margin-top: 3px;
+}
+
+.management-rank-cell strong {
+  color: var(--palladium-blue);
+  display: block;
+  font-size: 1.05rem;
+}
+
+.management-rank-cell small {
+  text-transform: uppercase;
 }
 
 .management-direction-score-row.status-red td:first-child {
@@ -5439,6 +5506,7 @@ td small {
   .dashboard-focus-summary,
   .dashboard-alerts-strip,
   .management-summary-grid,
+  .management-command-strip,
   .management-grid,
   .management-country-grid,
   .management-objective-view,
@@ -5553,6 +5621,7 @@ td small {
   .dashboard-focus-summary,
   .dashboard-alerts-strip,
   .management-summary-grid,
+  .management-command-strip,
   .management-grid,
   .management-country-grid,
   .management-priority-row,

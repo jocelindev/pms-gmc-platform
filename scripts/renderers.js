@@ -2422,6 +2422,66 @@
       Number(quality.unmatchedObjectiveCount || 0) +
       Number(quality.missingMonthlyObjectiveCount || 0) +
       Number(quality.missingFormulaCount || 0);
+    const dataCountryNames = [
+      ...new Set(
+        dataRows
+          .map((row) => row.kpi.branch || managementResultCountry(row.result))
+          .filter(Boolean)
+          .map((country) => String(country).trim())
+      ),
+    ];
+    const scoredDirectionCount = directionScores.filter((item) => item.hasData).length;
+    const decisionMetric = topDecisionRow ? metricFromTarget(topDecisionRow.kpi) : null;
+    const commandStrip = $("#management-command-strip");
+    if (commandStrip) {
+      const decisionClass = topDecisionRow?.kpi.status || globalClass;
+      const healthLabel = dataRows.length ? ragLabel(globalClass) : "En attente Kobo";
+      const decisionTitle = topDecisionRow ? topDecisionRow.kpi.name : dataRows.length ? "Aucune urgence critique" : "Donnees attendues";
+      const decisionBody = topDecisionRow
+        ? actionRecommendation(topDecisionRow)
+        : dataRows.length
+          ? "Continuer le suivi de la periode et preparer la validation du rapport."
+          : "Synchroniser Kobo puis controler le rapprochement des trois formulaires.";
+      const coverageHint = dataRows.length
+        ? `${scoredDirectionCount} pole(s), ${dataCountryNames.length || 1} pays/filiale, ${activeDataMode.toLowerCase()}`
+        : `${context.visiblePoles.length} pole(s) visibles, donnees Kobo attendues`;
+      const commandCards = [
+        {
+          label: "Sante executive",
+          value: score === null ? "--" : `${score}/100`,
+          body: `${healthLabel} - ${scoreBreakdown}`,
+          className: globalClass,
+        },
+        {
+          label: "Decision prioritaire",
+          value: topDecisionRow ? topDecisionRow.pole.id : "Pilotage",
+          body: decisionBody,
+          detail: topDecisionRow
+            ? `${topDecisionRow.pole.name} / ${topDecisionRow.kpi.branch || context.activeCountry.name} / taux ${decisionMetric?.display || "--"}`
+            : decisionTitle,
+          className: decisionClass,
+        },
+        {
+          label: "Couverture donnees",
+          value: `${dataRows.length} KPI`,
+          body: coverageHint,
+          detail: activePeriodScope,
+          className: dataRows.length ? "green" : "gray",
+        },
+      ];
+      commandStrip.innerHTML = commandCards
+        .map(
+          (card) => `
+            <article class="management-command-card status-${escapeHtml(card.className)}">
+              <span>${escapeHtml(card.label)}</span>
+              <strong>${escapeHtml(card.value)}</strong>
+              <p>${escapeHtml(card.body)}</p>
+              <small>${escapeHtml(card.detail || "")}</small>
+            </article>
+          `
+        )
+        .join("");
+    }
     const directorBrief = $("#management-director-brief");
     if (directorBrief) {
       const goodMessage = dataRows.length
@@ -2519,7 +2579,7 @@
     if (directionScoreBody) {
       directionScoreBody.innerHTML = directionScores.length
         ? directionScores
-            .map((item) => {
+            .map((item, index) => {
               const scoreValue = Number.isFinite(Number(item.score)) ? Math.max(0, Math.min(100, Math.round(Number(item.score)))) : null;
               const scoreLabel = scoreValue === null ? "--" : `${scoreValue}/100`;
               const targetLabel = item.targetRate === null ? "--" : `${item.targetRate}%`;
@@ -2531,6 +2591,10 @@
                 : "Kobo attendu";
               return `
                 <tr class="management-direction-score-row status-${escapeHtml(item.className)}">
+                  <td class="management-rank-cell">
+                    <strong>#${escapeHtml(index + 1)}</strong>
+                    <small>${escapeHtml(item.className === "red" ? "Risque" : item.className === "amber" ? "Vigilance" : item.className === "green" ? "OK" : "Attente")}</small>
+                  </td>
                   <td>
                     <button class="management-pole-link" type="button" data-open-pole="${escapeHtml(item.pole.id)}">
                       <strong>${escapeHtml(item.pole.name)}</strong>
@@ -2565,7 +2629,7 @@
               `;
             })
             .join("")
-        : `<tr><td colspan="7">Aucune donnee Kobo calculee pour le pays et la periode selectionnes.</td></tr>`;
+        : `<tr><td colspan="8">Aucune donnee Kobo calculee pour le pays et la periode selectionnes.</td></tr>`;
     }
 
     const heatmapHead = $("#management-heatmap-head");
