@@ -852,7 +852,8 @@
     return new Set(isGroupCountry(activeCountry) && (!selectedPole || selectedPole === "Tous") ? poleIds : poleIds);
   }
 
-  function availableKoboDatesForCalendar(state = {}, calendar = {}) {
+  function availableKoboDatesForCalendar(state = {}, calendar = {}, options = {}) {
+    const sameMonthOnly = options.sameMonthOnly !== false;
     const selectedDate = parseIsoDate(calendar.selectedDate || calendar.end || calendar.start) || new Date();
     const selectedMonth = selectedDate.getMonth();
     const selectedYear = selectedDate.getFullYear();
@@ -865,7 +866,8 @@
       if (allowedPoleIds.size && item.poleId && !allowedPoleIds.has(item.poleId)) return;
       if (!isGroupCountry(activeCountry) && (!item.branch || !matchesCountryScope(item.branch, activeCountry))) return;
       const date = parseIsoDate(item.date);
-      if (!date || date.getMonth() !== selectedMonth || date.getFullYear() !== selectedYear) return;
+      if (!date) return;
+      if (sameMonthOnly && (date.getMonth() !== selectedMonth || date.getFullYear() !== selectedYear)) return;
       dates.set(item.date, date);
     });
 
@@ -879,7 +881,8 @@
       if (allowedPoleIds.size && result.poleId && !allowedPoleIds.has(result.poleId)) return;
       if (!managementResultMatchesCountry(result, activeCountry)) return;
       const date = resultCalendarDate(result);
-      if (!date || date.getMonth() !== selectedMonth || date.getFullYear() !== selectedYear) return;
+      if (!date) return;
+      if (sameMonthOnly && (date.getMonth() !== selectedMonth || date.getFullYear() !== selectedYear)) return;
       const iso = dateToIso(date);
       dates.set(iso, date);
     });
@@ -890,7 +893,7 @@
   function renderDateDropdownOptions(state = {}, calendar = {}) {
     const selectedDate = parseIsoDate(calendar.selectedDate || calendar.end || calendar.start) || new Date();
     const selectedIso = dateToIso(selectedDate);
-    const availableDates = availableKoboDatesForCalendar(state, calendar);
+    const availableDates = availableKoboDatesForCalendar(state, calendar, { sameMonthOnly: false });
 
     if (!availableDates.length) {
       return `
