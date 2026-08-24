@@ -3223,15 +3223,11 @@ def target_achievement_percent(value: float | None, target_value: float | None, 
 
 def direct_achievement_percent_from_elements(elements: list[dict]) -> float | None:
     direct_terms = (
-        "valeur realisee",
         "taux realisation",
         "taux realise",
         "taux d atteinte",
         "atteinte objectif",
         "vs target",
-        "realise kpi",
-        "valeur finale kpi",
-        "resultat kpi",
     )
     for element in elements:
         label_key = normalize_match_key(semantic_kobo_element_label(element.get("label") or ""))
@@ -4553,6 +4549,23 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 selected_labels.add(label_key)
         return selected
 
+    def reference_has_objective_for_month(record: dict, branch_key: str, period_date: dt.date) -> bool:
+        period_month = month_key_from_date(period_date)
+        key_candidates = [
+            normalize_match_key(record.get("kpiId")),
+            normalize_match_key(record.get("kpiName")),
+        ]
+        branch_candidates = [branch_key, "groupe", record.get("branchKey")]
+        for key in [candidate for candidate in key_candidates if candidate]:
+            for objective_branch_key in [candidate for candidate in branch_candidates if candidate]:
+                if objective_lookup.get((objective_branch_key, record["poleId"], key, period_month)):
+                    return True
+            if objective_by_pole_kpi_month.get((record["poleId"], key, period_month)):
+                return True
+            if objective_by_kpi_month.get((key, period_month)):
+                return True
+        return False
+
     inferred_calculation_entries: list[dict] = []
     for (branch_key, pole_id, period_date), scoped_elements in daily_elements_by_scope.items():
         sample_element = next((item.get("element") or {} for item in scoped_elements if item.get("element")), {})
@@ -4568,6 +4581,15 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 continue
             matching_elements = shared_elements_for_reference(reference, scoped_elements)
             if not matching_elements:
+                continue
+            if not reference_has_objective_for_month(reference, branch_key, period_date):
+                continue
+            inferred_value, _inferred_method, _inferred_warnings = evaluate_kpi_formula(
+                reference.get("formula") or "",
+                matching_elements,
+                unit=reference.get("unit", ""),
+            )
+            if inferred_value is None:
                 continue
             for element in matching_elements:
                 add_calculation_group(
