@@ -150,6 +150,26 @@
       .trim();
   }
 
+  function dataNatureKey(item = {}) {
+    const normalized = normalizeLookup(item.dataNature || item.data_nature || item.nature || "Reel");
+    if (["test", "donnee test", "donnees test"].includes(normalized)) return "test";
+    if (["mixte", "mixed"].includes(normalized)) return "mixed";
+    return "real";
+  }
+
+  function itemMatchesDataMode(item = {}, mode = "all") {
+    const selectedMode = normalizeLookup(mode || "all");
+    if (!selectedMode || selectedMode === "all" || selectedMode === "toutes") return true;
+    const nature = dataNatureKey(item);
+    if (selectedMode === "test") return nature === "test" || nature === "mixed";
+    if (selectedMode === "real" || selectedMode === "reel" || selectedMode === "reelles") return nature === "real";
+    return true;
+  }
+
+  function filterItemsByDataMode(items = [], mode = "all") {
+    return (Array.isArray(items) ? items : []).filter((item) => itemMatchesDataMode(item, mode));
+  }
+
   function resolveFormulaPoleId(direction) {
     const normalized = normalizeLookup(direction).toUpperCase();
     const aliases = {
@@ -389,7 +409,7 @@
     const allowedPoleIds = calendarDateScopePoleIds();
     const activeCountry = ensureAllowedCountry(state.calendarBranchFilter);
     const dates = new Map();
-    const dailyDates = Array.isArray(state.kpiDailyDates) ? state.kpiDailyDates : [];
+    const dailyDates = filterItemsByDataMode(state.kpiDailyDates, state.dataModeFilter);
 
     dailyDates.forEach((item) => {
       if (allowedPoleIds.size && item.poleId && !allowedPoleIds.has(item.poleId)) return;
@@ -408,7 +428,7 @@
         .map(([iso]) => iso);
     }
 
-    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const results = filterItemsByDataMode(state.kpiCalculationResults, state.dataModeFilter);
 
     results.forEach((result) => {
       if (allowedPoleIds.size && result.poleId && !allowedPoleIds.has(result.poleId)) return;
@@ -444,22 +464,25 @@
 
   function latestAvailableDataDateIso() {
     const candidates = [];
-    const dailyDates = Array.isArray(state.kpiDailyDates) ? state.kpiDailyDates : [];
+    const dailyDates = filterItemsByDataMode(state.kpiDailyDates, state.dataModeFilter);
     dailyDates.forEach((item) => {
       if (fromIsoDate(item.date)) candidates.push(item.date);
     });
 
-    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const results = filterItemsByDataMode(state.kpiCalculationResults, state.dataModeFilter);
     results.forEach((result) => {
       const iso = resultCalendarDateIso(result);
       if (iso) candidates.push(iso);
     });
 
-    const monthlyObjectives = Array.isArray(state.kpiCalculationQuality?.monthlyObjectives)
-      ? state.kpiCalculationQuality.monthlyObjectives
-      : Array.isArray(state.kpiObjectives)
-        ? state.kpiObjectives
-        : [];
+    const monthlyObjectives = filterItemsByDataMode(
+      Array.isArray(state.kpiCalculationQuality?.monthlyObjectives)
+        ? state.kpiCalculationQuality.monthlyObjectives
+        : Array.isArray(state.kpiObjectives)
+          ? state.kpiObjectives
+          : [],
+      state.dataModeFilter
+    );
     monthlyObjectives.forEach((objective) => {
       const iso = objectiveAvailableDateIso(objective);
       if (iso) candidates.push(iso);
@@ -477,11 +500,17 @@
   }
 
   function ensureCalendarDateFromAvailableData() {
-    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
-    const hasDailyDates = Array.isArray(state.kpiDailyDates) && state.kpiDailyDates.length;
-    const hasMonthlyObjectives =
-      (Array.isArray(state.kpiCalculationQuality?.monthlyObjectives) && state.kpiCalculationQuality.monthlyObjectives.length) ||
-      (Array.isArray(state.kpiObjectives) && state.kpiObjectives.length);
+    const results = filterItemsByDataMode(state.kpiCalculationResults, state.dataModeFilter);
+    const hasDailyDates = filterItemsByDataMode(state.kpiDailyDates, state.dataModeFilter).length;
+    const monthlyObjectiveRows = filterItemsByDataMode(
+      Array.isArray(state.kpiCalculationQuality?.monthlyObjectives)
+        ? state.kpiCalculationQuality.monthlyObjectives
+        : Array.isArray(state.kpiObjectives)
+          ? state.kpiObjectives
+          : [],
+      state.dataModeFilter
+    );
+    const hasMonthlyObjectives = monthlyObjectiveRows.length;
     if (!results.length && !hasDailyDates && !hasMonthlyObjectives) {
       state.calendarDateDropdownOpen = false;
       return false;
@@ -785,10 +814,13 @@
 
   function applyCalculatedKpisToReporting() {
     resetReportingToBaseline();
-    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
-    const referenceKpis = Array.isArray(state.kpiCalculationQuality?.referenceKpis)
-      ? state.kpiCalculationQuality.referenceKpis
-      : [];
+    const results = filterItemsByDataMode(state.kpiCalculationResults, state.dataModeFilter);
+    const referenceKpis = filterItemsByDataMode(
+      Array.isArray(state.kpiCalculationQuality?.referenceKpis)
+        ? state.kpiCalculationQuality.referenceKpis
+        : [],
+      state.dataModeFilter
+    );
     ensureCalendarDateFromAvailableData();
     if (!results.length && !referenceKpis.length) return;
 
@@ -826,6 +858,7 @@
         vsTargetClass: result.vsTargetClass,
         performanceDirection: result.performanceDirection || "",
         status: result.status,
+        dataNature: result.dataNature || "Reel",
       });
       historyByKpi.set(key, history);
     });
@@ -863,6 +896,7 @@
           formula: kpi.formula,
           performanceDirection: kpi.performanceDirection || "",
           method: kpi.method || "Donnees de calcul attendues",
+          dataNature: kpi.dataNature || "Reel",
           trendHistory: historyByKpi.get(kpiHistoryKey(kpi)) || [],
         });
       });
@@ -908,6 +942,7 @@
         performanceDirection: result.performanceDirection || "",
         method: result.method,
         elementsCount: result.elementsCount,
+        dataNature: result.dataNature || "Reel",
         trendHistory: scopedHistory,
       });
     });
@@ -940,6 +975,7 @@
     calendarPoleFilter: "Tous",
     calendarBranchFilter: "Groupe",
     calendarStatusFilter: "Tous",
+    dataModeFilter: "all",
     platformUsers: buildSeedUsers(),
     platformAccessRoles: [
       {
@@ -2204,7 +2240,7 @@
     renderPoleMonitor(state);
     renderReportControls(state);
     renderReportWorkspace(state);
-    renderKoboTable("", state.koboSubmissions, state.calendarBranchFilter);
+    renderKoboTable("", filterItemsByDataMode(state.koboSubmissions, state.dataModeFilter), state.calendarBranchFilter);
     if (toastMessage) showToast(toastMessage.replace(countryValue || "Groupe", state.calendarBranchFilter));
   }
 
@@ -2228,6 +2264,7 @@
     const branchFilter = $("#calendar-branch-filter");
     const cycleFilter = $("#calendar-cycle-filter");
     const statusFilter = $("#calendar-status-filter");
+    const dataModeFilter = $("#data-mode-filter");
 
     function scrollActiveDateIntoView() {
       const menu = $("#calendar-date-menu");
@@ -2355,6 +2392,24 @@
           ? "Tous les statuts sont visibles."
           : `Statut ${statusFilter.value.toLowerCase()} selectionne.`
       );
+    });
+
+    dataModeFilter?.addEventListener("change", () => {
+      state.dataModeFilter = dataModeFilter.value || "all";
+      ensureCalendarDateFromAvailableData();
+      applyCalculatedKpisToReporting();
+      renderCalendarSlicer(state);
+      renderCountryDashboard(state);
+      renderAdvancedDashboard(state);
+      renderManagementDashboard(state);
+      renderPoleSummaryTables(state);
+      renderPoleControls(state);
+      renderPoleMonitor(state);
+      renderReportControls(state);
+      renderReportWorkspace(state);
+      renderKoboTable("", filterItemsByDataMode(state.koboSubmissions, state.dataModeFilter), state.calendarBranchFilter);
+      const labels = { all: "toutes les donnees", real: "donnees reelles", test: "donnees test" };
+      showToast(`Mode donnees applique: ${labels[state.dataModeFilter] || "toutes les donnees"}.`);
     });
 
     document.addEventListener("click", (event) => {

@@ -988,7 +988,7 @@ body[data-active-view="management"] .powerbi-filter-row {
   align-items: end;
   display: grid;
   gap: 9px;
-  grid-template-columns: repeat(2, minmax(220px, 0.9fr)) minmax(250px, 1.1fr) minmax(250px, 1.1fr);
+  grid-template-columns: repeat(2, minmax(210px, 0.85fr)) minmax(170px, 0.65fr) minmax(230px, 1fr) minmax(230px, 1fr);
 }
 
 .powerbi-filter-box {
@@ -999,6 +999,10 @@ body[data-active-view="management"] .powerbi-filter-row {
   gap: 7px;
   min-height: 70px;
   padding: 11px 20px 8px;
+}
+
+.powerbi-filter-box.compact-filter-box {
+  min-width: 150px;
 }
 
 .powerbi-filter-box select {

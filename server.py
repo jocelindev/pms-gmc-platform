@@ -677,6 +677,7 @@ def ensure_kpi_daily_data_schema(conn: sqlite3.Connection) -> bool:
           source_submission_uid TEXT NOT NULL,
           submitted_at TEXT,
           collector TEXT,
+          data_nature TEXT NOT NULL DEFAULT 'Reel',
           raw_payload_json TEXT,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -688,6 +689,9 @@ def ensure_kpi_daily_data_schema(conn: sqlite3.Connection) -> bool:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_date ON kpi_daily_data(data_date)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_scope ON kpi_daily_data(pole_id, kpi_key, data_date)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_source ON kpi_daily_data(source_form_uid, source_submission_uid)")
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(kpi_daily_data)").fetchall()}
+    if "data_nature" not in columns:
+        conn.execute("ALTER TABLE kpi_daily_data ADD COLUMN data_nature TEXT NOT NULL DEFAULT 'Reel'")
     return True
 
 
@@ -1051,6 +1055,7 @@ def objective_record_to_front(record: dict, pole_names: dict[str, str] | None = 
         "validation": record.get("validation") or "A valider",
         "documentStatus": record.get("documentStatus") or "Objectif Kobo",
         "attention": record.get("attention") or "",
+        "dataNature": record.get("dataNature") or "Reel",
         "sourceServer": record.get("sourceServer") or "",
         "sourceForm": record.get("sourceForm") or "",
         "sourceFields": {
@@ -2899,6 +2904,55 @@ def text_or_empty(value) -> str:
     return str(value).strip()
 
 
+def kobo_payload_values(value) -> list[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, dict):
+        values: list[str] = []
+        for nested_value in value.values():
+            values.extend(kobo_payload_values(nested_value))
+        return values
+    if isinstance(value, list):
+        values: list[str] = []
+        for nested_value in value:
+            values.extend(kobo_payload_values(nested_value))
+        return values
+    return [str(value)]
+
+
+def kobo_data_nature_from_payload(payload: dict | None, *extra_values) -> str:
+    values = kobo_payload_values(payload or {})
+    values.extend(text_or_empty(value) for value in extra_values if text_or_empty(value))
+    normalized_blob = normalize_match_key(" ".join(values))
+    if not normalized_blob:
+        return "Reel"
+
+    test_patterns = (
+        r"\bdonnee\s+test\b",
+        r"\bdonnees\s+test\b",
+        r"\bjeu\s+de\s+donnees\s+test\b",
+        r"\bsoumission\s+test\b",
+        r"\bexemple\s+test\b",
+        r"\btest\s+complet\b",
+        r"\btest\s+fictif\b",
+        r"\bfictif\b",
+        r"\bcodex\b",
+    )
+    if any(re.search(pattern, normalized_blob) for pattern in test_patterns):
+        return "Test"
+    return "Reel"
+
+
+def merge_data_nature(current: str = "", incoming: str = "") -> str:
+    current = text_or_empty(current) or "Reel"
+    incoming = text_or_empty(incoming) or "Reel"
+    if current == incoming:
+        return current
+    if "Mixte" in {current, incoming}:
+        return "Mixte"
+    return "Mixte"
+
+
 PERIOD_MONTH_INDEX = {
     "janvier": 1,
     "janv": 1,
@@ -3595,6 +3649,7 @@ def upsert_kpi_daily_data(
     source_submission_uid: str,
     submitted_at: str,
     collector: str,
+    data_nature: str,
     raw_payload_json: str,
 ) -> None:
     element_label = semantic_kobo_element_label(element_label or "valeur")
@@ -3618,10 +3673,11 @@ def upsert_kpi_daily_data(
           source_submission_uid,
           submitted_at,
           collector,
+          data_nature,
           raw_payload_json,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(data_date, pole_id, branch, kpi_key, element_key, source_form_uid, source_submission_uid)
         DO UPDATE SET
           kpi_raw = excluded.kpi_raw,
@@ -3631,6 +3687,7 @@ def upsert_kpi_daily_data(
           validation_status = excluded.validation_status,
           submitted_at = excluded.submitted_at,
           collector = excluded.collector,
+          data_nature = excluded.data_nature,
           raw_payload_json = excluded.raw_payload_json,
           updated_at = CURRENT_TIMESTAMP
         """,
@@ -3649,6 +3706,7 @@ def upsert_kpi_daily_data(
             source_submission_uid,
             submitted_at,
             collector,
+            text_or_empty(data_nature or "Reel") or "Reel",
             raw_payload_json,
         ),
     )
@@ -3689,6 +3747,7 @@ def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source
         )
         status_raw = mapped_submission_value(objective_source, payload, "documentStatus", ["statut_objectif", "statut_documentaire", "statut"])
         attention_raw = mapped_submission_value(objective_source, payload, "attention", ["commentaires", "points_d_attention", "observation"])
+        data_nature = kobo_data_nature_from_payload(payload, row["collector"], source_raw, attention_raw)
 
         pole_id = resolve_catalog_pole_id(conn, pole_raw or row["pole_id"])
         kpi_key = normalize_match_key(kpi_raw or row["kpi_name"])
@@ -3723,6 +3782,7 @@ def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source
                 "validation": text_or_empty(validation_raw or row["validation_status"]),
                 "documentStatus": text_or_empty(status_raw or "Objectif Kobo"),
                 "attention": text_or_empty(attention_raw),
+                "dataNature": data_nature,
                 "sourceForm": objective_source["formId"],
                 "sourceServer": objective_source.get("serverUrl") or "",
             }
@@ -3776,9 +3836,10 @@ def list_kpi_daily_dates(conn: sqlite3.Connection) -> list[dict]:
           pole_id,
           branch,
           kpi_key,
+          COALESCE(NULLIF(data_nature, ''), 'Reel') AS data_nature,
           COUNT(*) AS rows_count
         FROM kpi_daily_data
-        GROUP BY data_date, pole_id, branch, kpi_key
+        GROUP BY data_date, pole_id, branch, kpi_key, COALESCE(NULLIF(data_nature, ''), 'Reel')
         ORDER BY data_date DESC, pole_id, kpi_key
         LIMIT 1000
         """
@@ -3789,6 +3850,7 @@ def list_kpi_daily_dates(conn: sqlite3.Connection) -> list[dict]:
             "poleId": row["pole_id"],
             "branch": row["branch"] or "Groupe",
             "kpiKey": row["kpi_key"],
+            "dataNature": row["data_nature"] or "Reel",
             "rowsCount": row["rows_count"],
         }
         for row in rows
@@ -3807,6 +3869,7 @@ def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
           s.period,
           s.validation_status,
           s.created_at,
+          s.raw_payload_json,
           p.name AS pole_name,
           f.title AS form_title,
           f.source_type
@@ -3823,6 +3886,7 @@ def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
         if source_role not in {"referentielKpi", "objectifsMensuels", "donneesCalcul"}:
             continue
         status = row["validation_status"] or "A valider"
+        payload = parse_raw_payload(row)
         submissions.append(
             {
                 "form": row["form_title"] or row["form_uid"],
@@ -3835,6 +3899,7 @@ def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
                 "className": status_class_from_validation(status),
                 "period": row["period"] or "",
                 "sourceRole": source_role,
+                "dataNature": kobo_data_nature_from_payload(payload, row["collector"], row["kpi_name"], row["period"]),
             }
         )
     return submissions
@@ -3878,6 +3943,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         "blockingAnomalyCount": 0,
         "warnings": [],
         "proposals": [],
+        "dataNatureCounts": {"Reel": 0, "Test": 0, "Mixte": 0},
+        "dailyDataNatureCounts": {},
     }
 
     anomaly_sequence = 0
@@ -4127,6 +4194,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             ),
             "validation": text_or_empty(validation_raw or row["validation_status"] or "A valider"),
             "documentStatus": text_or_empty(document_status_raw or "A preciser"),
+            "dataNature": kobo_data_nature_from_payload(payload, row["collector"], row["kpi_name"], row["period"]),
         }
         references.append(record)
         if not record["formula"]:
@@ -4238,10 +4306,12 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "periodStart": period_start,
                 "periodEnd": period_end,
                 "periodType": period_type,
+                "dataNature": text_or_empty(element.get("dataNature")) or "Reel",
                 "elements": [],
             },
         )
         group["elements"].append(element)
+        group["dataNature"] = merge_data_nature(group.get("dataNature"), element.get("dataNature"))
 
     def calculation_submission_elements(payload: dict, row: sqlite3.Row) -> list[dict]:
         elements = []
@@ -4347,6 +4417,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "validation",
             ["validation_hierarchique", "validation_status"],
         )
+        data_nature = kobo_data_nature_from_payload(payload, row["collector"], row["kpi_name"], row["period"])
 
         kpi_key = normalize_match_key(kpi_raw or row["kpi_name"])
         period_label = text_or_empty(period_raw or row["period"] or "Periode non renseignee")
@@ -4413,6 +4484,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "value": element.get("value"),
                 "branch": branch,
                 "validation": text_or_empty(validation_raw or row["validation_status"]),
+                "dataNature": data_nature,
             }
             for element in numeric_elements
         ]
@@ -4432,6 +4504,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     source_submission_uid=text_or_empty(row["submission_uid"] or str(row["id"])),
                     submitted_at=text_or_empty(row["submitted_at"]),
                     collector=text_or_empty(row["collector"]),
+                    data_nature=data_nature,
                     raw_payload_json=text_or_empty(row["raw_payload_json"]),
                 )
             continue
@@ -4472,7 +4545,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
               element_label,
               raw_value,
               numeric_value,
-              validation_status
+              validation_status,
+              data_nature
             FROM kpi_daily_data
             WHERE source_form_uid = ?
             ORDER BY data_date, pole_id, kpi_key, element_key
@@ -4490,6 +4564,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "value": row["raw_value"] if row["raw_value"] not in (None, "") else row["numeric_value"],
             "branch": branch,
             "validation": text_or_empty(row["validation_status"]),
+            "dataNature": text_or_empty(row["data_nature"] or "Reel") or "Reel",
         }
         calculation_entries.append(
             {
@@ -4744,6 +4819,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     "validation": record.get("validation", ""),
                     "documentStatus": record.get("documentStatus", ""),
                     "validationClass": status_class_from_validation(record.get("validation", "")),
+                    "dataNature": record.get("dataNature") or "Reel",
                     "status": "gray",
                     "valueLabel": "--",
                     "method": "Reference Kobo, donnees de calcul attendues",
@@ -4989,6 +5065,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "reportingFrequency": reference.get("reportingFrequency", ""),
             "status": status,
             "trend": "Calcul Kobo",
+            "dataNature": group.get("dataNature") or "Reel",
             "source": calculation_source["formId"] if calculation_source else reference_source["formId"],
             "objectiveSource": objective.get("sourceForm") if objective else "",
             "formula": reference["formula"] or "Formule a completer",
@@ -5014,12 +5091,32 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     exact_results = [result for result in results if result.get("periodType") != "monthToDate"]
     quality["calculatedCount"] = len(exact_results)
     quality["monthToDateCount"] = len(results) - len(exact_results)
+    data_nature_counts = {"Reel": 0, "Test": 0, "Mixte": 0}
+    for result in exact_results:
+        nature = text_or_empty(result.get("dataNature")) or "Reel"
+        if nature not in data_nature_counts:
+            nature = "Reel"
+        data_nature_counts[nature] += 1
+    quality["dataNatureCounts"] = data_nature_counts
     if calculation_source:
         row = conn.execute(
             "SELECT COUNT(*) AS daily_count FROM kpi_daily_data WHERE source_form_uid = ?",
             (calculation_source["formId"],),
         ).fetchone()
         quality["dailyDataRows"] = int(row["daily_count"] if row else 0)
+        rows = conn.execute(
+            """
+            SELECT COALESCE(NULLIF(data_nature, ''), 'Reel') AS data_nature, COUNT(*) AS row_count
+            FROM kpi_daily_data
+            WHERE source_form_uid = ?
+            GROUP BY COALESCE(NULLIF(data_nature, ''), 'Reel')
+            """,
+            (calculation_source["formId"],),
+        ).fetchall()
+        quality["dailyDataNatureCounts"] = {
+            text_or_empty(row["data_nature"] or "Reel") or "Reel": int(row["row_count"] or 0)
+            for row in rows
+        }
     if quality["calculationGroups"]:
         quality["matchRate"] = round((quality["matchedCalculationGroups"] / quality["calculationGroups"]) * 100)
         quality["calculationRate"] = round((quality["calculatedCount"] / quality["calculationGroups"]) * 100)

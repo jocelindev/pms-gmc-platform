@@ -35,6 +35,34 @@
       .trim();
   }
 
+  function dataNatureKey(item = {}) {
+    const normalized = normalizeLookup(item.dataNature || item.data_nature || item.nature || "Reel");
+    if (["test", "donnee test", "donnees test"].includes(normalized)) return "test";
+    if (["mixte", "mixed"].includes(normalized)) return "mixed";
+    return "real";
+  }
+
+  function itemMatchesDataMode(item = {}, mode = "all") {
+    const selectedMode = normalizeLookup(mode || "all");
+    if (!selectedMode || selectedMode === "all" || selectedMode === "toutes") return true;
+    const nature = dataNatureKey(item);
+    if (selectedMode === "test") return nature === "test" || nature === "mixed";
+    if (selectedMode === "real" || selectedMode === "reel" || selectedMode === "reelles") return nature === "real";
+    return true;
+  }
+
+  function filterItemsByDataMode(items = [], mode = "all") {
+    return (Array.isArray(items) ? items : []).filter((item) => itemMatchesDataMode(item, mode));
+  }
+
+  function stateKpiResults(state = {}) {
+    return filterItemsByDataMode(state.kpiCalculationResults, state.dataModeFilter);
+  }
+
+  function stateDailyDates(state = {}) {
+    return filterItemsByDataMode(state.kpiDailyDates, state.dataModeFilter);
+  }
+
   function getCountryOptions() {
     const countries = Array.isArray(PMS_DATA.countries) ? PMS_DATA.countries : [];
     if (countries.length) return countries;
@@ -860,7 +888,7 @@
     const allowedPoleIds = getCalendarDateScopePoleIds(state);
     const activeCountry = getActiveCountry(state);
     const dates = new Map();
-    const dailyDates = Array.isArray(state.kpiDailyDates) ? state.kpiDailyDates : [];
+    const dailyDates = stateDailyDates(state);
 
     dailyDates.forEach((item) => {
       if (allowedPoleIds.size && item.poleId && !allowedPoleIds.has(item.poleId)) return;
@@ -875,7 +903,7 @@
       return [...dates.values()].sort((left, right) => right.getTime() - left.getTime());
     }
 
-    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const results = stateKpiResults(state);
 
     results.forEach((result) => {
       if (allowedPoleIds.size && result.poleId && !allowedPoleIds.has(result.poleId)) return;
@@ -943,6 +971,7 @@
     const branchFilter = $("#calendar-branch-filter");
     const cycleFilter = $("#calendar-cycle-filter");
     const statusFilter = $("#calendar-status-filter");
+    const dataModeFilter = $("#data-mode-filter");
 
     if (monthTitle) {
       monthTitle.textContent = new Date(viewYear, viewMonth, 1).toLocaleDateString("fr-FR", {
@@ -1038,6 +1067,10 @@
 
     if (statusFilter) {
       statusFilter.value = state.calendarStatusFilter || "Tous";
+    }
+
+    if (dataModeFilter) {
+      dataModeFilter.value = state.dataModeFilter || "all";
     }
 
     if (!grid) return;
@@ -1561,7 +1594,7 @@
   function managementRowsFromResults(state = {}, context = {}) {
     const poleById = new Map(context.visiblePoles.map((pole) => [pole.id, pole]));
     const activeCountries = context.isGroup ? context.visibleCountries : [context.activeCountry];
-    const results = (Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [])
+    const results = stateKpiResults(state)
       .filter(managementResultHasValue)
       .filter((result) => poleById.has(result.poleId))
       .filter((result) => {
@@ -1674,7 +1707,7 @@
     if (!poleAvailableForCountry(pole, country)) {
       return { hasData: false, score: null, className: "gray", status: "gray", total: 0, label: "Hors scope" };
     }
-    const cellResults = (Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [])
+    const cellResults = stateKpiResults(state)
       .filter(managementResultHasValue)
       .filter((result) => result.poleId === pole.id)
       .filter((result) => managementResultMatchesCountry(result, country));
@@ -2008,7 +2041,21 @@
     const target = $("#dashboard-quality-list");
     if (!target) return;
     const activeCountry = context.activeCountry;
-    const submissions = filterRowsByCountry(state.koboSubmissions || [], activeCountry);
+    const submissions = filterRowsByCountry(filterItemsByDataMode(state.koboSubmissions || [], state.dataModeFilter), activeCountry);
+    const kpiNatureCounts = scopedKpiDataRows(context.kpiRows).reduce(
+      (counts, row) => {
+        const nature = dataNatureKey(row.kpi || {});
+        counts[nature] = (counts[nature] || 0) + 1;
+        return counts;
+      },
+      { real: 0, test: 0, mixed: 0 }
+    );
+    const dataModeLabels = {
+      all: "Toutes les donnees",
+      real: "Donnees reelles",
+      test: "Donnees test",
+    };
+    const activeDataMode = dataModeLabels[state.dataModeFilter || "all"] || "Toutes les donnees";
     const rows = [...context.visiblePoles].filter(hasPoleData)
       .sort((left, right) => Number(right.lateSubmissions || 0) - Number(left.lateSubmissions || 0) || left.quality - right.quality)
       .slice(0, 5);
@@ -2016,6 +2063,10 @@
       <div class="quality-summary-line">
         <strong>${escapeHtml(submissions.length)}</strong>
         <span>soumission(s) Kobo visibles - ${escapeHtml(activeCountry.name)}</span>
+      </div>
+      <div class="quality-summary-line">
+        <strong>${escapeHtml(activeDataMode)}</strong>
+        <span>${escapeHtml(kpiNatureCounts.real || 0)} reel(s) / ${escapeHtml(kpiNatureCounts.test || 0)} test / ${escapeHtml(kpiNatureCounts.mixed || 0)} mixte(s)</span>
       </div>
       ${rows
         .map(
@@ -2278,6 +2329,12 @@
     const globalClass = !dataRows.length ? "gray" : redRows.length ? "red" : amberRows.length ? "amber" : score === null ? "gray" : scoreClass(score);
     const activeScope = context.isGroup ? "Groupe consolide" : context.activeCountry.name;
     const activePeriodScope = state.calendar?.label || calendarPeriodLabel(state.calendar || {});
+    const dataModeLabels = {
+      all: "Toutes donnees",
+      real: "Donnees reelles",
+      test: "Donnees test",
+    };
+    const activeDataMode = dataModeLabels[state.dataModeFilter || "all"] || "Toutes donnees";
     const activeDataScope = dataRows.length
       ? `${dataRows.length} KPI Kobo calcule${dataRows.length > 1 ? "s" : ""}`
       : "Aucune donnee Kobo calculee";
@@ -2303,7 +2360,7 @@
     }
     const filterScope = $("#management-filter-scope");
     if (filterScope) {
-      filterScope.textContent = `${activeScope} | ${activePeriodScope} | ${activeDataScope}`;
+      filterScope.textContent = `${activeScope} | ${activePeriodScope} | ${activeDataMode} | ${activeDataScope}`;
     }
 
     const summary = $("#management-summary-cards");
@@ -2930,8 +2987,8 @@
   function renderKoboPipeline(state = {}) {
     const container = $("#kobo-pipeline");
     if (!container) return;
-    const submissions = Array.isArray(state.koboSubmissions) ? state.koboSubmissions : [];
-    const calculated = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const submissions = filterItemsByDataMode(state.koboSubmissions, state.dataModeFilter);
+    const calculated = stateKpiResults(state);
     const referenceCount = Number(state.kpiCalculationQuality?.referenceCount || 0);
     const validationCount = Array.isArray(state.validationQueue) ? state.validationQueue.length : 0;
     const reportsCount = Array.isArray(state.reportHistory) ? state.reportHistory.length : 0;
@@ -3132,7 +3189,7 @@
   function renderHourChart(state = {}) {
     const target = $("#hour-chart");
     if (!target) return;
-    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const results = stateKpiResults(state);
     const hourlyResults = results.filter((item) => normalizeLookup(item.collectionFrequency || item.reportingFrequency || "").includes("horaire"));
     if (!hourlyResults.length) {
       target.innerHTML = `<div class="empty-kpi-state">Analyse horaire disponible apres collecte horaire Kobo.</div>`;
@@ -3177,7 +3234,7 @@
   function renderTimeHeatmap(state = {}) {
     const target = $("#time-heatmap");
     if (!target) return;
-    const dates = Array.isArray(state.kpiDailyDates) ? state.kpiDailyDates : [];
+    const dates = stateDailyDates(state);
     if (!dates.length) {
       target.innerHTML = `<div class="empty-kpi-state">La heatmap temps sera disponible apres reception de donnees journalieres Kobo.</div>`;
       return;
@@ -3293,7 +3350,7 @@
     const panel = $("#kpi-engine-panel");
     if (!panel) return;
     const quality = state.kpiCalculationQuality || {};
-    const results = Array.isArray(state.kpiCalculationResults) ? state.kpiCalculationResults : [];
+    const results = stateKpiResults(state);
     const activeCountry = getActiveCountry(state);
     const countryResults = filterRowsByCountry(results, activeCountry);
     const status = $("#kpi-engine-status");
@@ -4641,15 +4698,16 @@
         : [];
     const correctionKey = (...items) => items.map((item) => normalizeLookup(item)).join("|");
     const quality = state.kpiCalculationQuality || {};
-    const referenceKpis = Array.isArray(quality.referenceKpis) ? quality.referenceKpis : [];
-    const monthlyObjectives = Array.isArray(quality.monthlyObjectives)
-      ? quality.monthlyObjectives
-      : Array.isArray(state.kpiObjectives)
-        ? state.kpiObjectives
-        : [];
-    const calculationResults = Array.isArray(state.kpiCalculationResults)
-      ? state.kpiCalculationResults.filter((item) => item.periodType !== "monthToDate")
-      : [];
+    const referenceKpis = filterItemsByDataMode(Array.isArray(quality.referenceKpis) ? quality.referenceKpis : [], state.dataModeFilter);
+    const monthlyObjectives = filterItemsByDataMode(
+      Array.isArray(quality.monthlyObjectives)
+        ? quality.monthlyObjectives
+        : Array.isArray(state.kpiObjectives)
+          ? state.kpiObjectives
+          : [],
+      state.dataModeFilter
+    );
+    const calculationResults = stateKpiResults(state).filter((item) => item.periodType !== "monthToDate");
     const referenceByKpi = new Map();
     referenceKpis.forEach((kpi) => {
       const kpiId = kpi.kpiId || kpi.catalogId || kpi.id || kpi.name;
@@ -5384,7 +5442,7 @@
     renderPoleControls(state);
     renderPoleMonitor(state);
     renderReportCalendar(state);
-    renderKoboTable("", state.koboSubmissions, state.calendarBranchFilter);
+    renderKoboTable("", filterItemsByDataMode(state.koboSubmissions, state.dataModeFilter), state.calendarBranchFilter);
     renderCollectionForms();
     renderMethodologyControls();
     renderKoboPipeline(state);
