@@ -24,7 +24,7 @@ def ensure_database(db_path: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Demarre PMS GMC avec initialisation de base si necessaire.")
+    parser = argparse.ArgumentParser(description="Demarre Palladium Africa Control Tower avec initialisation de base si necessaire.")
     parser.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     parser.add_argument("--port", default=os.environ.get("PORT", "5184"))
     parser.add_argument("--db", default=os.environ.get("PMS_DB_PATH", str(DEFAULT_DB_PATH)))

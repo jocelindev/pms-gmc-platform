@@ -3099,7 +3099,7 @@
         className: referenceCount ? "green" : "gray",
       },
       {
-        title: "Calcul PMS",
+        title: "Calcul plateforme",
         detail: "Application des formules et seuils RAG du catalogue.",
         count: calculated.length,
         status: calculated.length ? "Calcule" : "En attente",

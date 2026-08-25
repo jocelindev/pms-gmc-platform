@@ -1218,7 +1218,7 @@
       mergeDatabasePayload(payload);
       return true;
     } catch (error) {
-      console.warn("Base PMS indisponible, mode local active.", error);
+      console.warn("Base plateforme indisponible, mode local active.", error);
       state.databaseConnected = false;
       return false;
     }
@@ -1379,10 +1379,10 @@
       return "Identifiant introuvable. Verifiez l'email, le nom utilisateur ou demandez la creation du compte.";
     }
     if (lowerMessage.includes("mot de passe incorrect")) {
-      return "Mot de passe incorrect. Verifiez la saisie ou demandez une reinitialisation a l'administrateur PMS.";
+      return "Mot de passe incorrect. Verifiez la saisie ou demandez une reinitialisation a l'administrateur Control Tower.";
     }
     if (lowerMessage.includes("inactif")) {
-      return "Compte inactif. Contactez l'administrateur PMS pour reactiver l'acces.";
+      return "Compte inactif. Contactez l'administrateur Control Tower pour reactiver l'acces.";
     }
     if (lowerMessage.includes("failed to fetch") || lowerMessage.includes("load failed")) {
       return "Serveur indisponible pour le moment. Patientez quelques secondes puis reessayez.";
@@ -1610,7 +1610,7 @@
 
     if (forgotLink) {
       forgotLink.addEventListener("click", () => {
-        setLoginFeedback("Pour reinitialiser votre mot de passe, contactez l'administrateur PMS.", "info");
+        setLoginFeedback("Pour reinitialiser votre mot de passe, contactez l'administrateur Control Tower.", "info");
       });
     }
 
@@ -1692,7 +1692,7 @@
     document.querySelector(`#${view}`)?.classList.add("active");
     document.body.dataset.activeView = view;
     document.body.classList.toggle("dashboard-mode", view === "dashboard");
-    $("#view-title").textContent = viewTitles[view] || "PMS GMC Group";
+    $("#view-title").textContent = viewTitles[view] || "Palladium Africa Control Tower";
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -2091,7 +2091,7 @@
       mode: "Fichier charge",
       name: file.name,
       origin: `${formType} - ${formatBytes(file.size)}`,
-      detail: fields.length ? "Formulaire charge localement et pret pour mapping PMS." : "Formulaire charge, mais aucun champ exploitable n'a ete detecte.",
+      detail: fields.length ? "Formulaire charge localement et pret pour mapping plateforme." : "Formulaire charge, mais aucun champ exploitable n'a ete detecte.",
       status: fields.length ? "Charge" : "A verifier",
       statusClass: fields.length ? "green" : "amber",
       fields,

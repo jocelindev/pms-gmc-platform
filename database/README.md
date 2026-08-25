@@ -1,6 +1,6 @@
-# Base de donnees PMS GMC Group
+# Base de donnees Palladium Africa Control Tower
 
-Cette base SQLite sert de premiere couche de persistance pour la plateforme PMS.
+Cette base SQLite sert de premiere couche de persistance pour Palladium Africa Control Tower.
 
 ## Fichiers
 

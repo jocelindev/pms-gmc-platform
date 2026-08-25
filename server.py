@@ -814,7 +814,7 @@ def ensure_permission(conn: sqlite3.Connection, code: str) -> int:
         VALUES (?, ?, ?)
         ON CONFLICT(code) DO UPDATE SET label = excluded.label
         """,
-        (code, label, f"Droit {label.lower()} dans la plateforme PMS."),
+        (code, label, f"Droit {label.lower()} dans Palladium Africa Control Tower."),
     )
     row = conn.execute("SELECT id FROM permissions WHERE code = ?", (code,)).fetchone()
     return int(row["id"])
@@ -1435,7 +1435,7 @@ def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = Non
                 status_label = "Donnees non datables"
                 status_class = "amber"
             else:
-                action = "Pret pour le rapprochement PMS."
+                action = "Pret pour le rapprochement plateforme."
                 status_label = "Pret"
                 status_class = "green"
 
@@ -2130,7 +2130,7 @@ def access_for_session(conn: sqlite3.Connection, user_id: int, profile: str, per
         return [
             {
                 "id": f"ADMIN-{row['pole_id']}",
-                "responsible": row["responsible"] or ("Administrateur PMS" if is_admin else "Management PMS"),
+                "responsible": row["responsible"] or ("Administrateur Control Tower" if is_admin else "Management Control Tower"),
                 "poleId": row["pole_id"],
                 "poleName": row["pole_name"],
                 "branch": "Groupe",
@@ -2170,7 +2170,7 @@ def authenticate_user(payload: dict) -> dict:
     with db_connect() as conn:
         if normalized_identifier in {"admin", "administrateur", "admin@palladium.local"}:
             profile_id = ensure_profile(conn, "Administrateur")
-            user_id = ensure_user(conn, "Administrateur PMS", profile_id, DEFAULT_ADMIN_PASSWORD)
+            user_id = ensure_user(conn, "Administrateur Control Tower", profile_id, DEFAULT_ADMIN_PASSWORD)
             conn.commit()
         else:
             row = conn.execute(
@@ -5675,7 +5675,7 @@ class PMSHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     global DB_PATH
-    parser = argparse.ArgumentParser(description="Serveur local PMS GMC Group")
+    parser = argparse.ArgumentParser(description="Serveur local Palladium Africa Control Tower")
     default_host = os.environ.get("HOST", "127.0.0.1")
     default_port = int(os.environ.get("PORT", "5184"))
     default_db = os.environ.get("PMS_DB_PATH", str(DEFAULT_DB_PATH))
@@ -5690,7 +5690,7 @@ def main() -> None:
         apply_env_kobo_sources(conn)
     server = ThreadingHTTPServer((args.host, args.port), PMSHandler)
     start_kobo_auto_sync_scheduler()
-    print(f"PMS GMC API disponible sur http://{args.host}:{args.port}/")
+    print(f"Palladium Africa Control Tower API disponible sur http://{args.host}:{args.port}/")
     print(f"Base SQLite: {DB_PATH}")
     server.serve_forever()
 

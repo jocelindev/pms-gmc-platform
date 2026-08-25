@@ -11,7 +11,7 @@
       },
       {
         name: "CDC_PMS_GMC_Group_2026.docx",
-        role: "Cahier des charges PMS",
+        role: "Cahier des charges Control Tower",
       },
     ],
 
@@ -158,14 +158,14 @@
         { key: "element_id_3", label: "Element de calcul 3 optionnel", source: "Troisieme variable si necessaire", block: "Calcul" },
         { key: "valeur_element_3", label: "Valeur element 3 optionnelle", source: "Troisieme valeur si necessaire", block: "Calcul" },
         { key: "source_donnee", label: "Source de la donnee", source: "Systeme, fichier ou responsable", block: "Tracabilite" },
-        { key: "validation_hierarchique", label: "Validation", source: "Controle avant calcul PMS", block: "Tracabilite" },
+        { key: "validation_hierarchique", label: "Validation", source: "Controle avant calcul plateforme", block: "Tracabilite" },
       ],
       koboLogicSteps: [
         "Formulaire 1 : declare les KPI, pays / filiales, poles et formules de calcul.",
         "Formulaire Objectifs : declare les cibles mensuelles officielles par pays / filiale, pole, KPI et mois.",
         "Formulaire Donnees : collecte soit le taux realise deja connu, soit un a trois elements bruts necessaires a la formule.",
         "La plateforme rapproche les trois formulaires par pays / filiale, pole, KPI et periode.",
-        "Le PMS calcule la valeur realisee, l'objectif a date, le taux realise et le statut de performance.",
+        "La plateforme calcule la valeur realisee, l'objectif a date, le taux realise et le statut de performance.",
       ],
       referentials: {
         types: ["Financier", "Commercial", "Productivite", "Qualite", "Satisfaction Client", "Operationnel", "Strategique"],
@@ -589,7 +589,7 @@
       { title: "Reception Kobo", detail: "Webhook ou synchronisation planifiee depuis KoboToolbox.", count: "1 285", status: "Actif", className: "green" },
       { title: "Zone de controle", detail: "Doublons, formats, pieces jointes et champs obligatoires.", count: "17", status: "A traiter", className: "amber" },
       { title: "Mapping KPI", detail: "Rattachement formulaire, pole, filiale, periode et code KPI.", count: "44", status: "Regles", className: "green" },
-      { title: "Calcul PMS", detail: "Application des formules et seuils RAG du catalogue.", count: "74", status: "Pret", className: "green" },
+      { title: "Calcul plateforme", detail: "Application des formules et seuils RAG du catalogue.", count: "74", status: "Pret", className: "green" },
       { title: "Publication", detail: "Mise a jour tableau de bord, alertes et rapports par pole.", count: "7", status: "Cycles", className: "green" },
     ],
 

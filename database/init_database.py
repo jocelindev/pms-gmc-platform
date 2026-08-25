@@ -380,7 +380,7 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
     cur.execute(
         """
         INSERT INTO app_metadata (key, value, updated_at)
-        VALUES ('database_name', 'PMS GMC Group', CURRENT_TIMESTAMP)
+        VALUES ('database_name', 'Palladium Africa Control Tower', CURRENT_TIMESTAMP)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
         """
     )
@@ -403,7 +403,7 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
                 (profile_id, permission_id, 1 if permissions.get(code) else 0),
             )
 
-    upsert_user(cur, "Administrateur PMS", profile_ids["Administrateur"], DEFAULT_ADMIN_PASSWORD)
+    upsert_user(cur, "Administrateur Control Tower", profile_ids["Administrateur"], DEFAULT_ADMIN_PASSWORD)
 
     reporting = data.get("reporting", {})
     poles = list(reporting.get("poles", []))
@@ -570,7 +570,7 @@ def count_tables(conn: sqlite3.Connection) -> dict[str, int]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Initialise la base SQLite PMS GMC Group.")
+    parser = argparse.ArgumentParser(description="Initialise la base SQLite Palladium Africa Control Tower.")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH, help="Chemin du fichier SQLite.")
     parser.add_argument("--reset", action="store_true", help="Supprime et recree la base.")
     args = parser.parse_args()

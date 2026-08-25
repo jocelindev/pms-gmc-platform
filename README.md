@@ -1,6 +1,6 @@
-# PMS GMC Group - Prototype web
+# Palladium Africa Control Tower - Prototype web
 
-Premiere base de developpement pour la plateforme Performance Management System de GMC Group.
+Premiere base de developpement pour la tour de controle des performances Groupe de Palladium Africa.
 
 ## Ouvrir la plateforme avec la base locale
 
