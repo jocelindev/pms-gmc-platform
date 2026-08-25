@@ -6,7 +6,13 @@ services:
     buildCommand: python -m py_compile server.py start.py database/init_database.py
     startCommand: python start.py --host 0.0.0.0
     healthCheckPath: /api/health
+    domains:
+      - controltower.palladiumafrica.com
     envVars:
+      - key: PMS_PUBLIC_APP_ORIGIN
+        value: https://controltower.palladiumafrica.com
+      - key: PMS_ALLOWED_CORS_ORIGINS
+        value: https://pms-gmc-platform.onrender.com,https://controltower.palladiumafrica.com
       - key: PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS
         value: "120"
       - key: PMS_KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS
