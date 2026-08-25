@@ -1,6 +1,7 @@
 (function () {
   const { PMS_DATA, PMS_RENDERERS } = window;
   const api = window.PMS_API;
+  const reportingExports = window.PMS_REPORTING || {};
   const {
     $,
     renderAll,
@@ -1710,524 +1711,71 @@
     };
   }
 
-  function downloadTextFile(filename, content, type) {
-    const blob = new Blob([content], { type });
-    downloadBlobFile(filename, blob);
-  }
-
-  function downloadBlobFile(filename, blob) {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function xmlEscape(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&apos;");
-  }
-
-  function crc32(bytes) {
-    if (!crc32.table) {
-      crc32.table = Array.from({ length: 256 }, (_, index) => {
-        let value = index;
-        for (let bit = 0; bit < 8; bit += 1) {
-          value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-        }
-        return value >>> 0;
-      });
-    }
-    let crc = 0xffffffff;
-    bytes.forEach((byte) => {
-      crc = crc32.table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  function getCurrentManagementReportContext() {
+    const reporting = PMS_DATA.reporting;
+    const activeCountry = ensureAllowedCountry(state.calendarBranchFilter || "Groupe");
+    const authorizedPoleIds = new Set(getAuthorizedPoleIds(activeCountry));
+    const countryPoleIds = new Set(selectedCountryPoleIds(activeCountry));
+    const visiblePoles = reporting.poles.filter(
+      (pole) => (!authorizedPoleIds.size || authorizedPoleIds.has(pole.id)) && countryPoleIds.has(pole.id)
+    );
+    const calculatedStatuses = new Set(["green", "amber", "red"]);
+    const visibleKpis = visiblePoles.flatMap((pole) =>
+      (reporting.kpisByPole[pole.id] || [])
+        .filter((kpi) => itemMatchesDataMode(kpi, state.dataModeFilter))
+        .filter((kpi) => referenceKpiMatchesCountry(kpi, activeCountry))
+        .map((kpi) => ({
+          ...kpi,
+          poleId: pole.id,
+          poleName: pole.name,
+          poleOwner: pole.owner,
+          owner: pole.owner,
+        }))
+    );
+    const calculatedKpis = visibleKpis.filter((kpi) => kpi.calculated && calculatedStatuses.has(kpi.status));
+    const directionScores = visiblePoles.map((pole) => {
+      const poleKpis = visibleKpis.filter((kpi) => kpi.poleId === pole.id);
+      const measured = poleKpis.filter((kpi) => kpi.calculated && calculatedStatuses.has(kpi.status));
+      const red = measured.filter((kpi) => kpi.status === "red").length;
+      const amber = measured.filter((kpi) => kpi.status === "amber").length;
+      const green = measured.filter((kpi) => kpi.status === "green").length;
+      const score = scoreFromKpis(poleKpis);
+      return {
+        poleId: pole.id,
+        poleName: pole.name,
+        owner: pole.owner,
+        score,
+        total: measured.length,
+        red,
+        amber,
+        green,
+        action: !measured.length
+          ? "Attente donnees Kobo"
+          : red
+            ? "Plan de rattrapage"
+            : amber
+              ? "Suivi rapproche"
+              : "Maintenir",
+      };
     });
-    return (crc ^ 0xffffffff) >>> 0;
-  }
+    const priorities = calculatedKpis
+      .filter((kpi) => ["red", "amber"].includes(kpi.status))
+      .sort((left, right) => {
+        if (left.status !== right.status) return left.status === "red" ? -1 : 1;
+        return Number(left.vsTargetValue ?? 999) - Number(right.vsTargetValue ?? 999);
+      })
+      .slice(0, 5);
 
-  function concatBytes(parts) {
-    const total = parts.reduce((sum, part) => sum + part.length, 0);
-    const output = new Uint8Array(total);
-    let offset = 0;
-    parts.forEach((part) => {
-      output.set(part, offset);
-      offset += part.length;
-    });
-    return output;
-  }
-
-  function zipHeader(signature, fields) {
-    const bytes = new Uint8Array(fields.reduce((sum, field) => sum + field.size, 4));
-    const view = new DataView(bytes.buffer);
-    let offset = 0;
-    view.setUint32(offset, signature, true);
-    offset += 4;
-    fields.forEach((field) => {
-      if (field.size === 2) view.setUint16(offset, field.value, true);
-      if (field.size === 4) view.setUint32(offset, field.value >>> 0, true);
-      offset += field.size;
-    });
-    return bytes;
-  }
-
-  function dosDateTime(date = new Date()) {
-    const year = Math.max(1980, date.getFullYear());
-    const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
-    const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
-    return { dosTime, dosDate };
-  }
-
-  function createStoredZip(files) {
-    const encoder = new TextEncoder();
-    const now = dosDateTime();
-    const localParts = [];
-    const centralParts = [];
-    let offset = 0;
-
-    files.forEach((file) => {
-      const nameBytes = encoder.encode(file.name);
-      const dataBytes = file.data instanceof Uint8Array ? file.data : encoder.encode(file.data);
-      const crc = crc32(dataBytes);
-      const localHeader = zipHeader(0x04034b50, [
-        { value: 20, size: 2 },
-        { value: 0, size: 2 },
-        { value: 0, size: 2 },
-        { value: now.dosTime, size: 2 },
-        { value: now.dosDate, size: 2 },
-        { value: crc, size: 4 },
-        { value: dataBytes.length, size: 4 },
-        { value: dataBytes.length, size: 4 },
-        { value: nameBytes.length, size: 2 },
-        { value: 0, size: 2 },
-      ]);
-      localParts.push(localHeader, nameBytes, dataBytes);
-
-      const centralHeader = zipHeader(0x02014b50, [
-        { value: 20, size: 2 },
-        { value: 20, size: 2 },
-        { value: 0, size: 2 },
-        { value: 0, size: 2 },
-        { value: now.dosTime, size: 2 },
-        { value: now.dosDate, size: 2 },
-        { value: crc, size: 4 },
-        { value: dataBytes.length, size: 4 },
-        { value: dataBytes.length, size: 4 },
-        { value: nameBytes.length, size: 2 },
-        { value: 0, size: 2 },
-        { value: 0, size: 2 },
-        { value: 0, size: 2 },
-        { value: 0, size: 2 },
-        { value: 0, size: 4 },
-        { value: offset, size: 4 },
-      ]);
-      centralParts.push(centralHeader, nameBytes);
-      offset += localHeader.length + nameBytes.length + dataBytes.length;
-    });
-
-    const centralDirectory = concatBytes(centralParts);
-    const localData = concatBytes(localParts);
-    const end = zipHeader(0x06054b50, [
-      { value: 0, size: 2 },
-      { value: 0, size: 2 },
-      { value: files.length, size: 2 },
-      { value: files.length, size: 2 },
-      { value: centralDirectory.length, size: 4 },
-      { value: localData.length, size: 4 },
-      { value: 0, size: 2 },
-    ]);
-    return concatBytes([localData, centralDirectory, end]);
-  }
-
-  function pptxTextShape(id, text, x, y, cx, cy, options = {}) {
-    const fontSize = Number(options.fontSize || 1800);
-    const color = String(options.color || "1F3864").replace("#", "");
-    const fill = options.fill ? `<a:solidFill><a:srgbClr val="${xmlEscape(options.fill).replace("#", "")}"/></a:solidFill>` : "";
-    const border = options.border ? `<a:ln w="12700"><a:solidFill><a:srgbClr val="${xmlEscape(options.border).replace("#", "")}"/></a:solidFill></a:ln>` : "";
-    const paragraphs = String(text ?? "")
-      .split(/\r?\n/)
-      .map((line) => `
-        <a:p>
-          <a:pPr algn="${options.align || "l"}"/>
-          <a:r>
-            <a:rPr lang="fr-FR" sz="${fontSize}"${options.bold ? ' b="1"' : ""}>
-              <a:solidFill><a:srgbClr val="${xmlEscape(color)}"/></a:solidFill>
-            </a:rPr>
-            <a:t>${xmlEscape(line)}</a:t>
-          </a:r>
-          <a:endParaRPr lang="fr-FR" sz="${fontSize}"/>
-        </a:p>
-      `)
-      .join("");
-    return `
-      <p:sp>
-        <p:nvSpPr>
-          <p:cNvPr id="${id}" name="Text ${id}"/>
-          <p:cNvSpPr txBox="1"/>
-          <p:nvPr/>
-        </p:nvSpPr>
-        <p:spPr>
-          <a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>
-          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-          ${fill}
-          ${border}
-        </p:spPr>
-        <p:txBody>
-          <a:bodyPr wrap="square" lIns="110000" tIns="70000" rIns="110000" bIns="70000"/>
-          <a:lstStyle/>
-          ${paragraphs}
-        </p:txBody>
-      </p:sp>
-    `;
-  }
-
-  function pptxSlideXml(shapes) {
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-      <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-        <p:cSld>
-          <p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
-          <p:spTree>
-            <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
-            <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-            ${shapes.join("")}
-          </p:spTree>
-        </p:cSld>
-        <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-      </p:sld>`;
-  }
-
-  function pptxSlideRels() {
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-      <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-        <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
-      </Relationships>`;
-  }
-
-  function parseReportPercent(value) {
-    if (value === null || value === undefined) return null;
-    const text = String(value).trim();
-    if (!text || text === "--") return null;
-    const match = text.replace(/\s/g, "").replace(",", ".").match(/-?\d+(?:\.\d+)?/);
-    if (!match) return null;
-    const parsed = Number(match[0]);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  function formatReportPercent(value) {
-    return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(value)}%`;
-  }
-
-  function reportAchievement(kpi = {}) {
-    const explicit = Number(kpi.vsTargetValue);
-    const value = Number.isFinite(explicit)
-      ? explicit
-      : parseReportPercent(kpi.vsTargetLabel);
-    if (!Number.isFinite(value)) {
-      return { value: null, label: "--", className: "gray" };
-    }
     return {
-      value,
-      label: formatReportPercent(value),
-      className: value >= 100 ? "green" : value >= 90 ? "amber" : "red",
+      country: activeCountry,
+      period: state.calendar?.label || $("#period-filter")?.value || "",
+      dataMode: state.dataModeFilter || "all",
+      kpis: calculatedKpis,
+      directionScores,
+      priorities,
+      score: scoreFromKpis(calculatedKpis),
+      quality: state.kpiCalculationQuality,
     };
-  }
-
-  function buildReportPptx(context) {
-    const critical = reportCriticalKpis(context.kpis);
-    const generatedAt = new Date().toLocaleString("fr-FR");
-    const slideW = 12192000;
-    const margin = 520000;
-    const blue = "1F3864";
-    const gold = "D6A838";
-    const gray = "666666";
-    const red = "C00000";
-    const amber = "C55A11";
-    const green = "107C41";
-    const statusColor = (status) => (status === "red" ? red : status === "amber" ? amber : status === "green" ? green : gray);
-    const title = `Rapport ${context.cycle.value} - ${context.pole.name}`;
-    const slide1 = pptxSlideXml([
-      pptxTextShape(2, "PMS GMC GROUP", margin, 360000, 3200000, 420000, { fontSize: 1500, bold: true, color: gold }),
-      pptxTextShape(3, title, margin, 900000, 8400000, 980000, { fontSize: 3300, bold: true, color: blue }),
-      pptxTextShape(4, `Periode: ${context.period}\nResponsable: ${context.pole.owner}\nGenere le: ${generatedAt}`, margin, 1950000, 7600000, 900000, { fontSize: 1500, color: gray }),
-      pptxTextShape(5, `Score\n${context.pole.score ?? "--"}`, margin, 3250000, 2450000, 1080000, { fontSize: 2100, bold: true, color: blue, fill: "FFF7D6", border: gold }),
-      pptxTextShape(6, `KPI suivis\n${context.kpis.length}`, margin + 2700000, 3250000, 2450000, 1080000, { fontSize: 2100, bold: true, color: blue, fill: "F5F7FB", border: "CBD5E1" }),
-      pptxTextShape(7, `KPI critiques\n${critical.length}`, margin + 5400000, 3250000, 2450000, 1080000, { fontSize: 2100, bold: true, color: critical.length ? red : green, fill: critical.length ? "FDE2E2" : "DDF7E8", border: critical.length ? red : green }),
-      pptxTextShape(8, `Cycle\n${context.cycle.value}`, margin + 8100000, 3250000, 2450000, 1080000, { fontSize: 2100, bold: true, color: blue, fill: "F5F7FB", border: "CBD5E1" }),
-      pptxTextShape(9, `Commentaire responsable: ${context.comment || "A completer par le responsable."}`, margin, 5150000, slideW - margin * 2, 760000, { fontSize: 1350, color: gray, fill: "F8FAFC", border: "E2E8F0" }),
-    ]);
-
-    const tableRows = context.kpis.slice(0, 10);
-    const tableShapes = [
-      pptxTextShape(2, "Lecture KPI", margin, 320000, 5200000, 560000, { fontSize: 2600, bold: true, color: blue }),
-      pptxTextShape(3, "KPI", margin, 1050000, 4300000, 390000, { fontSize: 1150, bold: true, color: "FFFFFF", fill: blue }),
-      pptxTextShape(4, "Valeur", margin + 4300000, 1050000, 1700000, 390000, { fontSize: 1150, bold: true, color: "FFFFFF", fill: blue }),
-      pptxTextShape(5, "Objectif", margin + 6000000, 1050000, 1900000, 390000, { fontSize: 1150, bold: true, color: "FFFFFF", fill: blue }),
-      pptxTextShape(6, "Taux realise", margin + 7900000, 1050000, 1500000, 390000, { fontSize: 1150, bold: true, color: "FFFFFF", fill: blue }),
-      pptxTextShape(7, "Tendance", margin + 9400000, 1050000, 1600000, 390000, { fontSize: 1150, bold: true, color: "FFFFFF", fill: blue }),
-    ];
-    tableRows.forEach((kpi, index) => {
-      const y = 1480000 + index * 430000;
-      const fill = index % 2 ? "FFFFFF" : "F8FAFC";
-      const id = 10 + index * 5;
-      const achievement = reportAchievement(kpi);
-      tableShapes.push(
-        pptxTextShape(id, kpi.name, margin, y, 4300000, 390000, { fontSize: 1050, color: blue, fill, border: "E2E8F0" }),
-        pptxTextShape(id + 1, kpi.value, margin + 4300000, y, 1700000, 390000, { fontSize: 1050, color: blue, fill, border: "E2E8F0" }),
-        pptxTextShape(id + 2, kpi.target, margin + 6000000, y, 1900000, 390000, { fontSize: 1050, color: blue, fill, border: "E2E8F0" }),
-        pptxTextShape(id + 3, achievement.label, margin + 7900000, y, 1500000, 390000, { fontSize: 1050, bold: true, color: statusColor(achievement.className), fill, border: "E2E8F0" }),
-        pptxTextShape(id + 4, kpi.trend || "--", margin + 9400000, y, 1600000, 390000, { fontSize: 950, color: gray, fill, border: "E2E8F0" })
-      );
-    });
-    if (!tableRows.length) {
-      tableShapes.push(pptxTextShape(10, "Aucun KPI disponible pour ce rapport.", margin, 1500000, 6400000, 520000, { fontSize: 1600, color: gray }));
-    }
-    const slide2 = pptxSlideXml(tableShapes);
-
-    const actionShapes = [
-      pptxTextShape(2, "Plan d'action KPI rouges / oranges", margin, 360000, 8400000, 620000, { fontSize: 2600, bold: true, color: blue }),
-    ];
-    const actionRows = critical.length ? critical : [{ name: "Aucun KPI critique", status: "green" }];
-    actionRows.forEach((kpi, index) => {
-      const y = 1250000 + index * 820000;
-      const action = kpi.status === "red"
-        ? "Action corrective obligatoire avant validation."
-        : kpi.status === "amber"
-          ? "Analyse preventive et suivi au prochain reporting."
-          : "Maintenir le suivi sur la periode.";
-      actionShapes.push(
-        pptxTextShape(3 + index * 2, `${index + 1}. ${kpi.name}`, margin, y, 4700000, 640000, { fontSize: 1500, bold: true, color: statusColor(kpi.status), fill: "F8FAFC", border: "E2E8F0" }),
-        pptxTextShape(4 + index * 2, `Responsable: ${context.pole.owner}\nAction: ${action}`, margin + 5000000, y, 6100000, 640000, { fontSize: 1250, color: blue, fill: "FFFFFF", border: "E2E8F0" })
-      );
-    });
-    const slide3 = pptxSlideXml(actionShapes);
-
-    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-        <Default Extension="xml" ContentType="application/xml"/>
-        <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
-        <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
-        <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
-        <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
-        <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
-        <Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
-        <Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
-        <Override PartName="/ppt/slides/slide2.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
-        <Override PartName="/ppt/slides/slide3.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
-      </Types>`;
-    const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-      <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-        <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
-        <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
-        <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
-      </Relationships>`;
-    const app = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>PMS GMC</Application><PresentationFormat>Wide</PresentationFormat><Slides>3</Slides></Properties>`;
-    const core = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlEscape(title)}</dc:title><dc:creator>PMS GMC</dc:creator><cp:lastModifiedBy>PMS GMC</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:modified></cp:coreProperties>`;
-    const presentation = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-      <p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-        <p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>
-        <p:sldIdLst><p:sldId id="256" r:id="rId2"/><p:sldId id="257" r:id="rId3"/><p:sldId id="258" r:id="rId4"/></p:sldIdLst>
-        <p:sldSz cx="12192000" cy="6858000" type="wide"/><p:notesSz cx="6858000" cy="9144000"/>
-      </p:presentation>`;
-    const presentationRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-      <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-        <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
-        <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>
-        <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide2.xml"/>
-        <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide3.xml"/>
-      </Relationships>`;
-    const slideMaster = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-      <p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-        <p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld>
-        <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
-        <p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>
-        <p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>
-      </p:sldMaster>`;
-    const slideMasterRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>`;
-    const slideLayout = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
-    const slideLayoutRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>`;
-    const theme = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="PMS GMC"><a:themeElements><a:clrScheme name="PMS"><a:dk1><a:srgbClr val="1F3864"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="111827"/></a:dk2><a:lt2><a:srgbClr val="F8FAFC"/></a:lt2><a:accent1><a:srgbClr val="D6A838"/></a:accent1><a:accent2><a:srgbClr val="1F3864"/></a:accent2><a:accent3><a:srgbClr val="107C41"/></a:accent3><a:accent4><a:srgbClr val="C55A11"/></a:accent4><a:accent5><a:srgbClr val="C00000"/></a:accent5><a:accent6><a:srgbClr val="64748B"/></a:accent6><a:hlink><a:srgbClr val="1F3864"/></a:hlink><a:folHlink><a:srgbClr val="1F3864"/></a:folHlink></a:clrScheme><a:fontScheme name="Arial"><a:majorFont><a:latin typeface="Arial"/></a:majorFont><a:minorFont><a:latin typeface="Arial"/></a:minorFont></a:fontScheme><a:fmtScheme name="PMS"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
-
-    const files = [
-      { name: "[Content_Types].xml", data: contentTypes },
-      { name: "_rels/.rels", data: rels },
-      { name: "docProps/app.xml", data: app },
-      { name: "docProps/core.xml", data: core },
-      { name: "ppt/presentation.xml", data: presentation },
-      { name: "ppt/_rels/presentation.xml.rels", data: presentationRels },
-      { name: "ppt/slides/slide1.xml", data: slide1 },
-      { name: "ppt/slides/slide2.xml", data: slide2 },
-      { name: "ppt/slides/slide3.xml", data: slide3 },
-      { name: "ppt/slides/_rels/slide1.xml.rels", data: pptxSlideRels() },
-      { name: "ppt/slides/_rels/slide2.xml.rels", data: pptxSlideRels() },
-      { name: "ppt/slides/_rels/slide3.xml.rels", data: pptxSlideRels() },
-      { name: "ppt/slideMasters/slideMaster1.xml", data: slideMaster },
-      { name: "ppt/slideMasters/_rels/slideMaster1.xml.rels", data: slideMasterRels },
-      { name: "ppt/slideLayouts/slideLayout1.xml", data: slideLayout },
-      { name: "ppt/slideLayouts/_rels/slideLayout1.xml.rels", data: slideLayoutRels },
-      { name: "ppt/theme/theme1.xml", data: theme },
-    ];
-
-    return new Blob([createStoredZip(files)], {
-      type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    });
-  }
-
-  function csvCell(value) {
-    return `"${String(value ?? "").replaceAll('"', '""')}"`;
-  }
-
-  function buildKpiCsv({ pole, cycle, period, kpis }) {
-    const header = ["Pole", "Cycle", "Periode", "KPI", "Valeur", "Objectif", "Tendance", "Source Kobo", "Taux realise"];
-    const rows = kpis.map((kpi) => [
-      pole.name,
-      cycle.value,
-      period,
-      kpi.name,
-      kpi.value,
-      kpi.target,
-      kpi.trend,
-      kpi.source,
-      reportAchievement(kpi).label,
-    ]);
-    return [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\n");
-  }
-
-  function reportCriticalKpis(kpis = []) {
-    return [
-      ...kpis.filter((kpi) => kpi.status === "red"),
-      ...kpis.filter((kpi) => kpi.status === "amber"),
-    ].slice(0, 5);
-  }
-
-  function buildReportTableRows(kpis = []) {
-    return kpis
-      .map((kpi) => {
-        const achievement = reportAchievement(kpi);
-        return `
-          <tr>
-            <td>${escapeHtml(kpi.name)}</td>
-            <td>${escapeHtml(kpi.value)}</td>
-            <td>${escapeHtml(kpi.target)}</td>
-            <td>${escapeHtml(kpi.trend)}</td>
-            <td class="achievement-${escapeHtml(achievement.className)}"><strong>${escapeHtml(achievement.label)}</strong></td>
-          </tr>
-        `;
-      })
-      .join("");
-  }
-
-  function buildActionPlanRows(context) {
-    const critical = reportCriticalKpis(context.kpis);
-    if (!critical.length) {
-      return `<tr><td colspan="4">Aucun KPI rouge ou orange a transformer en plan d'action.</td></tr>`;
-    }
-    return critical
-      .map((kpi) => {
-        const action = kpi.status === "red"
-          ? "Action corrective obligatoire avant validation."
-          : "Analyse preventive et suivi au prochain reporting.";
-        return `
-          <tr>
-            <td>${escapeHtml(kpi.name)}</td>
-            <td>${escapeHtml(kpi.status)}</td>
-            <td>${escapeHtml(context.pole.owner)}</td>
-            <td>${escapeHtml(action)}</td>
-          </tr>
-        `;
-      })
-      .join("");
-  }
-
-  function reportDocumentHtml(context, mode = "pdf") {
-    const title = `Rapport ${context.cycle.value} - ${context.pole.name}`;
-    const criticalCount = reportCriticalKpis(context.kpis).length;
-    const generatedAt = new Date().toLocaleString("fr-FR");
-    return `<!doctype html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>${escapeHtml(title)}</title>
-          <style>
-            body { font-family: Arial, sans-serif; color: #1f3864; margin: 28px; }
-            h1 { margin: 0 0 6px; font-size: ${mode === "ppt" ? "34px" : "26px"}; }
-            h2 { color: #1f3864; font-size: 18px; margin-top: 24px; }
-            .meta { color: #555; margin-bottom: 18px; }
-            .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
-            .card { border: 1px solid #d9d9d9; border-left: 4px solid #d6a838; padding: 10px; }
-            .card strong { display: block; font-size: 22px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-            th { background: #f2f2f2; color: #1f3864; text-align: left; }
-            th, td { border: 1px solid #d9d9d9; padding: 8px; font-size: 12px; }
-            .achievement-green { color: #107c41; font-weight: 700; }
-            .achievement-amber { color: #c55a11; font-weight: 700; }
-            .achievement-red { color: #c00000; font-weight: 700; }
-            .achievement-gray { color: #666; font-weight: 700; }
-            .comment { border-left: 4px solid #d6a838; background: #fffaf0; padding: 10px; margin-top: 16px; color: #333; }
-            @media print { body { margin: 16mm; } button { display: none; } }
-          </style>
-        </head>
-        <body>
-          <h1>${escapeHtml(title)}</h1>
-          <p class="meta">Periode: ${escapeHtml(context.period)} | Responsable: ${escapeHtml(context.pole.owner)} | Genere le ${escapeHtml(generatedAt)}</p>
-          <div class="summary">
-            <div class="card"><span>Score</span><strong>${escapeHtml(context.pole.score ?? "--")}</strong></div>
-            <div class="card"><span>KPI suivis</span><strong>${escapeHtml(context.kpis.length)}</strong></div>
-            <div class="card"><span>KPI critiques</span><strong>${escapeHtml(criticalCount)}</strong></div>
-            <div class="card"><span>Cycle</span><strong>${escapeHtml(context.cycle.value)}</strong></div>
-          </div>
-          <h2>Lecture KPI</h2>
-          <table>
-            <thead><tr><th>KPI</th><th>Valeur</th><th>Objectif</th><th>Tendance</th><th>Taux realise</th></tr></thead>
-            <tbody>${buildReportTableRows(context.kpis)}</tbody>
-          </table>
-          <h2>Plan d'action KPI rouges/oranges</h2>
-          <table>
-            <thead><tr><th>KPI</th><th>Statut</th><th>Responsable</th><th>Action proposee</th></tr></thead>
-            <tbody>${buildActionPlanRows(context)}</tbody>
-          </table>
-          <div class="comment"><strong>Commentaire responsable</strong><br>${escapeHtml(context.comment || "A completer par le responsable.")}</div>
-        </body>
-      </html>`;
-  }
-
-  function exportReportPdf(context, slug) {
-    const html = reportDocumentHtml(context, "pdf");
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      downloadTextFile(`rapport-${slug}-pdf.html`, html, "text/html;charset=utf-8");
-      showToast("Fenetre PDF bloquee. Un fichier HTML imprimable a ete telecharge.");
-      return;
-    }
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    showToast("Rapport PDF ouvert. Choisissez 'Enregistrer en PDF' dans l'impression.");
-  }
-
-  function exportReportExcel(context, slug) {
-    const html = reportDocumentHtml(context, "excel");
-    downloadTextFile(`rapport-${slug}.xls`, html, "application/vnd.ms-excel;charset=utf-8");
-    showToast("Export Excel genere.");
-  }
-
-  function exportReportPowerPoint(context, slug) {
-    try {
-      const pptx = buildReportPptx(context);
-      downloadBlobFile(`rapport-${slug}.pptx`, pptx);
-      showToast("Export PowerPoint .pptx genere.");
-    } catch (error) {
-      console.error(error);
-      showToast("Export PowerPoint impossible. Reessayez apres actualisation.");
-    }
   }
 
   function bindNavigation() {
@@ -2251,6 +1799,17 @@
       if (managementButton) {
         activateView("management");
         showToast("Vue Management ouverte pour approfondir le controle groupe.");
+        return;
+      }
+      const managementExportButton = event.target.closest("#export-management-report");
+      if (managementExportButton) {
+        if (!canAccessManagement()) {
+          showToast("Export reserve au management.");
+          return;
+        }
+        const context = getCurrentManagementReportContext();
+        const slug = `${context.country}-${context.period}`.replaceAll(" ", "_");
+        reportingExports.exportManagementPowerPoint?.(context, slug, { toast: showToast });
         return;
       }
       const detailButton = event.target.closest("[data-dashboard-kpi-detail]");
@@ -3002,15 +2561,15 @@
         const context = getCurrentReportContext();
         const slug = `${context.pole.id}-${context.cycle.value}-${context.period}`.replaceAll(" ", "_");
         if (button.dataset.reportExport === "pdf") {
-          exportReportPdf(context, slug);
+          reportingExports.exportReportPdf?.(context, slug, { toast: showToast });
           return;
         }
         if (button.dataset.reportExport === "excel") {
-          exportReportExcel(context, slug);
+          reportingExports.exportReportExcel?.(context, slug, { toast: showToast });
           return;
         }
         if (button.dataset.reportExport === "powerpoint") {
-          exportReportPowerPoint(context, slug);
+          reportingExports.exportReportPowerPoint?.(context, slug, { toast: showToast });
           return;
         }
         const payload = {
@@ -3022,8 +2581,7 @@
           kpis: context.kpis,
           generatedAt: new Date().toISOString(),
         };
-        downloadTextFile(`rapport-${slug}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
-        showToast("Export JSON du rapport genere.");
+        reportingExports.exportJson?.(`rapport-${slug}.json`, payload, { toast: showToast });
       });
     });
 

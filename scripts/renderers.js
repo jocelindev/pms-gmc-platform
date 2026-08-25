@@ -4332,6 +4332,7 @@
                 const action = kpi.status === "red"
                   ? "Action corrective obligatoire et commentaire responsable avant validation."
                   : "Analyse preventive et suivi du prochain point de reporting.";
+                const targetMetric = metricFromTarget(kpi);
                 return `
                   <article class="report-action-row status-${escapeHtml(kpi.status)}">
                     <strong>${escapeHtml(kpi.name)}</strong>
@@ -4339,7 +4340,9 @@
                     <div class="report-action-meta">
                       <small>Responsable: ${escapeHtml(pole.owner)}</small>
                       <small>Echeance: ${escapeHtml(cycle.deadline)}</small>
-                      <small>Statut: ${escapeHtml(kpiStatusText(kpi.status))}</small>
+                      <small>Taux realise: ${escapeHtml(targetMetric.display)}</small>
+                      <small>Realise: ${escapeHtml(kpi.value || "--")}</small>
+                      <small>Objectif: ${escapeHtml(kpi.target || "--")}</small>
                     </div>
                   </article>
                 `;
