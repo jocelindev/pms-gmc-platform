@@ -1909,11 +1909,33 @@
       </Relationships>`;
   }
 
-  function pptxStatusLabel(status) {
-    if (status === "green") return "Vert";
-    if (status === "amber") return "Orange";
-    if (status === "red") return "Rouge";
-    return "En attente";
+  function parseReportPercent(value) {
+    if (value === null || value === undefined) return null;
+    const text = String(value).trim();
+    if (!text || text === "--") return null;
+    const match = text.replace(/\s/g, "").replace(",", ".").match(/-?\d+(?:\.\d+)?/);
+    if (!match) return null;
+    const parsed = Number(match[0]);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function formatReportPercent(value) {
+    return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(value)}%`;
+  }
+
+  function reportAchievement(kpi = {}) {
+    const explicit = Number(kpi.vsTargetValue);
+    const value = Number.isFinite(explicit)
+      ? explicit
+      : parseReportPercent(kpi.vsTargetLabel);
+    if (!Number.isFinite(value)) {
+      return { value: null, label: "--", className: "gray" };
+    }
+    return {
+      value,
+      label: formatReportPercent(value),
+      className: value >= 100 ? "green" : value >= 90 ? "amber" : "red",
+    };
   }
 
   function buildReportPptx(context) {
@@ -1946,18 +1968,19 @@
       pptxTextShape(3, "KPI", margin, 1050000, 4300000, 390000, { fontSize: 1150, bold: true, color: "FFFFFF", fill: blue }),
       pptxTextShape(4, "Valeur", margin + 4300000, 1050000, 1700000, 390000, { fontSize: 1150, bold: true, color: "FFFFFF", fill: blue }),
       pptxTextShape(5, "Objectif", margin + 6000000, 1050000, 1900000, 390000, { fontSize: 1150, bold: true, color: "FFFFFF", fill: blue }),
-      pptxTextShape(6, "Statut", margin + 7900000, 1050000, 1500000, 390000, { fontSize: 1150, bold: true, color: "FFFFFF", fill: blue }),
+      pptxTextShape(6, "Taux realise", margin + 7900000, 1050000, 1500000, 390000, { fontSize: 1150, bold: true, color: "FFFFFF", fill: blue }),
       pptxTextShape(7, "Tendance", margin + 9400000, 1050000, 1600000, 390000, { fontSize: 1150, bold: true, color: "FFFFFF", fill: blue }),
     ];
     tableRows.forEach((kpi, index) => {
       const y = 1480000 + index * 430000;
       const fill = index % 2 ? "FFFFFF" : "F8FAFC";
       const id = 10 + index * 5;
+      const achievement = reportAchievement(kpi);
       tableShapes.push(
         pptxTextShape(id, kpi.name, margin, y, 4300000, 390000, { fontSize: 1050, color: blue, fill, border: "E2E8F0" }),
         pptxTextShape(id + 1, kpi.value, margin + 4300000, y, 1700000, 390000, { fontSize: 1050, color: blue, fill, border: "E2E8F0" }),
         pptxTextShape(id + 2, kpi.target, margin + 6000000, y, 1900000, 390000, { fontSize: 1050, color: blue, fill, border: "E2E8F0" }),
-        pptxTextShape(id + 3, pptxStatusLabel(kpi.status), margin + 7900000, y, 1500000, 390000, { fontSize: 1050, bold: true, color: statusColor(kpi.status), fill, border: "E2E8F0" }),
+        pptxTextShape(id + 3, achievement.label, margin + 7900000, y, 1500000, 390000, { fontSize: 1050, bold: true, color: statusColor(achievement.className), fill, border: "E2E8F0" }),
         pptxTextShape(id + 4, kpi.trend || "--", margin + 9400000, y, 1600000, 390000, { fontSize: 950, color: gray, fill, border: "E2E8F0" })
       );
     });
@@ -2061,7 +2084,7 @@
   }
 
   function buildKpiCsv({ pole, cycle, period, kpis }) {
-    const header = ["Pole", "Cycle", "Periode", "KPI", "Valeur", "Objectif", "Tendance", "Source Kobo", "Statut"];
+    const header = ["Pole", "Cycle", "Periode", "KPI", "Valeur", "Objectif", "Tendance", "Source Kobo", "Taux realise"];
     const rows = kpis.map((kpi) => [
       pole.name,
       cycle.value,
@@ -2071,7 +2094,7 @@
       kpi.target,
       kpi.trend,
       kpi.source,
-      kpi.status,
+      reportAchievement(kpi).label,
     ]);
     return [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\n");
   }
@@ -2085,17 +2108,18 @@
 
   function buildReportTableRows(kpis = []) {
     return kpis
-      .map(
-        (kpi) => `
+      .map((kpi) => {
+        const achievement = reportAchievement(kpi);
+        return `
           <tr>
             <td>${escapeHtml(kpi.name)}</td>
             <td>${escapeHtml(kpi.value)}</td>
             <td>${escapeHtml(kpi.target)}</td>
             <td>${escapeHtml(kpi.trend)}</td>
-            <td>${escapeHtml(kpi.status)}</td>
+            <td class="achievement-${escapeHtml(achievement.className)}"><strong>${escapeHtml(achievement.label)}</strong></td>
           </tr>
-        `
-      )
+        `;
+      })
       .join("");
   }
 
@@ -2141,6 +2165,10 @@
             table { width: 100%; border-collapse: collapse; margin-top: 10px; }
             th { background: #f2f2f2; color: #1f3864; text-align: left; }
             th, td { border: 1px solid #d9d9d9; padding: 8px; font-size: 12px; }
+            .achievement-green { color: #107c41; font-weight: 700; }
+            .achievement-amber { color: #c55a11; font-weight: 700; }
+            .achievement-red { color: #c00000; font-weight: 700; }
+            .achievement-gray { color: #666; font-weight: 700; }
             .comment { border-left: 4px solid #d6a838; background: #fffaf0; padding: 10px; margin-top: 16px; color: #333; }
             @media print { body { margin: 16mm; } button { display: none; } }
           </style>
@@ -2156,7 +2184,7 @@
           </div>
           <h2>Lecture KPI</h2>
           <table>
-            <thead><tr><th>KPI</th><th>Valeur</th><th>Objectif</th><th>Tendance</th><th>Statut</th></tr></thead>
+            <thead><tr><th>KPI</th><th>Valeur</th><th>Objectif</th><th>Tendance</th><th>Taux realise</th></tr></thead>
             <tbody>${buildReportTableRows(context.kpis)}</tbody>
           </table>
           <h2>Plan d'action KPI rouges/oranges</h2>

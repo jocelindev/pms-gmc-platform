@@ -1160,6 +1160,26 @@
     return "red";
   }
 
+  function targetAchievementStatusClass(kpi = {}) {
+    const metric = metricFromTarget(kpi);
+    const explicit = Number(kpi.vsTargetValue);
+    const ratio = Number.isFinite(explicit) ? explicit : parseNumber(metric.display);
+    if (Number.isFinite(ratio)) {
+      if (ratio >= 100) return "green";
+      if (ratio >= 90) return "amber";
+      return "red";
+    }
+    if (metric.className === "positive") return "green";
+    if (metric.className === "neutral") return "amber";
+    if (metric.className === "negative") return "red";
+    return "gray";
+  }
+
+  function targetAchievementPill(kpi = {}) {
+    const metric = metricFromTarget(kpi);
+    return statusPill(metric.display || "--", targetAchievementStatusClass(kpi));
+  }
+
   function hasKpiData(kpi = {}) {
     return Boolean(kpi.calculated && ["green", "amber", "red"].includes(kpi.status));
   }
@@ -4255,7 +4275,7 @@
               <th>Objectif</th>
               <th>Tendance</th>
               <th>Source Kobo</th>
-              <th>Statut</th>
+              <th>Taux realise</th>
             </tr>
           </thead>
           <tbody>
@@ -4268,7 +4288,7 @@
                     <td>${escapeHtml(kpi.target)}</td>
                     <td>${escapeHtml(kpi.trend)}</td>
                     <td>${escapeHtml(kpi.source)}</td>
-                    <td>${statusPill(kpiStatusText(kpi.status), kpi.status)}</td>
+                    <td>${targetAchievementPill(kpi)}</td>
                   </tr>
                 `
               )
