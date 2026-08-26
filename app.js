@@ -1379,10 +1379,10 @@
       return "Identifiant introuvable. Verifiez l'email, le nom utilisateur ou demandez la creation du compte.";
     }
     if (lowerMessage.includes("mot de passe incorrect")) {
-      return "Mot de passe incorrect. Verifiez la saisie ou demandez une reinitialisation a l'administrateur Control Tower.";
+      return "Mot de passe incorrect. Verifiez la saisie ou demandez une reinitialisation a l'administrateur Hub central.";
     }
     if (lowerMessage.includes("inactif")) {
-      return "Compte inactif. Contactez l'administrateur Control Tower pour reactiver l'acces.";
+      return "Compte inactif. Contactez l'administrateur Hub central pour reactiver l'acces.";
     }
     if (lowerMessage.includes("failed to fetch") || lowerMessage.includes("load failed")) {
       return "Serveur indisponible pour le moment. Patientez quelques secondes puis reessayez.";
@@ -1610,7 +1610,7 @@
 
     if (forgotLink) {
       forgotLink.addEventListener("click", () => {
-        setLoginFeedback("Pour reinitialiser votre mot de passe, contactez l'administrateur Control Tower.", "info");
+        setLoginFeedback("Pour reinitialiser votre mot de passe, contactez l'administrateur Hub central.", "info");
       });
     }
 
@@ -1692,7 +1692,7 @@
     document.querySelector(`#${view}`)?.classList.add("active");
     document.body.dataset.activeView = view;
     document.body.classList.toggle("dashboard-mode", view === "dashboard");
-    $("#view-title").textContent = viewTitles[view] || "Palladium Africa Control Tower";
+    $("#view-title").textContent = viewTitles[view] || "Palladium Africa Hub central";
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 

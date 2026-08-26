@@ -1,4 +1,4 @@
-# Palladium Africa Control Tower - Prototype web
+# Palladium Africa Hub central - Prototype web
 
 Premiere base de developpement pour la tour de controle des performances Groupe de Palladium Africa.
 

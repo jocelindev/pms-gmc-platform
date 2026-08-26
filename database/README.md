@@ -1,6 +1,6 @@
-# Base de donnees Palladium Africa Control Tower
+# Base de donnees Palladium Africa Hub central
 
-Cette base SQLite sert de premiere couche de persistance pour Palladium Africa Control Tower.
+Cette base SQLite sert de premiere couche de persistance pour Palladium Africa Hub central.
 
 ## Fichiers
 

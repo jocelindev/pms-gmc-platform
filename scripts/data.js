@@ -11,7 +11,7 @@
       },
       {
         name: "CDC_PMS_GMC_Group_2026.docx",
-        role: "Cahier des charges Control Tower",
+        role: "Cahier des charges Hub central",
       },
     ],
 
