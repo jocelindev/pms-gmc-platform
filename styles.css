@@ -474,6 +474,118 @@ button {
   line-height: 1.4;
 }
 
+.login-country-panel {
+  display: grid;
+  gap: 12px;
+  max-width: 680px;
+}
+
+.login-country-panel > span {
+  color: var(--palladium-gold);
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.login-country-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.login-country-card {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px 12px;
+  backdrop-filter: blur(8px);
+}
+
+.login-country-card strong {
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.country-flag {
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 5px;
+  box-shadow: 0 8px 18px rgba(2, 8, 19, 0.18);
+  display: block;
+  flex: 0 0 44px;
+  height: 29px;
+  overflow: hidden;
+  position: relative;
+  width: 44px;
+}
+
+.country-ci {
+  background: linear-gradient(90deg, #f77f00 0 33.33%, #fff 33.33% 66.66%, #009e60 66.66%);
+}
+
+.country-bj {
+  background:
+    linear-gradient(90deg, #008751 0 40%, transparent 40%),
+    linear-gradient(180deg, #fcd116 0 50%, #e8112d 50%);
+}
+
+.country-cm {
+  background: linear-gradient(90deg, #007a5e 0 33.33%, #ce1126 33.33% 66.66%, #fcd116 66.66%);
+}
+
+.country-cg {
+  background: linear-gradient(135deg, #009543 0 38%, #fcd116 38% 62%, #dc241f 62%);
+}
+
+.country-gn {
+  background: linear-gradient(90deg, #ce1126 0 33.33%, #fcd116 33.33% 66.66%, #009460 66.66%);
+}
+
+.country-gw {
+  background:
+    linear-gradient(90deg, #ce1126 0 38%, transparent 38%),
+    linear-gradient(180deg, #fcd116 0 50%, #009e49 50%);
+}
+
+.country-ne {
+  background: linear-gradient(180deg, #e05206 0 33.33%, #fff 33.33% 66.66%, #0db02b 66.66%);
+}
+
+.country-cm::after,
+.country-gw::after {
+  background: #fcd116;
+  clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 56%, 79% 91%, 50% 69%, 21% 91%, 32% 56%, 2% 35%, 39% 35%);
+  content: "";
+  height: 9px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 9px;
+}
+
+.country-gw::after {
+  background: #111;
+  left: 19%;
+}
+
+.country-ne::after {
+  background: #e05206;
+  border-radius: 999px;
+  content: "";
+  height: 9px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 9px;
+}
+
 .login-flow {
   display: grid;
   gap: 10px;
@@ -5502,6 +5614,10 @@ td small {
     grid-template-columns: 1fr;
   }
 
+  .login-country-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .app-shell {
     grid-template-columns: 230px minmax(0, 1fr);
   }
@@ -5594,6 +5710,10 @@ td small {
 
   .login-highlights {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .login-country-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .login-flow {
