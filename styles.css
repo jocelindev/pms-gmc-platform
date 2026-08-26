@@ -894,7 +894,7 @@ body[data-active-view="management"] .powerbi-filter-row {
   border: 2px solid rgba(31, 56, 100, 0.22);
   border-radius: 18px 18px 8px 8px;
   display: grid;
-  grid-template-columns: minmax(350px, 1.15fr) minmax(210px, 0.7fr) minmax(200px, 0.68fr) minmax(150px, 0.45fr);
+  grid-template-columns: minmax(290px, 1fr) minmax(240px, 0.8fr) minmax(240px, 0.8fr) minmax(130px, 0.42fr);
   min-height: 82px;
   overflow: visible;
   position: relative;
@@ -1121,17 +1121,31 @@ body[data-active-view="management"] .powerbi-filter-row {
 
 .powerbi-filter-box {
   background: #f7fbff;
-  border: 1.8px solid var(--palladium-blue);
-  border-radius: 22px;
+  border: 1.8px solid rgba(214, 168, 56, 0.88);
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
   display: grid;
   gap: 7px;
-  min-height: 70px;
-  padding: 11px 20px 8px;
+  min-height: 62px;
+  padding: 9px 14px 7px;
 }
 
 .powerbi-top-filter-box {
   align-self: center;
-  border-color: rgba(214, 168, 56, 0.82);
+  margin: 10px 14px;
+  min-height: 62px;
+  padding: 9px 14px 7px;
+}
+
+.powerbi-date-card,
+.powerbi-top-filter-box {
+  background: #f7fbff;
+  border: 1.8px solid rgba(214, 168, 56, 0.88);
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.powerbi-date-card {
   margin: 10px 14px;
   min-height: 62px;
   padding: 9px 14px 7px;
@@ -1143,27 +1157,47 @@ body[data-active-view="management"] .powerbi-filter-row {
 
 .powerbi-filter-box select {
   appearance: none;
-  background: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.92);
   border: 0;
-  border-bottom: 1px solid rgba(31, 56, 100, 0.35);
+  border-bottom: 2px solid rgba(214, 168, 56, 0.8);
   border-radius: 0;
-  color: #050505;
-  font-size: 16px;
-  min-height: 24px;
-  padding: 0 28px 0 0;
+  color: var(--palladium-blue);
+  font-size: clamp(15px, 1vw, 18px);
+  font-weight: 900;
+  min-height: 34px;
+  padding: 0 32px 0 6px;
 }
 
 .powerbi-filter-box::after {
-  border: solid #111827;
-  border-width: 0 1.6px 1.6px 0;
+  border: solid #0870d8;
+  border-width: 0 2px 2px 0;
   content: "";
-  height: 10px;
+  height: 14px;
   justify-self: end;
   margin-right: 4px;
-  margin-top: -24px;
+  margin-top: -30px;
   pointer-events: none;
   transform: rotate(45deg);
-  width: 10px;
+  width: 14px;
+}
+
+.powerbi-date-card input,
+.powerbi-top-filter-box select {
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 2px solid rgba(214, 168, 56, 0.8);
+  color: var(--palladium-blue);
+  font-size: clamp(15px, 1vw, 18px);
+  font-weight: 900;
+  min-height: 34px;
+  padding-left: 6px;
+}
+
+.powerbi-top-filter-box::after {
+  border-color: #0870d8;
+  border-width: 0 2px 2px 0;
+  height: 14px;
+  margin-top: -31px;
+  width: 14px;
 }
 
 .powerbi-chart-title {
