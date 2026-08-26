@@ -890,8 +890,8 @@ body[data-active-view="management"] .powerbi-filter-row {
 
 .powerbi-ribbon-top {
   align-items: stretch;
-  background: var(--palladium-gold);
-  border: 2px solid rgba(31, 56, 100, 0.12);
+  background: var(--palladium-blue);
+  border: 2px solid rgba(31, 56, 100, 0.22);
   border-radius: 18px 18px 8px 8px;
   display: grid;
   grid-template-columns: minmax(360px, 1.35fr) minmax(260px, 0.8fr) minmax(170px, 0.5fr);
@@ -911,7 +911,7 @@ body[data-active-view="management"] .powerbi-filter-row {
 
 .powerbi-logo-image {
   background: rgba(255, 255, 255, 0.86);
-  border: 2px solid #050505;
+  border: 2px solid var(--palladium-gold);
   border-radius: 8px;
   display: block;
   height: 48px;
@@ -921,7 +921,7 @@ body[data-active-view="management"] .powerbi-filter-row {
 }
 
 .powerbi-brand-block strong {
-  color: #050505;
+  color: #fff;
   font-size: clamp(22px, 2.15vw, 30px);
   font-weight: 950;
   letter-spacing: -0.01em;
@@ -930,7 +930,7 @@ body[data-active-view="management"] .powerbi-filter-row {
 }
 
 .powerbi-doc-icon {
-  border: 3px solid #050505;
+  border: 3px solid var(--palladium-gold);
   border-radius: 8px;
   height: 50px;
   justify-self: end;
@@ -940,8 +940,9 @@ body[data-active-view="management"] .powerbi-filter-row {
 
 .powerbi-doc-icon::after {
   align-items: center;
-  border: 3px solid #050505;
+  border: 3px solid var(--palladium-gold);
   border-radius: 999px;
+  color: var(--palladium-gold);
   content: "$";
   display: flex;
   font-size: 13px;
@@ -955,7 +956,7 @@ body[data-active-view="management"] .powerbi-filter-row {
 }
 
 .powerbi-doc-icon span {
-  background: #050505;
+  background: var(--palladium-gold);
   display: block;
   height: 3px;
   margin: 8px 8px 0;
@@ -963,8 +964,8 @@ body[data-active-view="management"] .powerbi-filter-row {
 
 .powerbi-date-card {
   align-content: center;
-  border-left: 2px solid #050505;
-  border-right: 2px solid #050505;
+  border-left: 2px solid rgba(255, 255, 255, 0.24);
+  border-right: 2px solid rgba(255, 255, 255, 0.24);
   display: grid;
   gap: 4px;
   padding: 10px 16px;
@@ -984,9 +985,9 @@ body[data-active-view="management"] .powerbi-filter-row {
 
 .powerbi-date-card input {
   border: 0;
-  border-bottom: 2px solid rgba(31, 56, 100, 0.45);
-  background: rgba(255, 255, 255, 0.48);
-  color: #0870d8;
+  border-bottom: 2px solid rgba(214, 168, 56, 0.8);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--palladium-blue);
   cursor: pointer;
   font-size: 25px;
   font-weight: 950;
@@ -1096,7 +1097,7 @@ body[data-active-view="management"] .powerbi-filter-row {
 
 .powerbi-signature {
   align-content: center;
-  color: #0b1c8a;
+  color: #fff;
   display: grid;
   font-weight: 900;
   justify-items: center;
@@ -1105,7 +1106,7 @@ body[data-active-view="management"] .powerbi-filter-row {
 }
 
 .powerbi-signature span {
-  color: #050505;
+  color: rgba(255, 255, 255, 0.84);
   font-size: 11px;
   margin-top: 4px;
 }
@@ -1118,8 +1119,8 @@ body[data-active-view="management"] .powerbi-filter-row {
 }
 
 .powerbi-filter-box {
-  background: #fff0a8;
-  border: 1.8px solid #050505;
+  background: #f7fbff;
+  border: 1.8px solid var(--palladium-blue);
   border-radius: 22px;
   display: grid;
   gap: 7px;
