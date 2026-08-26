@@ -598,6 +598,7 @@ def recreate_user_access_view(conn: sqlite3.Connection) -> None:
         CREATE VIEW v_user_access_details AS
         SELECT
           ua.id,
+          u.id AS user_id,
           u.full_name AS responsible,
           u.email,
           p.id AS pole_id,
@@ -974,7 +975,7 @@ def list_profiles(conn: sqlite3.Connection) -> list[dict]:
 def list_user_access(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         """
-        SELECT id, responsible, pole_id, pole_name, branch, profile, dashboard_scope, status
+        SELECT id, user_id, responsible, pole_id, pole_name, branch, profile, dashboard_scope, status
         FROM v_user_access_details
         ORDER BY branch, pole_name, responsible
         """
@@ -983,6 +984,7 @@ def list_user_access(conn: sqlite3.Connection) -> list[dict]:
         {
             "id": f"DB-{row['id']}",
             "dbId": row["id"],
+            "userId": row["user_id"],
             "responsible": row["responsible"],
             "poleId": row["pole_id"],
             "poleName": row["pole_name"],
@@ -2073,7 +2075,7 @@ def save_user_access(payload: dict) -> dict:
         conn.commit()
         row = conn.execute(
             """
-            SELECT id, responsible, pole_id, pole_name, branch, profile, dashboard_scope, status
+            SELECT id, user_id, responsible, pole_id, pole_name, branch, profile, dashboard_scope, status
             FROM v_user_access_details
             WHERE responsible = ? AND pole_id = ? AND branch = ?
             """,
@@ -2087,6 +2089,7 @@ def list_user_access_from_rows(rows: list[sqlite3.Row]) -> list[dict]:
         {
             "id": f"DB-{row['id']}",
             "dbId": row["id"],
+            "userId": row["user_id"],
             "responsible": row["responsible"],
             "poleId": row["pole_id"],
             "poleName": row["pole_name"],
@@ -2148,7 +2151,7 @@ def access_for_session(conn: sqlite3.Connection, user_id: int, profile: str, per
 
     rows = conn.execute(
         """
-        SELECT id, responsible, pole_id, pole_name, branch, profile, dashboard_scope, status
+        SELECT id, user_id, responsible, pole_id, pole_name, branch, profile, dashboard_scope, status
         FROM v_user_access_details
         WHERE id IN (
           SELECT id FROM user_access WHERE user_id = ?

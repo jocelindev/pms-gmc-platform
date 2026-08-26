@@ -1259,6 +1259,12 @@ textarea {
   color: var(--palladium-blue);
 }
 
+.primary-action:disabled,
+.ghost-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .view {
   display: none;
 }
@@ -4259,6 +4265,82 @@ button.dashboard-control-card {
   color: var(--muted);
 }
 
+.user-view-preview {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.user-view-card {
+  background: #f8fbff;
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  min-height: 92px;
+  padding: 13px 14px;
+}
+
+.user-view-card span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.user-view-card strong {
+  color: var(--palladium-blue);
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.user-view-card small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.user-view-card-wide {
+  grid-column: span 2;
+}
+
+.user-view-chip-list {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.user-view-chip {
+  background: rgba(31, 56, 100, 0.08);
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-radius: 999px;
+  color: var(--palladium-blue);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 7px 9px;
+}
+
+.user-view-chip.green {
+  background: #e9f8ef;
+  border-color: #b7ebc9;
+  color: #087b3a;
+}
+
+.user-view-chip.amber {
+  background: #fff4cc;
+  border-color: #f7d36a;
+  color: #9a5b00;
+}
+
+.user-view-chip.red {
+  background: #ffe5e5;
+  border-color: #f3b2b2;
+  color: #b42318;
+}
+
 .access-note {
   border: 1px solid rgba(31, 56, 100, 0.16);
   border-radius: 8px;
@@ -5709,6 +5791,7 @@ td small {
   .kpi-engine-checklist,
   .kpi-engine-advice,
   .admin-summary-grid,
+  .user-view-preview,
   .admin-kobo-form,
   .admin-kobo-actions,
   .kobo-logic-grid,
@@ -5833,6 +5916,7 @@ td small {
   .kpi-engine-checklist,
   .kpi-engine-advice,
   .admin-summary-grid,
+  .user-view-preview,
   .admin-kobo-form,
   .kobo-logic-grid,
   .kobo-template-actions,
@@ -5847,6 +5931,10 @@ td small {
   .report-summary,
   .distribution-list {
     grid-template-columns: 1fr;
+  }
+
+  .user-view-card-wide {
+    grid-column: auto;
   }
 
   .admin-summary-head {

@@ -149,7 +149,11 @@
   function countryOptionsHtml(selectedValue, state = {}) {
     const selectedCountry = getActiveCountry({ ...state, calendarBranchFilter: selectedValue });
     const selected = countryFilterValue(selectedCountry);
-    return getAuthorizedCountryOptions(state)
+    const authorizedCountries = getAuthorizedCountryOptions(state);
+    if (!authorizedCountries.length) {
+      return `<option value="">Aucun pays autorise</option>`;
+    }
+    return authorizedCountries
       .map((country) => {
         const value = countryFilterValue(country);
         return `<option value="${escapeHtml(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(country.name)}</option>`;
@@ -1049,16 +1053,20 @@
     const activeCountry = getActiveCountry(state);
     const activeCountryValue = countryFilterValue(activeCountry);
     const countrySelectOptions = countryOptionsHtml(activeCountryValue, state);
+    const countryOptionCount = getAuthorizedCountryOptions(state).length;
+    const countrySelectionLocked = Boolean(state.currentUser && !state.currentPermissions?.administration && countryOptionCount <= 1);
     const topbarBranchFilter = $("#branch-filter");
 
     if (topbarBranchFilter) {
       topbarBranchFilter.innerHTML = countrySelectOptions;
       topbarBranchFilter.value = activeCountryValue;
+      topbarBranchFilter.disabled = countrySelectionLocked || countryOptionCount === 0;
     }
 
     if (branchFilter) {
       branchFilter.innerHTML = countrySelectOptions;
       branchFilter.value = activeCountryValue;
+      branchFilter.disabled = countrySelectionLocked || countryOptionCount === 0;
     }
 
     if (cycleFilter) {
@@ -5262,6 +5270,62 @@
     if (currentUser) {
       state.currentUserAccessUserId = currentUser.id;
     }
+    const permissionsForProfile = (profile) =>
+      accessProfiles.find((role) => role.profile === profile)?.permissions || {};
+    const userAccessRulesFor = (user) => {
+      if (!user) return [];
+      const exactRules = accessRules.filter((rule) => String(rule.userId || "") === String(user.id));
+      if (exactRules.length) return exactRules;
+      return accessRules.filter((rule) => rule.responsible === user.fullName || rule.email === user.email);
+    };
+    const uniqueText = (values) => [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+    const renderChipList = (items, className = "", limit = 7) => {
+      const values = uniqueText(items);
+      if (!values.length) return `<small>Aucun element affecte.</small>`;
+      const visible = values.slice(0, limit);
+      const extra = values.length - visible.length;
+      return `
+        <div class="user-view-chip-list">
+          ${visible.map((item) => `<span class="user-view-chip ${escapeHtml(className)}">${escapeHtml(item)}</span>`).join("")}
+          ${extra > 0 ? `<span class="user-view-chip">+${extra}</span>` : ""}
+        </div>
+      `;
+    };
+    const selectedUserProfile = currentUser?.profile || state.currentUserAccessProfile || currentAccessRole?.profile || "";
+    const selectedUserPermissions = permissionsForProfile(selectedUserProfile);
+    const selectedUserRules = userAccessRulesFor(currentUser);
+    const selectedUserHasGlobalView = Boolean(selectedUserPermissions.administration || selectedUserPermissions.management);
+    const selectedUserCountries = selectedUserHasGlobalView || selectedUserRules.some((rule) => isGroupCountry(findCountryByValue(ruleCountryValue(rule))))
+      ? getCountryOptions().map((country) => country.name)
+      : selectedUserRules.map((rule) => findCountryByValue(ruleCountryValue(rule)).name);
+    const selectedUserPoles = selectedUserHasGlobalView
+      ? reporting.poles.map((pole) => pole.name)
+      : selectedUserRules.map((rule) => rule.poleName || reporting.poles.find((pole) => pole.id === rule.poleId)?.name || rule.poleId);
+    const menuItems = [
+      ["Tableau de bord", selectedUserPermissions.consultation || selectedUserPermissions.administration],
+      ["Management", selectedUserPermissions.management || selectedUserPermissions.administration],
+      ["Suivi par pole", selectedUserPermissions.consultation || selectedUserPermissions.administration],
+      ["Notifications", selectedUserPermissions.consultation || selectedUserPermissions.validation || selectedUserPermissions.administration],
+      ["Reporting", selectedUserPermissions.consultation || selectedUserPermissions.ajout || selectedUserPermissions.administration],
+      ["Administration", selectedUserPermissions.administration],
+    ].filter(([, allowed]) => allowed).map(([label]) => label);
+    const selectedUserDashboards = selectedUserHasGlobalView
+      ? [selectedUserPermissions.administration ? "Tous les dashboards" : "Management groupe + dashboards poles"]
+      : selectedUserRules.map((rule) => rule.dashboardScope || `Dashboard Suivi KPI - ${rule.branch || "Groupe"} - ${rule.poleName || rule.poleId}`);
+    const previewStatusClass = !currentUser
+      ? "gray"
+      : selectedUserHasGlobalView
+        ? "green"
+        : selectedUserRules.length
+          ? "amber"
+          : "red";
+    const previewStatusLabel = !currentUser
+      ? "Aucun utilisateur"
+      : selectedUserHasGlobalView
+        ? "Vue globale"
+        : selectedUserRules.length
+          ? "Vue limitee"
+          : "A affecter";
 
     if (accessSummary) {
       accessSummary.innerHTML = `
@@ -5286,6 +5350,44 @@
           <small>${escapeHtml(currentUser?.defaultBranch || "Groupe")} - ${escapeHtml(currentUser?.defaultPoleName || "Pole a affecter")}</small>
         </div>
       `;
+    }
+    const userViewStatus = $("#user-view-status");
+    const userViewPreview = $("#user-view-preview");
+    if (userViewStatus) {
+      userViewStatus.className = `status-pill ${previewStatusClass}`;
+      userViewStatus.textContent = previewStatusLabel;
+    }
+    if (userViewPreview) {
+      userViewPreview.innerHTML = currentUser
+        ? `
+          <article class="user-view-card">
+            <span>Utilisateur</span>
+            <strong>${escapeHtml(currentUser.fullName)}</strong>
+            <small>${escapeHtml(currentUser.email || "Email non renseigne")}</small>
+          </article>
+          <article class="user-view-card">
+            <span>Profil</span>
+            <strong>${escapeHtml(selectedUserProfile || "Non defini")}</strong>
+            <small>${selectedUserHasGlobalView ? "Vision groupe autorisee" : "Vision limitee par affectation"}</small>
+          </article>
+          <article class="user-view-card user-view-card-wide">
+            <span>Menus visibles</span>
+            ${renderChipList(menuItems, "green", 8)}
+          </article>
+          <article class="user-view-card user-view-card-wide">
+            <span>Pays / Filiales visibles</span>
+            ${renderChipList(selectedUserCountries, selectedUserHasGlobalView ? "green" : "amber")}
+          </article>
+          <article class="user-view-card user-view-card-wide">
+            <span>Poles visibles</span>
+            ${renderChipList(selectedUserPoles, selectedUserHasGlobalView ? "green" : "amber")}
+          </article>
+          <article class="user-view-card user-view-card-wide">
+            <span>Dashboard autorise</span>
+            ${renderChipList(selectedUserDashboards, selectedUserHasGlobalView ? "green" : "amber", 4)}
+          </article>
+        `
+        : `<div class="empty-kpi-state">Selectionner ou creer un utilisateur pour voir son perimetre.</div>`;
     }
     if (profileSelect) {
       profileSelect.innerHTML = accessProfiles

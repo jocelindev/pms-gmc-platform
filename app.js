@@ -1541,13 +1541,46 @@
     return Boolean(state.currentPermissions?.management || state.currentPermissions?.administration);
   }
 
+  function hasPermission(permissionCode) {
+    const permissions = state.currentPermissions || {};
+    return Boolean(permissions.administration || permissions[permissionCode]);
+  }
+
+  function canAccessView(view) {
+    const permissions = state.currentPermissions || {};
+    if (permissions.administration) return true;
+    if (view === "admin") return false;
+    if (view === "management") return Boolean(permissions.management);
+    if (view === "reports") return Boolean(permissions.consultation || permissions.ajout || permissions.validation);
+    if (view === "alerts") return Boolean(permissions.consultation || permissions.validation);
+    if (view === "dashboard" || view === "poles") return Boolean(permissions.consultation);
+    return true;
+  }
+
+  function firstAllowedView() {
+    return ["dashboard", "management", "poles", "alerts", "reports", "admin"].find(canAccessView) || "dashboard";
+  }
+
+  function applyNavigationPermissions() {
+    document.querySelectorAll(".nav-item").forEach((button) => {
+      button.toggleAttribute("hidden", !canAccessView(button.dataset.view));
+    });
+  }
+
+  function applyActionPermissions() {
+    const generationAllowed = hasPermission("ajout");
+    const commentAllowed = hasPermission("ajout") || hasPermission("modification");
+    const validationAllowed = hasPermission("validation");
+    $("#generate-report")?.toggleAttribute("disabled", !generationAllowed);
+    $("#save-report-comment")?.toggleAttribute("disabled", !commentAllowed);
+    $("#schedule-report")?.toggleAttribute("disabled", !validationAllowed);
+  }
+
   function applyUserAccessScope() {
     const firstAccess = state.userAccessScope?.[0];
     const canAdmin = Boolean(state.currentPermissions?.administration);
-    const canManagement = canAccessManagement();
-
-    document.querySelector('.nav-item[data-view="admin"]')?.toggleAttribute("hidden", !canAdmin);
-    document.querySelector('.nav-item[data-view="management"]')?.toggleAttribute("hidden", !canManagement);
+    applyNavigationPermissions();
+    applyActionPermissions();
 
     if (canAdmin) {
       state.activeAccessRuleId = null;
@@ -1678,13 +1711,9 @@
   }
 
   function activateView(view) {
-    if (view === "admin" && !state.currentPermissions?.administration) {
-      showToast("Acces reserve aux administrateurs.");
-      view = "dashboard";
-    }
-    if (view === "management" && !canAccessManagement()) {
-      showToast("Acces reserve au management.");
-      view = "dashboard";
+    if (!canAccessView(view)) {
+      showToast("Acces non autorise pour ce profil.");
+      view = firstAllowedView();
     }
     document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
     document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
@@ -2500,6 +2529,10 @@
     });
 
     $("#generate-report").addEventListener("click", async () => {
+      if (!hasPermission("ajout")) {
+        showToast("Droit d'ajout requis pour generer un rapport.");
+        return;
+      }
       state.currentReportPole = getAllowedPoleFromScope(state.currentReportPole);
       renderReportControls(state);
       renderReportWorkspace(state);
@@ -2552,6 +2585,10 @@
     });
 
     $("#save-report-comment").addEventListener("click", () => {
+      if (!hasPermission("ajout") && !hasPermission("modification")) {
+        showToast("Droit de modification requis pour enregistrer un commentaire.");
+        return;
+      }
       const comment = $("#report-comment").value.trim();
       showToast(comment ? "Commentaire de rapport enregistre." : "Ajoutez un commentaire avant enregistrement.");
     });
@@ -2586,6 +2623,10 @@
     });
 
     $("#schedule-report").addEventListener("click", () => {
+      if (!hasPermission("validation")) {
+        showToast("Droit de validation requis pour planifier la diffusion.");
+        return;
+      }
       const context = getCurrentReportContext();
       showToast(`Diffusion planifiee pour ${context.pole.name} selon le cycle ${context.cycle.value.toLowerCase()}.`);
     });

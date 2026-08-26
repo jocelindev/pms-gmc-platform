@@ -255,6 +255,7 @@ CREATE INDEX IF NOT EXISTS idx_reports_pole_period ON reports(pole_id, period);
 CREATE VIEW IF NOT EXISTS v_user_access_details AS
 SELECT
   ua.id,
+  u.id AS user_id,
   u.full_name AS responsible,
   u.email,
   p.id AS pole_id,
