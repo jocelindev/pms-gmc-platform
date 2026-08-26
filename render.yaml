@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: pms-gmc-platform
+    name: palladiumafrica-controltower
     runtime: python
     plan: free
     buildCommand: python -m py_compile server.py start.py database/init_database.py
@@ -10,9 +10,9 @@ services:
       - controltower.palladiumafrica.com
     envVars:
       - key: PMS_PUBLIC_APP_ORIGIN
-        value: https://controltower.palladiumafrica.com
+        value: https://palladiumafrica-controltower.onrender.com
       - key: PMS_ALLOWED_CORS_ORIGINS
-        value: https://pms-gmc-platform.onrender.com,https://controltower.palladiumafrica.com
+        value: https://pms-gmc-platform.onrender.com,https://palladiumafrica-controltower.onrender.com,https://controltower.palladiumafrica.com
       - key: PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS
         value: "120"
       - key: PMS_KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS
