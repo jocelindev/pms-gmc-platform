@@ -368,6 +368,13 @@ button {
   text-align: center;
 }
 
+.login-feature-section > p a {
+  color: #0f559b;
+  font-weight: 850;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .login-side-panel {
   background:
     linear-gradient(90deg, rgba(4, 17, 38, 0.96), rgba(9, 31, 65, 0.78) 52%, rgba(6, 24, 52, 0.52)),
