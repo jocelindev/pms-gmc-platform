@@ -894,7 +894,7 @@ body[data-active-view="management"] .powerbi-filter-row {
   border: 2px solid rgba(31, 56, 100, 0.22);
   border-radius: 18px 18px 8px 8px;
   display: grid;
-  grid-template-columns: minmax(360px, 1.35fr) minmax(260px, 0.8fr) minmax(170px, 0.5fr);
+  grid-template-columns: minmax(350px, 1.15fr) minmax(210px, 0.7fr) minmax(200px, 0.68fr) minmax(150px, 0.45fr);
   min-height: 82px;
   overflow: visible;
   position: relative;
@@ -904,7 +904,7 @@ body[data-active-view="management"] .powerbi-filter-row {
 .powerbi-brand-block {
   align-items: center;
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr) 58px;
+  grid-template-columns: 110px minmax(0, 1fr);
   gap: 12px;
   padding: 10px 18px;
 }
@@ -922,7 +922,7 @@ body[data-active-view="management"] .powerbi-filter-row {
 
 .powerbi-brand-block strong {
   color: #fff;
-  font-size: clamp(22px, 2.15vw, 30px);
+  font-size: clamp(20px, 1.85vw, 26px);
   font-weight: 950;
   letter-spacing: -0.01em;
   min-width: 0;
@@ -932,6 +932,7 @@ body[data-active-view="management"] .powerbi-filter-row {
 .powerbi-doc-icon {
   border: 3px solid var(--palladium-gold);
   border-radius: 8px;
+  display: none;
   height: 50px;
   justify-self: end;
   position: relative;
@@ -1115,7 +1116,7 @@ body[data-active-view="management"] .powerbi-filter-row {
   align-items: end;
   display: grid;
   gap: 9px;
-  grid-template-columns: repeat(2, minmax(210px, 0.85fr)) minmax(170px, 0.65fr) minmax(230px, 1fr) minmax(230px, 1fr);
+  grid-template-columns: minmax(210px, 0.85fr) minmax(170px, 0.65fr) minmax(230px, 1fr) minmax(230px, 1fr);
 }
 
 .powerbi-filter-box {
@@ -1126,6 +1127,14 @@ body[data-active-view="management"] .powerbi-filter-row {
   gap: 7px;
   min-height: 70px;
   padding: 11px 20px 8px;
+}
+
+.powerbi-top-filter-box {
+  align-self: center;
+  border-color: rgba(214, 168, 56, 0.82);
+  margin: 10px 14px;
+  min-height: 62px;
+  padding: 9px 14px 7px;
 }
 
 .powerbi-filter-box.compact-filter-box {
