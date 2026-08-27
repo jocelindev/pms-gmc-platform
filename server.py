@@ -764,6 +764,9 @@ def migrate_database(conn: sqlite3.Connection) -> None:
     if "must_change_password" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
         changed = True
+    if "last_login_at" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN last_login_at TEXT")
+        changed = True
 
     submission_columns = {row["name"] for row in conn.execute("PRAGMA table_info(kobo_submissions)").fetchall()}
     if "submission_uid" not in submission_columns:
@@ -1556,6 +1559,7 @@ def user_to_front(
         "phone": row["phone"] or "",
         "profile": row["profile"] or "Manager / Responsable",
         "status": row["status"] or "Actif",
+        "lastLoginAt": row["last_login_at"] if "last_login_at" in row.keys() else "",
         "defaultPoleId": row["default_pole_id"] if "default_pole_id" in row.keys() else default_pole_id,
         "defaultPoleName": row["default_pole_name"] if "default_pole_name" in row.keys() else default_pole_name,
         "defaultBranch": row["default_branch"] if "default_branch" in row.keys() else default_branch or "Groupe",
@@ -1571,6 +1575,7 @@ def list_users(conn: sqlite3.Connection) -> list[dict]:
           u.email,
           u.phone,
           u.status,
+          u.last_login_at,
           COALESCE(pr.name, apr.name, 'Manager / Responsable') AS profile,
           ua.pole_id AS default_pole_id,
           ua.branch AS default_branch,
@@ -2017,6 +2022,98 @@ def create_platform_user(payload: dict) -> dict:
         return user_to_front(row, default_pole_id or None, default_pole_name or None, default_branch)
 
 
+def get_user_by_id(conn: sqlite3.Connection, user_id: int) -> dict:
+    row = conn.execute(
+        """
+        SELECT
+          u.id,
+          u.full_name,
+          u.email,
+          u.phone,
+          u.status,
+          u.last_login_at,
+          COALESCE(pr.name, apr.name, 'Manager / Responsable') AS profile,
+          ua.pole_id AS default_pole_id,
+          ua.branch AS default_branch,
+          p.name AS default_pole_name
+        FROM users u
+        LEFT JOIN profiles pr ON pr.id = u.default_profile_id
+        LEFT JOIN user_access ua ON ua.id = (
+          SELECT id FROM user_access
+          WHERE user_id = u.id AND status = 'Actif'
+          ORDER BY updated_at DESC, id DESC
+          LIMIT 1
+        )
+        LEFT JOIN profiles apr ON apr.id = ua.profile_id
+        LEFT JOIN poles p ON p.id = ua.pole_id
+        WHERE u.id = ?
+        """,
+        (user_id,),
+    ).fetchone()
+    if not row:
+        raise ValueError("Utilisateur introuvable.")
+    return user_to_front(row)
+
+
+def parse_user_id(payload: dict) -> int:
+    raw_user_id = str(payload.get("userId") or payload.get("id") or "").strip()
+    if not raw_user_id:
+        raise ValueError("Utilisateur obligatoire.")
+    try:
+        return int(raw_user_id.replace("USR-", ""))
+    except ValueError as exc:
+        raise ValueError("Identifiant utilisateur invalide.") from exc
+
+
+def update_platform_user_status(payload: dict, session: dict | None = None) -> dict:
+    user_id = parse_user_id(payload)
+    status = str(payload.get("status") or "").strip()
+    allowed_statuses = {"Actif", "Suspendu", "Inactif", "A supprimer"}
+    if status not in allowed_statuses:
+        raise ValueError("Statut utilisateur invalide.")
+    if session and int(session.get("userId") or 0) == user_id and status != "Actif":
+        raise ValueError("Impossible de suspendre ou desactiver le compte actuellement connecte.")
+
+    with db_connect() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (status, user_id),
+        )
+        if conn.total_changes == 0:
+            raise ValueError("Utilisateur introuvable.")
+        audit(conn, "Mise a jour statut utilisateur", "user", str(user_id), {"status": status})
+        conn.commit()
+        return get_user_by_id(conn, user_id)
+
+
+def reset_platform_user_password(payload: dict) -> dict:
+    user_id = parse_user_id(payload)
+    password = str(payload.get("password") or DEFAULT_USER_PASSWORD).strip()
+    validate_password(password)
+    with db_connect() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET password_hash = ?,
+                password_updated_at = CURRENT_TIMESTAMP,
+                must_change_password = 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (hash_password(password), user_id),
+        )
+        if conn.total_changes == 0:
+            raise ValueError("Utilisateur introuvable.")
+        audit(conn, "Reinitialisation mot de passe utilisateur", "user", str(user_id), {"temporaryPasswordSet": True})
+        conn.commit()
+        user = get_user_by_id(conn, user_id)
+        return {**user, "temporaryPassword": password}
+
+
 def save_user_access(payload: dict) -> dict:
     user_id_payload = payload.get("userId")
     responsible = str(payload.get("responsible") or "").strip()
@@ -2219,6 +2316,10 @@ def authenticate_user(payload: dict) -> dict:
 
         permissions = permission_map_for_profile(conn, int(user["profile_id"]))
         access = access_for_session(conn, int(user["id"]), user["profile"], permissions)
+        conn.execute(
+            "UPDATE users SET last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (int(user["id"]),),
+        )
         audit(conn, "Connexion utilisateur", "user", str(user["id"]), {"profile": user["profile"]})
         conn.commit()
         session_token = create_session_token(int(user["id"]), user["profile"], permissions)
@@ -5591,6 +5692,14 @@ class PMSHandler(BaseHTTPRequestHandler):
             if path == "/api/users":
                 require_admin_session(self.headers)
                 self.send_json(create_platform_user(payload))
+                return
+            if path == "/api/users/status":
+                session = require_admin_session(self.headers)
+                self.send_json(update_platform_user_status(payload, session))
+                return
+            if path == "/api/users/reset-password":
+                require_admin_session(self.headers)
+                self.send_json(reset_platform_user_password(payload))
                 return
             if path == "/api/access/profile-permissions":
                 require_admin_session(self.headers)

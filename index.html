@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Palladium Africa Hub central</title>
-    <link rel="stylesheet" href="styles.css?v=user-views-20260826" />
+    <link rel="stylesheet" href="styles.css?v=control-improvements-20260827" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -1557,6 +1557,7 @@
                       <option>Actif</option>
                       <option>Suspendu</option>
                       <option>Inactif</option>
+                      <option>A supprimer</option>
                     </select>
                   </label>
                   <button class="primary-action" id="create-user" type="button">Creer l'utilisateur</button>
@@ -1592,6 +1593,33 @@
                     <input id="user-access-dashboard" class="search-input" readonly />
                   </label>
                   <button class="primary-action" id="save-user-access" type="button">Enregistrer l'acces utilisateur</button>
+                </div>
+              </section>
+
+              <section class="panel span-3">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Comptes utilisateurs</p>
+                    <h3>Gestion des comptes et tests de vue</h3>
+                  </div>
+                  <span class="status-pill gray" id="user-count">0 utilisateur</span>
+                </div>
+                <div class="table-wrap">
+                  <table class="access-table user-access-table">
+                    <thead>
+                      <tr>
+                        <th>Utilisateur</th>
+                        <th>Email</th>
+                        <th>Profil</th>
+                        <th>Pays / Filiale</th>
+                        <th>Pole</th>
+                        <th>Derniere connexion</th>
+                        <th>Statut</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="user-table"></tbody>
+                  </table>
                 </div>
               </section>
 
@@ -1672,10 +1700,10 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=user-views-20260826"></script>
-    <script src="scripts/renderers.js?v=user-views-20260826"></script>
-    <script src="scripts/api.js?v=user-views-20260826"></script>
-    <script src="scripts/reporting.js?v=user-views-20260826"></script>
-    <script src="app.js?v=user-views-20260826"></script>
+    <script src="scripts/data.js?v=control-improvements-20260827"></script>
+    <script src="scripts/renderers.js?v=control-improvements-20260827"></script>
+    <script src="scripts/api.js?v=control-improvements-20260827"></script>
+    <script src="scripts/reporting.js?v=control-improvements-20260827"></script>
+    <script src="app.js?v=control-improvements-20260827"></script>
   </body>
 </html>

@@ -2550,11 +2550,13 @@
         id: `RPT-${Date.now().toString().slice(-6)}-${state.currentReportPole}`,
         pole: state.currentReportPole,
         poleName: pole,
+        branch: state.calendarBranchFilter || "Groupe",
         cycle: state.currentReportCycle,
         period: $("#period-filter").value,
         format,
         status: "Brouillon",
         generatedAt,
+        comment: $("#report-comment").value.trim(),
       };
       let savedReport = report;
       let savedInDatabase = false;
@@ -2584,13 +2586,54 @@
       }
     });
 
-    $("#save-report-comment").addEventListener("click", () => {
+    $("#save-report-comment").addEventListener("click", async () => {
       if (!hasPermission("ajout") && !hasPermission("modification")) {
         showToast("Droit de modification requis pour enregistrer un commentaire.");
         return;
       }
       const comment = $("#report-comment").value.trim();
-      showToast(comment ? "Commentaire de rapport enregistre." : "Ajoutez un commentaire avant enregistrement.");
+      if (!comment) {
+        showToast("Ajoutez un commentaire avant enregistrement.");
+        return;
+      }
+      const poleOption = $("#report-pole-select").selectedOptions[0];
+      const poleName = poleOption?.textContent?.trim() || state.currentReportPole;
+      const period = $("#period-filter").value;
+      const reportId = `COMMENT-${state.currentReportPole}-${state.currentReportCycle}-${period}`
+        .replace(/[^A-Za-z0-9-]+/g, "-")
+        .replace(/-+/g, "-")
+        .slice(0, 80);
+      const report = {
+        id: reportId,
+        pole: state.currentReportPole,
+        poleId: state.currentReportPole,
+        poleName,
+        branch: state.calendarBranchFilter || "Groupe",
+        cycle: state.currentReportCycle,
+        period,
+        format: "Commentaire",
+        status: "Commentaire responsable",
+        generatedAt: new Date().toISOString(),
+        comment,
+      };
+      let savedReport = report;
+      let savedInDatabase = false;
+      try {
+        if (api?.saveReport) {
+          savedReport = await api.saveReport(report);
+          savedInDatabase = true;
+        }
+        state.reportHistory = [
+          savedReport,
+          ...state.reportHistory.filter((item) => item.id !== savedReport.id),
+        ];
+        renderReportHistory(state);
+        renderReports(state);
+        showToast(savedInDatabase ? "Commentaire enregistre dans la base." : "Commentaire enregistre en local.");
+      } catch (error) {
+        console.warn("Enregistrement commentaire indisponible.", error);
+        showToast(error.message || "Impossible d'enregistrer le commentaire.");
+      }
     });
 
     document.querySelectorAll("[data-report-export]").forEach((button) => {
@@ -3337,6 +3380,88 @@
       renderAdmin(state);
       setAdminTab("access");
       showToast(`Affectation chargee: ${rule.responsible}.`);
+    });
+
+    document.addEventListener("click", async (event) => {
+      const previewButton = event.target.closest("[data-preview-user]");
+      if (!previewButton) return;
+      const user = state.platformUsers.find((item) => String(item.id) === String(previewButton.dataset.previewUser));
+      if (!user) {
+        showToast("Utilisateur introuvable.");
+        return;
+      }
+      state.currentUserAccessUserId = user.id;
+      state.currentUserAccessProfile = user.profile || state.currentUserAccessProfile;
+      state.currentUserAccessBranch = user.defaultBranch || state.currentUserAccessBranch || "Groupe";
+      state.currentUserAccessPole = user.defaultPoleId || state.currentUserAccessPole;
+      const matchingRule = state.accessRules.find(
+        (rule) => String(rule.userId || "") === String(user.id) || rule.responsible === user.fullName || rule.email === user.email
+      );
+      state.activeAccessRuleId = matchingRule?.id || null;
+      renderAdmin(state);
+      setAdminTab("access");
+      showToast(`Vue de ${user.fullName} chargee.`);
+    });
+
+    document.addEventListener("click", async (event) => {
+      const statusButton = event.target.closest("[data-user-status]");
+      if (!statusButton) return;
+      const userId = statusButton.dataset.userStatus;
+      const nextStatus = statusButton.dataset.nextStatus || "Actif";
+      const user = state.platformUsers.find((item) => String(item.id) === String(userId));
+      if (!user) {
+        showToast("Utilisateur introuvable.");
+        return;
+      }
+      let savedUser = { ...user, status: nextStatus };
+      try {
+        if (api?.updateUserStatus) {
+          savedUser = { ...savedUser, ...(await api.updateUserStatus(userId, nextStatus)) };
+        }
+        state.platformUsers = state.platformUsers.map((item) =>
+          String(item.id) === String(userId) ? savedUser : item
+        );
+        renderAdmin(state);
+        setAdminTab("access");
+        showToast(`${savedUser.fullName} est maintenant ${nextStatus}.`);
+      } catch (error) {
+        console.warn("Mise a jour statut utilisateur indisponible.", error);
+        showToast(error.message || "Impossible de modifier le statut utilisateur.");
+      }
+    });
+
+    document.addEventListener("click", async (event) => {
+      const resetButton = event.target.closest("[data-reset-user-password]");
+      if (!resetButton) return;
+      const userId = resetButton.dataset.resetUserPassword;
+      const user = state.platformUsers.find((item) => String(item.id) === String(userId));
+      if (!user) {
+        showToast("Utilisateur introuvable.");
+        return;
+      }
+      const password = window.prompt(
+        `Nouveau mot de passe temporaire pour ${user.fullName}`,
+        "Palladium@2026!"
+      );
+      if (password === null) return;
+      if (!password || password.length < 8) {
+        showToast("Le mot de passe temporaire doit contenir au moins 8 caracteres.");
+        return;
+      }
+      try {
+        const response = api?.resetUserPassword
+          ? await api.resetUserPassword(userId, password)
+          : { ...user, temporaryPassword: password };
+        state.platformUsers = state.platformUsers.map((item) =>
+          String(item.id) === String(userId) ? { ...item, ...response } : item
+        );
+        renderAdmin(state);
+        setAdminTab("access");
+        showToast(`Mot de passe reinitialise: ${response.temporaryPassword || password}`);
+      } catch (error) {
+        console.warn("Reinitialisation mot de passe indisponible.", error);
+        showToast(error.message || "Impossible de reinitialiser le mot de passe.");
+      }
     });
 
     document.addEventListener("click", (event) => {

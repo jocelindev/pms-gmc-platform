@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT,
   password_updated_at TEXT,
   must_change_password INTEGER NOT NULL DEFAULT 0 CHECK (must_change_password IN (0, 1)),
+  last_login_at TEXT,
   status TEXT NOT NULL DEFAULT 'Actif',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

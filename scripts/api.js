@@ -54,6 +54,18 @@
         body: user,
       });
     },
+    updateUserStatus(userId, status) {
+      return request("/users/status", {
+        method: "POST",
+        body: { userId, status },
+      });
+    },
+    resetUserPassword(userId, password) {
+      return request("/users/reset-password", {
+        method: "POST",
+        body: { userId, password },
+      });
+    },
     bootstrap() {
       return request("/bootstrap", { timeout: 15000 });
     },

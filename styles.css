@@ -3504,6 +3504,41 @@ button.dashboard-control-card {
   font-weight: 900;
 }
 
+.kpi-preparation-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kpi-preparation-badge {
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 6px 8px;
+  text-transform: uppercase;
+}
+
+.kpi-preparation-badge.green {
+  background: var(--green-bg);
+  color: var(--green-text);
+}
+
+.kpi-preparation-badge.amber {
+  background: var(--amber-bg);
+  color: var(--amber-text);
+}
+
+.kpi-preparation-badge.red {
+  background: var(--red-bg);
+  color: var(--red-text);
+}
+
+.kpi-preparation-badge.gray {
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
 .kpi-trend-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -4260,6 +4295,10 @@ button.dashboard-control-card {
   min-width: 920px;
 }
 
+.user-access-table {
+  min-width: 1180px;
+}
+
 .objective-table small,
 .access-table small {
   color: var(--muted);
@@ -4513,6 +4552,20 @@ button.dashboard-control-card {
   border-color: rgba(45, 151, 92, 0.35);
   background: rgba(45, 151, 92, 0.12);
   color: #17653a;
+}
+
+.user-row-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 230px;
+}
+
+.user-row-actions .access-action {
+  min-height: 30px;
+  padding: 0 9px;
+  white-space: nowrap;
 }
 
 .database-browser-grid {
@@ -5291,6 +5344,35 @@ td small {
 }
 
 .alert-board {
+  grid-template-columns: 1fr;
+}
+
+.alert-section {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.alert-section-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.alert-section-head span {
+  color: var(--palladium-blue);
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.alert-section-grid {
+  display: grid;
+  gap: 12px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -5773,7 +5855,7 @@ td small {
   .dashboard-actions-grid,
   .country-score-grid,
   .pole-dashboard-grid,
-  .alert-board,
+  .alert-section-grid,
   .action-grid,
   .report-grid,
   .mini-card-grid,
@@ -5897,7 +5979,7 @@ td small {
   .dashboard-actions-grid,
   .country-score-grid,
   .pole-dashboard-grid,
-  .alert-board,
+  .alert-section-grid,
   .action-grid,
   .report-grid,
   .mini-card-grid,

@@ -842,6 +842,20 @@
     });
   }
 
+  function formatDisplayDateTime(value) {
+    if (!value) return "Jamais";
+    const normalized = String(value).replace(" ", "T");
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
   function calendarPeriodLabel(calendar = {}) {
     const start = formatDisplayDate(calendar.start);
     const end = formatDisplayDate(calendar.end);
@@ -1278,6 +1292,7 @@
     const statusFilter = state.calendarStatusFilter || "Tous";
     const kpiRows = rawKpiRows.filter((row) => dashboardStatusMatches(row, statusFilter));
     return {
+      state,
       activeCountry,
       isGroup,
       accessContext,
@@ -1796,6 +1811,16 @@
     const score = scope.score;
     const quality = scope.quality;
     const lateSubmissions = scope.lateSubmissions;
+    const dataQuality = context.state?.kpiCalculationQuality || {};
+    const koboAnomalyCount = Array.isArray(context.state?.koboAnomalies)
+      ? context.state.koboAnomalies.length
+      : Number(dataQuality.anomalyCount || 0);
+    const correctionCount =
+      Number(koboAnomalyCount || 0) +
+      Number(dataQuality.missingMonthlyObjectiveCount || 0) +
+      Number(dataQuality.unmatchedObjectiveCount || 0) +
+      Number(dataQuality.unmatchedCalculationCount || 0) +
+      Number(dataQuality.missingFormulaCount || 0);
     const scopeHint = selectedPole
       ? selectedPole?.owner || "Responsable a definir"
       : hasData
@@ -1828,6 +1853,12 @@
         value: hasData && Number.isFinite(Number(quality)) ? `${quality}%` : "--",
         hint: hasData ? (lateSubmissions ? `${lateSubmissions} retard(s)` : "collecte a jour") : "aucune soumission calculee",
         className: hasData ? (lateSubmissions ? "amber" : scoreClass(quality)) : "gray",
+      },
+      {
+        label: "Corrections Kobo",
+        value: correctionCount,
+        hint: correctionCount ? "lignes a corriger avant calcul complet" : "formulaires alignes",
+        className: correctionCount ? "amber" : "green",
       },
     ];
     const ipgScore = $("#dashboard-ipg-score");
@@ -3214,7 +3245,13 @@
     if (!target) return;
     const context = getDashboardContext(state);
     const rows = dashboardCriticalRows(context, 8).filter((row) => hasKpiData(row.kpi));
-    target.innerHTML = rows.length
+    const anomalies = Array.isArray(state.koboAnomalies) && state.koboAnomalies.length
+      ? state.koboAnomalies
+      : Array.isArray(state.kpiCalculationQuality?.anomalies)
+        ? state.kpiCalculationQuality.anomalies
+        : [];
+    const anomalyRows = anomalies.slice(0, 8);
+    const performanceMarkup = rows.length
       ? rows
           .map(
             (row) => `
@@ -3222,12 +3259,42 @@
                 ${statusPill(row.kpi.status === "red" ? "Critique" : "Vigilance", row.kpi.status)}
                 <h3>${escapeHtml(row.kpi.name)}</h3>
                 <strong>${escapeHtml(row.pole.name)} - ${escapeHtml(row.kpi.period || "Periode Kobo")}</strong>
-                <p>Valeur ${escapeHtml(row.kpi.value)} pour une cible ${escapeHtml(row.kpi.target)}. Source: ${escapeHtml(row.kpi.source || "KoboCollect")}.</p>
+                <p>Valeur ${escapeHtml(row.kpi.value)} pour une cible ${escapeHtml(row.kpi.target)}.</p>
               </article>
             `
           )
           .join("")
-      : `<div class="empty-kpi-state">Aucune notification de performance tant que les KPI ne sont pas calcules depuis Kobo.</div>`;
+      : `<div class="empty-kpi-state">Aucune alerte de performance calculee sur le perimetre actif.</div>`;
+    const anomalyMarkup = anomalyRows.length
+      ? anomalyRows
+          .map(
+            (item) => `
+              <article class="alert-card ${item.severity === "Bloquant" ? "critical" : "warning"}">
+                ${statusPill(item.severity || "A corriger", item.statusClass || (item.severity === "Bloquant" ? "red" : "amber"))}
+                <h3>${escapeHtml(item.kpi || item.poleName || "Ligne Kobo a verifier")}</h3>
+                <strong>${escapeHtml(item.form || "KoboCollect")} - ${escapeHtml(item.period || "Periode a verifier")}</strong>
+                <p>${escapeHtml(item.issue || "Anomalie de rapprochement")} ${item.action ? `- ${escapeHtml(item.action)}` : ""}</p>
+              </article>
+            `
+          )
+          .join("")
+      : `<div class="empty-kpi-state">Aucune anomalie Kobo detectee dans les donnees synchronisees.</div>`;
+    target.innerHTML = `
+      <section class="alert-section">
+        <div class="alert-section-head">
+          <span>Performance</span>
+          ${statusPill(rows.length ? `${rows.length} alerte(s)` : "RAS", rows.some((row) => row.kpi.status === "red") ? "red" : rows.length ? "amber" : "green")}
+        </div>
+        <div class="alert-section-grid">${performanceMarkup}</div>
+      </section>
+      <section class="alert-section">
+        <div class="alert-section-head">
+          <span>Qualite des donnees Kobo</span>
+          ${statusPill(anomalyRows.length ? `${anomalyRows.length} a corriger` : "RAS", anomalyRows.length ? "amber" : "green")}
+        </div>
+        <div class="alert-section-grid">${anomalyMarkup}</div>
+      </section>
+    `;
   }
 
   function renderActions(state = {}) {
@@ -3436,6 +3503,38 @@
     if (status === "red") return "Rouge";
     if (status === "gray") return "En attente Kobo";
     return "Orange";
+  }
+
+  function renderKpiPreparationBadges(kpi = {}, pole = {}) {
+    const targetMetric = metricFromTarget(kpi);
+    const trendMetrics = kpiTrendMetrics(kpi, pole);
+    const hasNegativeTrend = trendMetrics.some((metric) => metric.className === "negative");
+    const hasAnyTrend = trendMetrics.some((metric) => metric.display && metric.display !== "--" && metric.className !== "empty");
+    const badges = [
+      {
+        label: hasKpiData(kpi) ? "Calcule" : "Donnee attendue",
+        className: hasKpiData(kpi) ? "green" : "gray",
+      },
+      {
+        label: targetMetric.className === "empty" ? "Objectif attendu" : "Objectif OK",
+        className: targetMetric.className === "empty" ? "amber" : "green",
+      },
+      {
+        label: kpi.formula ? "Formule OK" : "Formule a verifier",
+        className: kpi.formula ? "green" : "amber",
+      },
+      {
+        label: hasNegativeTrend ? "Tendance defavorable" : hasAnyTrend ? "Tendance OK" : "Tendance a calculer",
+        className: hasNegativeTrend ? "red" : hasAnyTrend ? "green" : "gray",
+      },
+    ];
+    return `
+      <div class="kpi-preparation-badges">
+        ${badges
+          .map((badge) => `<span class="kpi-preparation-badge ${escapeHtml(badge.className)}">${escapeHtml(badge.label)}</span>`)
+          .join("")}
+      </div>
+    `;
   }
 
   function renderCalculationEnginePanel(state) {
@@ -3916,6 +4015,7 @@
                             </div>
                             <div class="pole-kpi-value">${escapeHtml(kpi.value)}</div>
                             ${renderTrendStrip(kpi, pole)}
+                            ${renderKpiPreparationBadges(kpi, pole)}
                           </section>
                         `
                       )
@@ -5370,6 +5470,11 @@
             <strong>${escapeHtml(selectedUserProfile || "Non defini")}</strong>
             <small>${selectedUserHasGlobalView ? "Vision groupe autorisee" : "Vision limitee par affectation"}</small>
           </article>
+          <article class="user-view-card">
+            <span>Statut compte</span>
+            <strong>${escapeHtml(currentUser.status || "Actif")}</strong>
+            <small>Derniere connexion: ${escapeHtml(formatDisplayDateTime(currentUser.lastLoginAt))}</small>
+          </article>
           <article class="user-view-card user-view-card-wide">
             <span>Menus visibles</span>
             ${renderChipList(menuItems, "green", 8)}
@@ -5516,24 +5621,42 @@
     }
 
     if (userTable) {
-      const userStatusClass = (status) => (status === "Actif" ? "green" : status === "Suspendu" ? "amber" : "gray");
+      const userStatusClass = (status) => (status === "Actif" ? "green" : status === "Suspendu" ? "amber" : status === "A supprimer" ? "red" : "gray");
       userTable.innerHTML = users.length
         ? users
             .map(
-              (user) => `
+              (user) => {
+                const isSelected = String(user.id) === String(currentUser?.id);
+                const isActiveUser = (user.status || "Actif") === "Actif";
+                const nextStatus = isActiveUser ? "Suspendu" : "Actif";
+                return `
               <tr>
                 <td><strong>${escapeHtml(user.fullName)}</strong></td>
                 <td>${escapeHtml(user.email || "")}</td>
-                <td>${escapeHtml(user.phone || "")}</td>
                 <td>${escapeHtml(user.profile || "")}</td>
                 <td>${escapeHtml(user.defaultBranch || "Groupe")}</td>
                 <td>${escapeHtml(user.defaultPoleName || user.defaultPoleId || "A affecter")}</td>
+                <td>${escapeHtml(formatDisplayDateTime(user.lastLoginAt))}</td>
                 <td>${statusPill(user.status || "Actif", userStatusClass(user.status || "Actif"))}</td>
+                <td>
+                  <div class="user-row-actions">
+                    <button class="access-action ${isSelected ? "active" : ""}" type="button" data-preview-user="${escapeHtml(user.id)}">
+                      ${isSelected ? "Vue active" : "Tester vue"}
+                    </button>
+                    <button class="access-action" type="button" data-user-status="${escapeHtml(user.id)}" data-next-status="${escapeHtml(nextStatus)}">
+                      ${isActiveUser ? "Suspendre" : "Reactiver"}
+                    </button>
+                    <button class="access-action" type="button" data-reset-user-password="${escapeHtml(user.id)}">
+                      Reset MDP
+                    </button>
+                  </div>
+                </td>
               </tr>
-            `
+            `;
+              }
             )
             .join("")
-        : `<tr><td colspan="7">Aucun utilisateur cree pour le moment.</td></tr>`;
+        : `<tr><td colspan="8">Aucun utilisateur cree pour le moment.</td></tr>`;
     }
 
     const permissionLabels = [
