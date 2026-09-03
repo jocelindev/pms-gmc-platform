@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Palladium Africa Hub central</title>
-    <link rel="stylesheet" href="styles.css?v=control-improvements-20260827" />
+    <link rel="stylesheet" href="styles.css?v=internal-tool-20260831" />
   </head>
   <body class="login-mode">
     <section class="login-page" id="login-page" aria-labelledby="login-title">
@@ -135,17 +135,18 @@
 
         <nav class="nav-list">
           <button class="nav-item active" data-view="dashboard">Tableau de bord</button>
+          <button class="nav-item" data-view="internal">Outil interne</button>
           <button class="nav-item" data-view="management">Management</button>
           <button class="nav-item" data-view="poles">Suivi par pole</button>
           <button class="nav-item" data-view="alerts">Notifications</button>
           <button class="nav-item" data-view="reports">Reporting</button>
-          <button class="nav-item" data-view="admin">Administration</button>
+           <button class="nav-item" data-view="admin">Collecte / Administration</button>
         </nav>
 
         <div class="sidebar-note">
           <span class="eyebrow">Source primaire</span>
-          <strong>KoboCollect / KoboToolbox</strong>
-          <p>Synchronisation planifiee, controle qualite et mapping vers le referentiel KPI.</p>
+          <strong>Collecte integree</strong>
+          <p>Saisie plateforme, controle qualite et import Kobo optionnel vers le referentiel KPI.</p>
         </div>
       </aside>
 
@@ -261,7 +262,7 @@
               <div>
                 <p class="eyebrow">Controle groupe</p>
                 <h3 id="dashboard-focus-title">Salle de controle performance</h3>
-                <p>Vue consolidee de la sante globale, des alertes Kobo et des actions prioritaires.</p>
+                <p>Vue consolidee de la sante globale, des alertes de collecte et des actions prioritaires.</p>
               </div>
               <span class="status-pill gray" id="dashboard-pole-status">Groupe</span>
             </div>
@@ -274,7 +275,7 @@
               <div>
                 <p class="eyebrow">Carte de controle</p>
                 <h3>Carte de chaleur Pays x Pole</h3>
-                <p>Identifier immediatement les zones vertes, orange, rouges ou en attente Kobo.</p>
+                  <p>Identifier immediatement les zones vertes, orange, rouges ou en attente de collecte.</p>
               </div>
             </div>
             <div class="dashboard-heatmap-wrap" id="dashboard-heatmap"></div>
@@ -304,7 +305,7 @@
             <section class="panel dashboard-quality-panel">
               <div class="panel-header">
                 <div>
-                  <p class="eyebrow">Qualite Kobo</p>
+                  <p class="eyebrow">Qualite collecte</p>
                   <h3>Fiabilite des donnees</h3>
                 </div>
               </div>
@@ -336,6 +337,104 @@
           </div>
         </section>
 
+        <section class="view internal-tool-view" id="internal" aria-labelledby="view-title">
+          <div class="section-intro internal-tool-intro">
+            <div>
+              <p class="eyebrow">Operations internes</p>
+              <h2>Outil interne de pilotage PMS</h2>
+              <p>File de travail consolidee pour suivre les donnees collectees, les alertes KPI, les plans d'action et la production des rapports.</p>
+            </div>
+            <div class="internal-meta-stack">
+              <span class="status-pill gray" id="internal-scope-pill">Perimetre actif</span>
+              <span class="status-pill gray" id="internal-kobo-pill">Collecte a verifier</span>
+              <button class="ghost-action" id="internal-admin-shortcut" type="button" data-open-view="admin" data-admin-target-tab="kobo">
+                Ouvrir la collecte
+              </button>
+            </div>
+          </div>
+
+          <section class="internal-command-grid" id="internal-command-grid" aria-label="Synthese operationnelle"></section>
+
+          <section class="panel internal-day-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Cycle de la periode</p>
+                <h3>Execution du jour</h3>
+              </div>
+              <span class="status-pill gray" id="internal-cycle-pill">A consolider</span>
+            </div>
+            <div class="internal-operating-strip" id="internal-operating-strip"></div>
+          </section>
+
+          <div class="internal-layout-grid">
+            <section class="panel span-2 internal-priority-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Priorites</p>
+                  <h3>Travail a traiter maintenant</h3>
+                </div>
+                <span class="status-pill gray" id="internal-priority-count">0 priorite</span>
+              </div>
+              <div class="table-wrap internal-priority-wrap">
+                <table class="internal-priority-table">
+                  <thead>
+                    <tr>
+                      <th>Priorite</th>
+                      <th>Pole / KPI</th>
+                      <th>Signal</th>
+                      <th>Action attendue</th>
+                      <th>Responsable</th>
+                      <th>Echeance</th>
+                    </tr>
+                  </thead>
+                  <tbody id="internal-priority-table"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel internal-kobo-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Collecte de donnees</p>
+                  <h3>Etat des sources</h3>
+                </div>
+              </div>
+              <div class="internal-kobo-sources" id="internal-kobo-sources"></div>
+            </section>
+
+            <section class="panel internal-corrections-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Controle qualite</p>
+                  <h3>Corrections ouvertes</h3>
+                </div>
+                <button class="ghost-action" type="button" data-open-view="alerts">Voir alertes</button>
+              </div>
+              <div class="internal-correction-list" id="internal-correction-list"></div>
+            </section>
+
+            <section class="panel span-2 internal-workflow-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Workflow</p>
+                  <h3>Collecter, controler, decider, reporter</h3>
+                </div>
+              </div>
+              <div class="internal-workflow-list" id="internal-workflow-list"></div>
+            </section>
+
+            <section class="panel internal-shortcuts-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Acces rapide</p>
+                  <h3>Modules operationnels</h3>
+                </div>
+              </div>
+              <div class="internal-shortcuts" id="internal-shortcuts"></div>
+            </section>
+          </div>
+        </section>
+
         <section class="view" id="management" aria-labelledby="view-title">
           <div class="section-intro">
             <div>
@@ -358,7 +457,7 @@
               <div>
                 <p class="eyebrow">Score demande</p>
                 <h3>Scoring de performance par direction</h3>
-                <p>Ce bloc presente le score de chaque direction a partir des KPI Kobo calcules.</p>
+                <p>Ce bloc presente le score de chaque direction a partir des KPI collectes et calcules.</p>
               </div>
               <span class="status-pill gray" id="management-direction-score-status">0 direction</span>
             </div>
@@ -460,7 +559,7 @@
             <div>
               <p class="eyebrow">KPIs par pole</p>
               <h2>KPIs par pole</h2>
-              <p>Choisir un pole pour afficher uniquement ses KPI, avec la valeur, l'objectif, la tendance, la source Kobo et le statut.</p>
+              <p>Choisir un pole pour afficher uniquement ses KPI, avec la valeur, l'objectif, la tendance et le statut.</p>
             </div>
             <div class="filters compact-filters pole-filter-bar">
               <span class="access-scope-pill" id="pole-access-scope">Acces: tous les poles</span>
@@ -481,7 +580,7 @@
                 <p class="eyebrow">Pilotage operationnel</p>
                 <h3 id="pole-pilot-title">Vue du pole selectionne</h3>
               </div>
-              <span class="status-pill gray" id="pole-pilot-status">En attente Kobo</span>
+              <span class="status-pill gray" id="pole-pilot-status">En attente collecte</span>
             </div>
             <div class="pole-pilot-grid" id="pole-pilot-summary"></div>
             <div class="pole-pilot-bottom">
@@ -493,7 +592,7 @@
           <section class="panel kpi-engine-panel" id="kpi-engine-panel">
             <div class="panel-header">
               <div>
-                <p class="eyebrow">Donnees Kobo</p>
+                <p class="eyebrow">Donnees collecte</p>
                 <h3>Etat de preparation des KPI</h3>
                 <p class="kpi-engine-subtitle">Controle des formulaires referentiel KPI, objectifs mensuels et donnees de calcul.</p>
               </div>
@@ -520,7 +619,7 @@
             <div>
               <p class="eyebrow">KoboCollect</p>
               <h2>Connexion au formulaire KoboCollect</h2>
-              <p>Choisir une source Kobo, verifier le fichier ou la connexion, puis confirmer les champs disponibles pour alimenter la plateforme.</p>
+              <p>Saisir les donnees dans la plateforme ou verifier les anciennes sources Kobo connectees.</p>
             </div>
           </div>
 
@@ -637,15 +736,15 @@
             <div>
               <p class="eyebrow">Referentiel</p>
               <h2>KPIs, objectifs et seuils</h2>
-              <p>Catalogue central pour les formules, frequences, sources Kobo et regles RAG.</p>
+              <p>Catalogue central pour les formules, frequences, sources de donnees et regles RAG.</p>
             </div>
-            <span class="status-pill gray">Alimente par formulaire 1 Kobo</span>
+            <span class="status-pill gray">Alimente par la collecte des KPI</span>
           </div>
           <div class="panel">
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Catalogue</p>
-                <h3>Referentiel KPI issu de KoboCollect</h3>
+                <h3>Referentiel KPI issu de la collecte</h3>
               </div>
               <input class="search-input" id="kpi-search" placeholder="Rechercher un KPI" />
             </div>
@@ -914,19 +1013,19 @@
           <div class="section-intro">
             <div>
               <p class="eyebrow">Administration</p>
-              <h2>Administration</h2>
-              <p>Connecter KoboCollect, verifier les objectifs importes, gerer les droits et consulter la base plateforme.</p>
+              <h2 id="admin-page-title">Administration</h2>
+              <p id="admin-page-description">Renseigner les donnees dans la plateforme, garder Kobo comme import optionnel, gerer les droits et consulter la base.</p>
             </div>
           </div>
 
           <div class="admin-submenu" role="tablist" aria-label="Sous-menu administration">
             <button class="admin-tab-button active" type="button" data-admin-tab="kobo">
-              <strong>KoboCollecte</strong>
-              <span>Formulaires, UID et synchronisation</span>
+              <strong>Collecte de donnees</strong>
+              <span>Saisie interne et import Kobo</span>
             </button>
             <button class="admin-tab-button" type="button" data-admin-tab="objectives">
               <strong>Objectifs</strong>
-              <span>Cibles KPI importees</span>
+              <span>Cibles KPI renseignees</span>
             </button>
             <button class="admin-tab-button" type="button" data-admin-tab="access">
               <strong>Droits d'acces</strong>
@@ -947,7 +1046,7 @@
                   <h3>Pilotage des objectifs KPI</h3>
                 </div>
                 <div class="admin-flow">
-                  <span>1. Connecter Kobo</span>
+                  <span>1. Renseigner la collecte</span>
                   <span>2. Mapper les champs</span>
                   <span>3. Synchroniser les objectifs</span>
                 </div>
@@ -969,8 +1068,8 @@
             <section class="panel span-3">
               <div class="panel-header">
                 <div>
-                  <p class="eyebrow">Donnees KoboCollect</p>
-                  <h3>Objectifs KPI importes depuis le formulaire Objectifs mensuels</h3>
+                  <p class="eyebrow">Donnees objectifs</p>
+                  <h3>Objectifs KPI renseignes par pays / filiale</h3>
                 </div>
                 <span class="status-pill gray" id="objective-count">0 objectif</span>
               </div>
@@ -987,7 +1086,7 @@
                       <th>Responsable</th>
                       <th>Validation</th>
                       <th>Statut</th>
-                      <th>Source Kobo</th>
+                      <th>Source</th>
                     </tr>
                   </thead>
                   <tbody id="objective-table"></tbody>
@@ -999,11 +1098,277 @@
 
           <div class="admin-tab-panel active" data-admin-panel="kobo">
             <div class="dashboard-grid admin-objective-grid">
+              <section class="panel span-3 platform-collection-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Collecte integree</p>
+                    <h3>Saisir les KPI directement dans Hub central</h3>
+                  </div>
+                  <span class="status-pill green">Saisie directe active</span>
+                </div>
+                <div class="platform-collection-grid">
+                  <form class="platform-collection-form" id="platform-reference-form">
+                    <div class="platform-form-head">
+                      <span>1</span>
+                      <div>
+                        <strong>Referentiel KPI</strong>
+                        <small>KPI, unite, formule, cible et frequence.</small>
+                      </div>
+                    </div>
+                    <label>
+                      Pays / filiale
+                      <select id="platform-reference-branch" class="search-input"></select>
+                    </label>
+                    <label>
+                      Pole / direction
+                      <select id="platform-reference-pole" class="search-input"></select>
+                    </label>
+                    <label>
+                      ID KPI
+                      <input id="platform-reference-kpi-id" class="search-input" placeholder="KPI-001" />
+                    </label>
+                    <label>
+                      Intitule KPI
+                      <input id="platform-reference-kpi-name" class="search-input" placeholder="Nom de l'indicateur" />
+                    </label>
+                    <label>
+                      Unite
+                      <select id="platform-reference-unit" class="search-input">
+                        <option value="% (Pourcentage)">% (Pourcentage)</option>
+                        <option value="Nombre / Quantite">Nombre / Quantite</option>
+                        <option value="Montant (FCFA / XOF)">Montant (FCFA / XOF)</option>
+                        <option value="Minutes">Minutes</option>
+                        <option value="Heures">Heures</option>
+                        <option value="Jours">Jours</option>
+                        <option value="Ratio">Ratio</option>
+                        <option value="Score">Score</option>
+                        <option value="Autre">Autre</option>
+                      </select>
+                    </label>
+                    <label>
+                      Frequence collecte
+                      <select id="platform-reference-frequency" class="search-input">
+                        <option>Journalier</option>
+                        <option>Horaire</option>
+                        <option>Hebdomadaire</option>
+                        <option>Mensuel</option>
+                      </select>
+                    </label>
+                    <label>
+                      Sens performance
+                      <select id="platform-reference-performance-direction" class="search-input">
+                        <option value="higherBetter">Plus haut = mieux</option>
+                        <option value="lowerBetter">Plus bas = mieux</option>
+                        <option value="targetRange">Zone cible</option>
+                      </select>
+                    </label>
+                    <label>
+                      Seuil cible / reference
+                      <input id="platform-reference-target" class="search-input" placeholder="ex. >= 90%" />
+                    </label>
+                    <label class="platform-wide-field">
+                      Formule de calcul
+                      <textarea id="platform-reference-formula" class="search-input" rows="2" placeholder="ex. CA realise / heures produites"></textarea>
+                    </label>
+                    <label>
+                      Responsable KPI
+                      <input id="platform-reference-responsible" class="search-input" placeholder="Responsable" />
+                    </label>
+                    <label>
+                      Nature donnee
+                      <select id="platform-reference-data-nature" class="search-input">
+                        <option>Reel</option>
+                        <option>Test</option>
+                      </select>
+                    </label>
+                    <button class="primary-action platform-wide-field" id="platform-reference-save" type="submit">
+                      Enregistrer le KPI
+                    </button>
+                    <div class="connector-status empty platform-wide-field" id="platform-reference-status">
+                      Pret pour une saisie referentiel.
+                    </div>
+                  </form>
+
+                  <form class="platform-collection-form" id="platform-objective-form">
+                    <div class="platform-form-head">
+                      <span>2</span>
+                      <div>
+                        <strong>Objectif mensuel</strong>
+                        <small>Cible par pays, pole, KPI et mois.</small>
+                      </div>
+                    </div>
+                    <label>
+                      Mois objectif
+                      <input id="platform-objective-period" class="search-input" type="month" />
+                    </label>
+                    <label>
+                      Pays / filiale
+                      <select id="platform-objective-branch" class="search-input"></select>
+                    </label>
+                    <label>
+                      Pole / direction
+                      <select id="platform-objective-pole" class="search-input"></select>
+                    </label>
+                    <label>
+                      KPI
+                      <select id="platform-objective-kpi" class="search-input"></select>
+                    </label>
+                    <label>
+                      Objectif mensuel
+                      <input id="platform-objective-target" class="search-input" placeholder="ex. 90%, 15 jours, objectif" />
+                    </label>
+                    <label>
+                      Unite
+                      <select id="platform-objective-unit" class="search-input">
+                        <option value="% (Pourcentage)">% (Pourcentage)</option>
+                        <option value="Nombre / Quantite">Nombre / Quantite</option>
+                        <option value="Montant (FCFA / XOF)">Montant (FCFA / XOF)</option>
+                        <option value="Minutes">Minutes</option>
+                        <option value="Heures">Heures</option>
+                        <option value="Jours">Jours</option>
+                        <option value="Ratio">Ratio</option>
+                        <option value="Score">Score</option>
+                        <option value="Autre">Autre</option>
+                      </select>
+                    </label>
+                    <label>
+                      Frequence
+                      <select id="platform-objective-frequency" class="search-input">
+                        <option>Mensuel</option>
+                        <option>Journalier</option>
+                        <option>Hebdomadaire</option>
+                        <option>Horaire</option>
+                      </select>
+                    </label>
+                    <label>
+                      Repartition
+                      <select id="platform-objective-distribution" class="search-input">
+                        <option>Automatique selon unite KPI</option>
+                        <option>Objectif fixe non prorata</option>
+                        <option>Prorata journalier</option>
+                      </select>
+                    </label>
+                    <label>
+                      Responsable
+                      <input id="platform-objective-responsible" class="search-input" placeholder="Responsable objectif" />
+                    </label>
+                    <label>
+                      Validation
+                      <select id="platform-objective-validation" class="search-input">
+                        <option>En attente</option>
+                        <option>Valide</option>
+                        <option>A corriger</option>
+                      </select>
+                    </label>
+                    <label>
+                      Nature donnee
+                      <select id="platform-objective-data-nature" class="search-input">
+                        <option>Reel</option>
+                        <option>Test</option>
+                      </select>
+                    </label>
+                    <button class="primary-action platform-wide-field" id="platform-objective-save" type="submit">
+                      Enregistrer l'objectif
+                    </button>
+                    <div class="connector-status empty platform-wide-field" id="platform-objective-status">
+                      Pret pour une saisie objectif.
+                    </div>
+                  </form>
+
+                  <form class="platform-collection-form" id="platform-calculation-form">
+                    <div class="platform-form-head">
+                      <span>3</span>
+                      <div>
+                        <strong>Realise / donnees de calcul</strong>
+                        <small>Taux realise connu ou 1 a 3 elements de formule.</small>
+                      </div>
+                    </div>
+                    <label>
+                      Date collecte
+                      <input id="platform-calculation-date" class="search-input" type="date" />
+                    </label>
+                    <label>
+                      Pays / filiale
+                      <select id="platform-calculation-branch" class="search-input"></select>
+                    </label>
+                    <label>
+                      Pole / direction
+                      <select id="platform-calculation-pole" class="search-input"></select>
+                    </label>
+                    <label>
+                      KPI
+                      <select id="platform-calculation-kpi" class="search-input"></select>
+                    </label>
+                    <label class="platform-wide-field">
+                      Mode de saisie
+                      <select id="platform-calculation-entry-mode" class="search-input">
+                        <option value="elements">Elements de calcul</option>
+                        <option value="taux_realise">Taux realise connu (%)</option>
+                        <option value="valeur_realisee">Valeur realisee directe</option>
+                      </select>
+                    </label>
+                    <div class="platform-calculation-direct platform-wide-field" data-platform-calculation-mode="direct">
+                      <label>
+                        Valeur directe
+                        <input id="platform-calculation-direct-value" class="search-input" inputmode="decimal" placeholder="ex. 95 pour 95%" />
+                      </label>
+                    </div>
+                    <div class="platform-calculation-elements platform-wide-field" data-platform-calculation-mode="elements">
+                      <label>
+                        Element 1
+                        <input id="platform-calculation-element-1" class="search-input" placeholder="ex. CA realise" />
+                      </label>
+                      <label>
+                        Valeur 1
+                        <input id="platform-calculation-value-1" class="search-input" inputmode="decimal" />
+                      </label>
+                      <label>
+                        Element 2
+                        <input id="platform-calculation-element-2" class="search-input" placeholder="ex. Heures produites" />
+                      </label>
+                      <label>
+                        Valeur 2
+                        <input id="platform-calculation-value-2" class="search-input" inputmode="decimal" />
+                      </label>
+                      <label>
+                        Element 3
+                        <input id="platform-calculation-element-3" class="search-input" />
+                      </label>
+                      <label>
+                        Valeur 3
+                        <input id="platform-calculation-value-3" class="search-input" inputmode="decimal" />
+                      </label>
+                    </div>
+                    <label>
+                      Validation
+                      <select id="platform-calculation-validation" class="search-input">
+                        <option>En attente</option>
+                        <option>Valide</option>
+                        <option>A corriger</option>
+                      </select>
+                    </label>
+                    <label>
+                      Nature donnee
+                      <select id="platform-calculation-data-nature" class="search-input">
+                        <option>Reel</option>
+                        <option>Test</option>
+                      </select>
+                    </label>
+                    <button class="primary-action platform-wide-field" id="platform-calculation-save" type="submit">
+                      Enregistrer le realise
+                    </button>
+                    <div class="connector-status empty platform-wide-field" id="platform-calculation-status">
+                      Pret pour une saisie donnees.
+                    </div>
+                  </form>
+                </div>
+              </section>
+
               <section class="panel span-3 admin-kobo-source-panel">
                 <div class="panel-header">
                   <div>
-                    <p class="eyebrow">Logique KoboCollect</p>
-                    <h3>Trois formulaires relies pour alimenter Hub central</h3>
+                    <p class="eyebrow">Passerelle KoboCollect</p>
+                    <h3>Import optionnel depuis les anciens formulaires</h3>
                   </div>
                 </div>
                 <div class="kobo-logic-grid">
@@ -1067,10 +1432,10 @@
                     <small>Ajouter PMS_KOBO_API_TOKEN pour activer la synchronisation toutes les 5 minutes.</small>
                   </div>
                 </div>
-                <div class="admin-kobo-audit" id="admin-kobo-audit" aria-label="Audit qualite des donnees Kobo">
+                <div class="admin-kobo-audit" id="admin-kobo-audit" aria-label="Audit qualite des donnees collecte">
                   <div class="admin-kobo-audit-head">
                     <div>
-                      <span>Controle qualite Kobo</span>
+                      <span>Controle qualite collecte</span>
                       <strong id="admin-kobo-audit-title">Configuration a verifier</strong>
                     </div>
                     <b id="admin-kobo-audit-score">0%</b>
@@ -1083,7 +1448,7 @@
               <section class="panel span-3 admin-kobo-anomalies-panel">
                 <div class="panel-header">
                   <div>
-                    <p class="eyebrow">Anomalies Kobo</p>
+                    <p class="eyebrow">Anomalies collecte</p>
                     <h3>KPI a corriger avant calcul complet</h3>
                   </div>
                   <span class="status-pill gray" id="admin-kobo-anomaly-count">0 ligne a corriger</span>
@@ -1445,7 +1810,7 @@
               <section class="panel span-3">
                 <div class="panel-header">
                   <div>
-                    <p class="eyebrow">Structure KoboCollect</p>
+                    <p class="eyebrow">Structure collecte</p>
                     <h3>Champs attendus pour les trois formulaires</h3>
                   </div>
                   <span class="status-pill green" id="objective-field-count">0 champ</span>
@@ -1700,10 +2065,10 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="scripts/data.js?v=control-improvements-20260827"></script>
-    <script src="scripts/renderers.js?v=control-improvements-20260827"></script>
-    <script src="scripts/api.js?v=control-improvements-20260827"></script>
-    <script src="scripts/reporting.js?v=control-improvements-20260827"></script>
-    <script src="app.js?v=control-improvements-20260827"></script>
+    <script src="scripts/data.js?v=internal-tool-20260831"></script>
+    <script src="scripts/renderers.js?v=internal-tool-20260831"></script>
+    <script src="scripts/api.js?v=internal-tool-20260831"></script>
+    <script src="scripts/reporting.js?v=internal-tool-20260831"></script>
+    <script src="app.js?v=internal-tool-20260831"></script>
   </body>
 </html>

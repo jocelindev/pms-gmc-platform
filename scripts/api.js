@@ -87,6 +87,27 @@
         body: objective,
       });
     },
+    savePlatformReferenceKpi(referenceKpi) {
+      return request("/collection/reference-kpi", {
+        method: "POST",
+        body: referenceKpi,
+        timeout: 15000,
+      });
+    },
+    savePlatformObjective(objective) {
+      return request("/collection/objective", {
+        method: "POST",
+        body: objective,
+        timeout: 15000,
+      });
+    },
+    savePlatformCalculation(calculation) {
+      return request("/collection/calculation", {
+        method: "POST",
+        body: calculation,
+        timeout: 15000,
+      });
+    },
     saveReport(report) {
       return request("/reports", {
         method: "POST",

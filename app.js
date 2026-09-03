@@ -11,6 +11,7 @@
     renderCountryDashboard,
     renderAdvancedDashboard,
     renderManagementDashboard,
+    renderInternalTool,
     renderPoleSummaryTables,
     renderPoleControls,
     renderPoleMonitor,
@@ -24,6 +25,7 @@
 
   const viewTitles = {
     dashboard: "Dashboard KPI par pole",
+    internal: "Outil interne PMS",
     management: "Management performance groupe",
     poles: "Suivi des performances par pole",
     kpis: "Referentiel KPI",
@@ -117,7 +119,7 @@
     PMS_DATA.reporting.poles.forEach((pole) => {
       PMS_DATA.reporting.kpisByPole[pole.id] = [];
       refreshPoleMetrics(pole.id, PMS_DATA.reporting.kpisByPole[pole.id] || [], {
-        lastReport: "Referentiel KPI Kobo attendu",
+        lastReport: "Referentiel KPI attendu",
         lateSubmissions: 0,
         quality: 0,
         readiness: 0,
@@ -129,7 +131,7 @@
     if (status === "green") return "Valide";
     if (status === "amber") return "A surveiller";
     if (status === "red") return "Plan requis";
-    return "En attente Kobo";
+    return "En attente collecte";
   }
 
   function scoreFromKpis(kpis) {
@@ -207,7 +209,7 @@
       ...kpi,
       id: kpi.id || profile.id || kpi.name,
       name: kpi.name || profile.title || profile.name || "KPI a renseigner",
-      value: "En attente Kobo",
+      value: "En attente collecte",
       target: kpi.target || profile.target || "A completer",
       trend: "Donnees attendues",
       status: "gray",
@@ -218,7 +220,7 @@
       pendingCalculation: true,
       period: "A collecter",
       formula: kpi.formula || profile.formula || "Formule a completer",
-      method: "Donnees Kobo attendues",
+      method: "Donnees de calcul attendues",
       category: kpi.category || profile.type || "Referentiel KPI",
       trendHistory: [],
     };
@@ -260,7 +262,7 @@
       upsertKpiItem(byPole, poleId, {
         id: `FORM-${formula.id}`,
         name: formula.name,
-        value: "En attente Kobo",
+        value: "En attente collecte",
         target: formula.target || "A completer",
         trend: formula.frequency || "A synchroniser",
         status: "gray",
@@ -271,7 +273,7 @@
         pendingCalculation: true,
         period: "A collecter",
         formula: formula.formula || "Formule a completer",
-        method: "Reference fichier collecte, donnees Kobo attendues",
+        method: "Reference fichier collecte, donnees de calcul attendues",
         category: formula.category,
       });
     });
@@ -752,13 +754,13 @@
         return {
           target: targets[0],
           monthlyTarget: targets[0],
-          source: "Objectif Kobo pays",
+          source: "Objectif pays",
         };
       }
       return {
         target: `${priorityPool.length} objectifs pays disponibles`,
         monthlyTarget: "",
-        source: "Objectifs Kobo par pays",
+        source: "Objectifs par pays",
       };
     }
 
@@ -769,7 +771,7 @@
     return {
       target: selected.target,
       monthlyTarget: selected.target,
-      source: selected.sourceForm || "Objectif Kobo mensuel",
+      source: selected.sourceForm || "Objectif mensuel",
     };
   }
 
@@ -798,7 +800,7 @@
       return {
         target: result.target || result.monthlyTarget,
         monthlyTarget: result.monthlyTarget || result.target,
-        source: result.objectiveSource || "Objectif Kobo mensuel",
+        source: result.objectiveSource || "Objectif mensuel",
       };
     }
     return objectiveTargetForReference(
@@ -835,7 +837,7 @@
     const scopedResultRows = scopedResults.map((result) => ({
       result,
       objectiveTarget: objectiveTargetForResult(result, activeCountry) || {
-        target: result.target || "Objectif Kobo mensuel attendu",
+        target: result.target || "Objectif mensuel attendu",
         monthlyTarget: result.monthlyTarget || "",
         source: result.objectiveSource || "Objectif a renseigner",
       },
@@ -873,7 +875,7 @@
       .forEach((kpi) => {
         if (!kpi.poleId) return;
         const objectiveTarget = objectiveTargetForReference(kpi, activeCountry) || {
-          target: "Objectif Kobo mensuel attendu",
+          target: "Objectif mensuel attendu",
           monthlyTarget: "",
           source: "Objectif a renseigner",
         };
@@ -882,12 +884,12 @@
           name: kpi.kpiName,
           branch: kpi.branch || activeCountry || "Groupe",
           value: kpi.valueLabel || "--",
-          target: objectiveTarget?.target || "Objectif Kobo mensuel attendu",
+          target: objectiveTarget?.target || "Objectif mensuel attendu",
           monthlyTarget: objectiveTarget?.monthlyTarget || "",
           objectiveSource: objectiveTarget?.source || "",
-          trend: "Reference Kobo",
+          trend: "Reference collecte",
           status: "gray",
-          source: kpi.source || "KoboCollect",
+          source: kpi.source || "Plateforme",
           collectionFrequency: kpi.collectionFrequency || PMS_DATA.collectionCadenceByPole?.[kpi.poleId]?.cadence || "A preciser",
           reportingFrequency: kpi.reportingFrequency || PMS_DATA.collectionCadenceByPole?.[kpi.poleId]?.primary || "A preciser",
           calculated: false,
@@ -919,7 +921,7 @@
         dayValueLabel: result.dayValueLabel || result.actualValueLabel || result.valueLabel,
         monthToDateValue: result.monthToDateValue ?? result.actualValue ?? result.value,
         monthToDateValueLabel: result.monthToDateValueLabel || result.actualValueLabel || result.valueLabel,
-        target: objectiveTarget.target || "Objectif Kobo mensuel attendu",
+        target: objectiveTarget.target || "Objectif mensuel attendu",
         monthlyTarget: objectiveTarget.monthlyTarget || result.monthlyTarget || "",
         targetValue: result.targetValue,
         targetMode: result.targetMode || "",
@@ -928,9 +930,9 @@
         vsTargetClass: result.vsTargetClass,
         aggregationMode: result.aggregationMode || "",
         objectiveSource: objectiveTarget.source || result.objectiveSource || "",
-        trend: result.trend || "Calcul Kobo",
+        trend: result.trend || "Calcul plateforme",
         status: result.status || "gray",
-        source: result.source || "KoboCollect",
+        source: result.source || "Plateforme",
         collectionFrequency: result.collectionFrequency || PMS_DATA.collectionCadenceByPole?.[result.poleId]?.cadence || "A preciser",
         reportingFrequency: result.reportingFrequency || PMS_DATA.collectionCadenceByPole?.[result.poleId]?.primary || "A preciser",
         calculated: true,
@@ -955,7 +957,7 @@
       refreshPoleMetrics(poleId, kpis, {
         quality: Number.isFinite(matchRate) ? matchRate : undefined,
         readiness: Number.isFinite(calculationRate) ? calculationRate : undefined,
-        lastReport: latestPeriod(scopedResultRows.map((item) => item.result).filter((item) => item.poleId === poleId)) || state.calendar?.label || "Reference Kobo",
+        lastReport: latestPeriod(scopedResultRows.map((item) => item.result).filter((item) => item.poleId === poleId)) || state.calendar?.label || "Reference collecte",
         lateSubmissions: state.kpiCalculationQuality?.unmatchedCalculationCount || 0,
       });
     });
@@ -1063,6 +1065,15 @@
     currentAdminPole: PMS_DATA.reporting.defaultPole,
     currentAdminKpi: null,
     currentAdminTab: "kobo",
+    currentPlatformReferenceBranch: "Groupe",
+    currentPlatformReferencePole: PMS_DATA.reporting.defaultPole,
+    currentPlatformObjectiveBranch: "Groupe",
+    currentPlatformObjectivePole: PMS_DATA.reporting.defaultPole,
+    currentPlatformObjectiveKpi: "",
+    currentPlatformCalculationBranch: "Groupe",
+    currentPlatformCalculationPole: PMS_DATA.reporting.defaultPole,
+    currentPlatformCalculationKpi: "",
+    platformCalculationEntryMode: "elements",
     currentAdminAccessPole: PMS_DATA.reporting.defaultPole,
     currentAccessProfile: "Administrateur",
     currentUserAccessUserId: `seed-${PMS_DATA.reporting.defaultPole}`,
@@ -1549,7 +1560,8 @@
   function canAccessView(view) {
     const permissions = state.currentPermissions || {};
     if (permissions.administration) return true;
-    if (view === "admin") return false;
+    if (view === "admin") return Boolean(permissions.ajout);
+    if (view === "internal") return Boolean(permissions.consultation || permissions.ajout || permissions.validation || permissions.management);
     if (view === "management") return Boolean(permissions.management);
     if (view === "reports") return Boolean(permissions.consultation || permissions.ajout || permissions.validation);
     if (view === "alerts") return Boolean(permissions.consultation || permissions.validation);
@@ -1558,7 +1570,7 @@
   }
 
   function firstAllowedView() {
-    return ["dashboard", "management", "poles", "alerts", "reports", "admin"].find(canAccessView) || "dashboard";
+    return ["dashboard", "internal", "management", "poles", "alerts", "reports", "admin"].find(canAccessView) || "dashboard";
   }
 
   function applyNavigationPermissions() {
@@ -1828,6 +1840,20 @@
       if (managementButton) {
         activateView("management");
         showToast("Vue Management ouverte pour approfondir le controle groupe.");
+        return;
+      }
+      const viewButton = event.target.closest("[data-open-view]");
+      if (viewButton) {
+        const targetView = viewButton.dataset.openView;
+        if (!targetView || !canAccessView(targetView)) {
+          showToast("Acces reserve au profil autorise.");
+          return;
+        }
+        activateView(targetView);
+        if (targetView === "admin" && viewButton.dataset.adminTargetTab) {
+          setAdminTab(viewButton.dataset.adminTargetTab);
+        }
+        showToast(`Module ${viewTitles[targetView] || targetView} ouvert.`);
         return;
       }
       const managementExportButton = event.target.closest("#export-management-report");
@@ -2174,6 +2200,7 @@
     renderCalendarSlicer(state);
     renderAdvancedDashboard(state);
     renderManagementDashboard(state);
+    renderInternalTool(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
     renderReportControls(state);
@@ -2190,6 +2217,7 @@
     renderCountryDashboard(state);
     renderAdvancedDashboard(state);
     renderManagementDashboard(state);
+    renderInternalTool(state);
     renderPoleSummaryTables(state);
     renderPoleControls(state);
     renderPoleMonitor(state);
@@ -2313,6 +2341,7 @@
       renderCalendarSlicer(state);
       renderAdvancedDashboard(state);
       renderManagementDashboard(state);
+      renderInternalTool(state);
       renderPoleSummaryTables(state);
       renderPoleControls(state);
       renderPoleMonitor(state);
@@ -2342,6 +2371,7 @@
       renderCalendarSlicer(state);
       renderAdvancedDashboard(state);
       renderManagementDashboard(state);
+      renderInternalTool(state);
       showToast(
         statusFilter.value === "Tous"
           ? "Tous les statuts sont visibles."
@@ -2357,6 +2387,7 @@
       renderCountryDashboard(state);
       renderAdvancedDashboard(state);
       renderManagementDashboard(state);
+      renderInternalTool(state);
       renderPoleSummaryTables(state);
       renderPoleControls(state);
       renderPoleMonitor(state);
@@ -2444,6 +2475,7 @@
       renderCountryDashboard(state);
       renderAdvancedDashboard(state);
       renderManagementDashboard(state);
+      renderInternalTool(state);
       renderPoleControls(state);
       renderPoleMonitor(state);
       const targetBlock = document.getElementById(`pole-block-${state.currentPoleMonitor}`);
@@ -2683,12 +2715,14 @@
   }
 
   function setAdminTab(tab) {
-    state.currentAdminTab = tab;
+    const canManageAdministration = !state.currentUser || state.currentPermissions?.administration;
+    const activeTab = canManageAdministration || tab === "kobo" ? tab : "kobo";
+    state.currentAdminTab = activeTab;
     document.querySelectorAll("[data-admin-tab]").forEach((button) => {
-      button.classList.toggle("active", button.dataset.adminTab === tab);
+      button.classList.toggle("active", button.dataset.adminTab === activeTab);
     });
     document.querySelectorAll("[data-admin-panel]").forEach((panel) => {
-      panel.classList.toggle("active", panel.dataset.adminPanel === tab);
+      panel.classList.toggle("active", panel.dataset.adminPanel === activeTab);
     });
   }
 
@@ -2762,6 +2796,209 @@
       setAdminTab("access");
       return true;
     };
+    const fieldValue = (selector) => $(selector)?.value?.trim() || "";
+    const selectedPoleById = (poleId) =>
+      PMS_DATA.reporting.poles.find((pole) => pole.id === poleId) || PMS_DATA.reporting.poles[0] || { id: poleId, name: poleId };
+    const setPlatformStatus = (selector, statusClass, content) => {
+      const status = $(selector);
+      if (!status) return;
+      status.className = `connector-status ${statusClass}`;
+      status.innerHTML = content;
+    };
+    const withLoading = async (button, label, task) => {
+      const previousText = button?.textContent;
+      if (button) {
+        button.disabled = true;
+        button.textContent = label;
+      }
+      try {
+        return await task();
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = previousText;
+        }
+      }
+    };
+    const applyCollectionResponse = (payload, statusSelector, successMessage) => {
+      mergeDatabasePayload(payload);
+      ensureCalendarDateFromAvailableData();
+      applyCalculatedKpisToReporting();
+      renderAll(state);
+      setAdminTab("kobo");
+      const saved = payload?.savedCollection || {};
+      setPlatformStatus(
+        statusSelector,
+        "success",
+        `<strong>Enregistre</strong><span>${escapeHtml(saved.formUid || "Collecte plateforme")} - ${escapeHtml(saved.submissionUid || "ligne mise a jour")}</span>`
+      );
+      showToast(successMessage);
+    };
+    const nextPlatformKpiId = () => {
+      const ids = [
+        ...(state.kpiCalculationQuality?.referenceKpis || []).map((kpi) => kpi.kpiId || kpi.catalogId || kpi.id),
+        ...Object.values(PMS_DATA.reporting.kpisByPole || {}).flatMap((items) => (items || []).map((kpi) => kpi.id || kpi.kpiId)),
+      ];
+      const maxId = ids.reduce((max, id) => {
+        const match = String(id || "").match(/KPI[-_\s]*(\d+)/i);
+        return match ? Math.max(max, Number(match[1]) || 0) : max;
+      }, 0);
+      return `KPI-${String(maxId + 1).padStart(3, "0")}`;
+    };
+    const refreshPlatformCollectionPanel = () => {
+      renderAdmin(state);
+      setAdminTab("kobo");
+    };
+    const updatePlatformCalculationMode = () => {
+      state.platformCalculationEntryMode = fieldValue("#platform-calculation-entry-mode") || "elements";
+      document.querySelectorAll("[data-platform-calculation-mode]").forEach((node) => {
+        const isElements = node.dataset.platformCalculationMode === "elements";
+        node.hidden = isElements ? state.platformCalculationEntryMode !== "elements" : state.platformCalculationEntryMode === "elements";
+      });
+    };
+    [
+      ["#platform-reference-branch", "currentPlatformReferenceBranch"],
+      ["#platform-reference-pole", "currentPlatformReferencePole"],
+      ["#platform-objective-branch", "currentPlatformObjectiveBranch"],
+      ["#platform-objective-pole", "currentPlatformObjectivePole"],
+      ["#platform-objective-kpi", "currentPlatformObjectiveKpi"],
+      ["#platform-calculation-branch", "currentPlatformCalculationBranch"],
+      ["#platform-calculation-pole", "currentPlatformCalculationPole"],
+      ["#platform-calculation-kpi", "currentPlatformCalculationKpi"],
+    ].forEach(([selector, stateKey]) => {
+      const input = $(selector);
+      input?.addEventListener("change", () => {
+        state[stateKey] = input.value;
+        refreshPlatformCollectionPanel();
+        updatePlatformCalculationMode();
+      });
+    });
+    $("#platform-calculation-entry-mode")?.addEventListener("change", updatePlatformCalculationMode);
+    updatePlatformCalculationMode();
+
+    $("#platform-reference-form")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!api?.savePlatformReferenceKpi) {
+        showToast("Collecte integree indisponible sur ce serveur.");
+        return;
+      }
+      const pole = selectedPoleById(fieldValue("#platform-reference-pole") || state.currentPlatformReferencePole);
+      const catalogId = fieldValue("#platform-reference-kpi-id") || nextPlatformKpiId();
+      const kpiName = fieldValue("#platform-reference-kpi-name");
+      if (!pole?.id || !kpiName) {
+        setPlatformStatus("#platform-reference-status", "warning", "Renseignez au minimum le pole et l'intitule du KPI.");
+        return;
+      }
+      $("#platform-reference-kpi-id").value = catalogId;
+      await withLoading($("#platform-reference-save"), "Enregistrement...", async () => {
+        try {
+          const response = await api.savePlatformReferenceKpi({
+            branch: fieldValue("#platform-reference-branch") || state.calendarBranchFilter || "Groupe",
+            poleId: pole.id,
+            poleName: pole.name,
+            catalogId,
+            kpiName,
+            unit: fieldValue("#platform-reference-unit"),
+            frequency: fieldValue("#platform-reference-frequency"),
+            collectionFrequency: fieldValue("#platform-reference-frequency"),
+            reportingFrequency: fieldValue("#platform-reference-frequency"),
+            performanceDirection: fieldValue("#platform-reference-performance-direction"),
+            target: fieldValue("#platform-reference-target"),
+            formula: fieldValue("#platform-reference-formula"),
+            responsible: fieldValue("#platform-reference-responsible") || pole.owner || "",
+            dataNature: fieldValue("#platform-reference-data-nature") || "Reel",
+            validation: "En attente",
+            sourceData: "Saisie interne Hub central",
+          });
+          applyCollectionResponse(response, "#platform-reference-status", `KPI ${catalogId} enregistre dans le referentiel.`);
+        } catch (error) {
+          console.warn("Saisie referentiel indisponible.", error);
+          setPlatformStatus("#platform-reference-status", "warning", `Enregistrement impossible: ${escapeHtml(error.message)}`);
+          showToast(error.message || "Impossible d'enregistrer le KPI.");
+        }
+      });
+    });
+
+    $("#platform-objective-form")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!api?.savePlatformObjective) {
+        showToast("Collecte integree indisponible sur ce serveur.");
+        return;
+      }
+      const pole = selectedPoleById(fieldValue("#platform-objective-pole") || state.currentPlatformObjectivePole);
+      const kpiId = fieldValue("#platform-objective-kpi");
+      const target = fieldValue("#platform-objective-target");
+      if (!pole?.id || !kpiId || !fieldValue("#platform-objective-period") || !target) {
+        setPlatformStatus("#platform-objective-status", "warning", "Renseignez le mois, le pays, le pole, le KPI et l'objectif.");
+        return;
+      }
+      await withLoading($("#platform-objective-save"), "Enregistrement...", async () => {
+        try {
+          const response = await api.savePlatformObjective({
+            branch: fieldValue("#platform-objective-branch") || state.calendarBranchFilter || "Groupe",
+            poleId: pole.id,
+            poleName: pole.name,
+            catalogId: kpiId,
+            period: fieldValue("#platform-objective-period"),
+            target,
+            unit: fieldValue("#platform-objective-unit"),
+            frequency: fieldValue("#platform-objective-frequency"),
+            distributionMode: fieldValue("#platform-objective-distribution"),
+            responsible: fieldValue("#platform-objective-responsible") || pole.owner || "",
+            validation: fieldValue("#platform-objective-validation") || "En attente",
+            dataNature: fieldValue("#platform-objective-data-nature") || "Reel",
+            sourceData: "Saisie interne Hub central",
+          });
+          applyCollectionResponse(response, "#platform-objective-status", `Objectif ${kpiId} enregistre.`);
+        } catch (error) {
+          console.warn("Saisie objectif indisponible.", error);
+          setPlatformStatus("#platform-objective-status", "warning", `Enregistrement impossible: ${escapeHtml(error.message)}`);
+          showToast(error.message || "Impossible d'enregistrer l'objectif.");
+        }
+      });
+    });
+
+    $("#platform-calculation-form")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!api?.savePlatformCalculation) {
+        showToast("Collecte integree indisponible sur ce serveur.");
+        return;
+      }
+      const pole = selectedPoleById(fieldValue("#platform-calculation-pole") || state.currentPlatformCalculationPole);
+      const kpiId = fieldValue("#platform-calculation-kpi");
+      const entryMode = fieldValue("#platform-calculation-entry-mode") || "elements";
+      const entryModeLabel = $("#platform-calculation-entry-mode")?.selectedOptions?.[0]?.textContent?.trim() || entryMode;
+      const elements = [1, 2, 3].map((index) => ({
+        label: fieldValue(`#platform-calculation-element-${index}`),
+        value: fieldValue(`#platform-calculation-value-${index}`),
+      }));
+      if (!pole?.id || !kpiId || !fieldValue("#platform-calculation-date")) {
+        setPlatformStatus("#platform-calculation-status", "warning", "Renseignez la date, le pays, le pole et le KPI.");
+        return;
+      }
+      await withLoading($("#platform-calculation-save"), "Enregistrement...", async () => {
+        try {
+          const response = await api.savePlatformCalculation({
+            branch: fieldValue("#platform-calculation-branch") || state.calendarBranchFilter || "Groupe",
+            poleId: pole.id,
+            poleName: pole.name,
+            catalogId: kpiId,
+            date: fieldValue("#platform-calculation-date"),
+            entryMode,
+            entryModeLabel,
+            directValue: fieldValue("#platform-calculation-direct-value"),
+            elements,
+            validation: fieldValue("#platform-calculation-validation") || "En attente",
+            dataNature: fieldValue("#platform-calculation-data-nature") || "Reel",
+          });
+          applyCollectionResponse(response, "#platform-calculation-status", `Donnee ${kpiId} enregistree.`);
+        } catch (error) {
+          console.warn("Saisie donnees de calcul indisponible.", error);
+          setPlatformStatus("#platform-calculation-status", "warning", `Enregistrement impossible: ${escapeHtml(error.message)}`);
+          showToast(error.message || "Impossible d'enregistrer la donnee.");
+        }
+      });
+    });
 
     const referenceKoboFields = [
       { mappedTo: "id", inputId: "#admin-kobo-reference-id-field", defaultValue: "id_kpi_final" },

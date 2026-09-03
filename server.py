@@ -121,6 +121,8 @@ REFERENCE_KOBO_SOURCE_TYPE = "KoboCollect Referentiel KPI"
 REFERENCE_KOBO_DEFAULT_SERVER = "https://kf.kobotoolbox.org"
 OBJECTIVES_KOBO_DEFAULT_UID = "aNdbykKVWBW8KeprR5M2Uj"
 CALCULATION_KOBO_DEFAULT_UID = "aCdB3YF8vSppFsVBroKm9W"
+PLATFORM_COLLECTION_SUBMISSION_PREFIX = "platform:"
+PLATFORM_COLLECTION_COLLECTOR = "Plateforme Hub central"
 KOBO_UID_REPLACEMENTS = {
     "agJCJ2VqwMGNk586NHJ39W": REFERENCE_KOBO_CURRENT_UID,
     "auGyH8vhCsK9KKtG2fu2u5": REFERENCE_KOBO_CURRENT_UID,
@@ -253,7 +255,7 @@ DATABASE_TABLE_LABELS = {
     "kpi_objectives": "Objectifs KPI",
     "kobo_forms": "Formulaires Kobo",
     "kobo_form_fields": "Champs formulaires Kobo",
-    "kobo_submissions": "Soumissions Kobo",
+    "kobo_submissions": "Soumissions collecte",
     "kpi_daily_data": "Donnees journalieres KPI",
     "validation_queue": "File de validation",
     "reports": "Rapports",
@@ -1058,7 +1060,7 @@ def objective_record_to_front(record: dict, pole_names: dict[str, str] | None = 
         "sourceData": record.get("sourceData") or "",
         "responsible": record.get("responsible") or "",
         "validation": record.get("validation") or "A valider",
-        "documentStatus": record.get("documentStatus") or "Objectif Kobo",
+        "documentStatus": record.get("documentStatus") or "Objectif collecte",
         "attention": record.get("attention") or "",
         "dataNature": record.get("dataNature") or "Reel",
         "sourceServer": record.get("sourceServer") or "",
@@ -2739,6 +2741,333 @@ def apply_env_kobo_sources(conn: sqlite3.Connection) -> bool:
     return changed
 
 
+def kobo_source_definition_for_role(role: str) -> dict | None:
+    for definition in ENV_KOBO_SOURCE_DEFINITIONS:
+        if definition["role"] == role:
+            return definition
+    return None
+
+
+def ensure_kobo_source_for_role(conn: sqlite3.Connection, role: str) -> dict:
+    definition = kobo_source_definition_for_role(role)
+    if not definition:
+        raise ValueError(f"Role de formulaire inconnu: {role}")
+
+    common_server, _server_env = first_env_value(KOBO_SERVER_ENV_KEYS)
+    role_server, _role_server_env = first_env_value(definition.get("server_env_keys", ()))
+    source = {
+        "role": definition["role"],
+        "uid": definition.get("default_uid", ""),
+        "server_url": normalize_kobo_server_url(role_server) or normalize_kobo_server_url(common_server) or REFERENCE_KOBO_DEFAULT_SERVER,
+        "title": definition["title"],
+        "source_type": definition["source_type"],
+        "cadence": definition["cadence"],
+        "field_type": definition["field_type"],
+        "fields": definition["fields"],
+        "from_env": False,
+    }
+    upsert_kobo_source_from_env(conn, source)
+    return source
+
+
+def platform_collector_from_session(session: dict | None) -> str:
+    if not session:
+        return PLATFORM_COLLECTION_COLLECTOR
+    for key in ("fullName", "full_name", "name", "email"):
+        value = text_or_empty(session.get(key))
+        if value:
+            return value
+    return PLATFORM_COLLECTION_COLLECTOR
+
+
+def normalize_collection_data_nature(value) -> str:
+    normalized = normalize_match_key(value)
+    if "test" in normalized or "fictif" in normalized:
+        return "Test"
+    return "Reel"
+
+
+def platform_submission_uid(kind: str, *parts) -> str:
+    normalized_parts = [normalize_submission_key(text_or_empty(part)) for part in parts]
+    normalized = ":".join(part or "na" for part in normalized_parts)
+    return f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}{kind}:{normalized}"
+
+
+def insert_platform_kobo_submission(
+    conn: sqlite3.Connection,
+    *,
+    role: str,
+    submission_uid_value: str,
+    pole_id: str,
+    pole_name: str,
+    branch: str,
+    kpi_name: str,
+    period: str,
+    value,
+    validation_status: str,
+    raw_payload: dict,
+    session: dict | None,
+) -> str:
+    source = ensure_kobo_source_for_role(conn, role)
+    ensure_pole(conn, pole_id, pole_name or pole_id)
+    submitted_at = utc_timestamp()
+    collector = platform_collector_from_session(session)
+    conn.execute(
+        """
+        INSERT INTO kobo_submissions (
+          submission_uid,
+          form_uid,
+          pole_id,
+          branch,
+          kpi_name,
+          collector,
+          submitted_at,
+          period,
+          value,
+          validation_status,
+          raw_payload_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(form_uid, submission_uid) DO UPDATE SET
+          pole_id = excluded.pole_id,
+          branch = excluded.branch,
+          kpi_name = excluded.kpi_name,
+          collector = excluded.collector,
+          submitted_at = excluded.submitted_at,
+          period = excluded.period,
+          value = excluded.value,
+          validation_status = excluded.validation_status,
+          raw_payload_json = excluded.raw_payload_json
+        """,
+        (
+            submission_uid_value,
+            source["uid"],
+            pole_id,
+            branch,
+            kpi_name,
+            collector,
+            submitted_at,
+            period,
+            None if value is None else str(value),
+            validation_status or "A valider",
+            json.dumps(raw_payload, ensure_ascii=False),
+        ),
+    )
+    return source["uid"]
+
+
+def save_platform_reference_kpi(payload: dict, session: dict | None = None) -> dict:
+    pole_id = text_or_empty(payload.get("poleId") or payload.get("pole"))
+    branch = text_or_empty(payload.get("branch") or payload.get("countryName") or "Groupe") or "Groupe"
+    kpi_code = canonical_kpi_code(payload.get("catalogId") or payload.get("kpiId") or payload.get("idKpi"))
+    kpi_name = text_or_empty(payload.get("kpiName") or payload.get("name") or kpi_code)
+    if not pole_id or not (kpi_code or kpi_name):
+        raise ValueError("Pays/filiale, pole et KPI sont obligatoires pour renseigner le referentiel.")
+
+    with db_connect() as conn:
+        pole_row = conn.execute("SELECT id, name, owner FROM poles WHERE id = ?", (pole_id,)).fetchone()
+        pole_name = text_or_empty(payload.get("poleName") or (pole_row["name"] if pole_row else pole_id)) or pole_id
+        data_nature = normalize_collection_data_nature(payload.get("dataNature"))
+        source_data = text_or_empty(payload.get("sourceData") or "Collecte plateforme")
+        validation_status = text_or_empty(payload.get("validation") or payload.get("validationStatus") or "A valider")
+        reference_payload = {
+            "id_kpi_final": kpi_code,
+            "pays_filiale": branch,
+            "categorie": text_or_empty(payload.get("category") or payload.get("type") or "KPI metier"),
+            "entite_direction": pole_name,
+            "sous_entite_pole_filiale": pole_name,
+            "groupe_de_rattachement": pole_id,
+            "chemin_organisationnel": f"{branch} / {pole_name}",
+            "intitule_du_kpi": kpi_name,
+            "description_definition": text_or_empty(payload.get("definition")),
+            "type_de_kpi": text_or_empty(payload.get("type") or payload.get("category") or "KPI metier"),
+            "unite_de_mesure": text_or_empty(payload.get("unit")),
+            "formule_de_calcul": text_or_empty(payload.get("formula")),
+            "valeur_cible": text_or_empty(payload.get("target")),
+            "sens_performance": text_or_empty(payload.get("performanceDirection") or "higherBetter"),
+            "frequence_de_collecte": text_or_empty(payload.get("collectionFrequency") or payload.get("frequency")),
+            "periodicite_du_reporting": text_or_empty(payload.get("reportingFrequency") or payload.get("frequency")),
+            "source_de_la_donnee": source_data,
+            "responsable_du_kpi": text_or_empty(payload.get("owner") or payload.get("responsible") or (pole_row["owner"] if pole_row else "")),
+            "repondant": text_or_empty(payload.get("respondent") or payload.get("responsible")),
+            "fonction_du_repondant": text_or_empty(payload.get("respondentFunction")),
+            "annee": text_or_empty(payload.get("year") or dt.date.today().year),
+            "validation_hierarchique": validation_status,
+            "validateur": text_or_empty(payload.get("validator")),
+            "commentaires": text_or_empty(payload.get("comments")),
+            "date_de_soumission": utc_timestamp(),
+            "reference_source": "Saisie interne Hub central",
+            "statut_documentaire": text_or_empty(payload.get("documentStatus") or "Documente"),
+            "points_d_attention": text_or_empty(payload.get("attention")),
+            "nature_donnee": "donnee test" if data_nature == "Test" else "donnee reelle",
+        }
+        source_form_uid = insert_platform_kobo_submission(
+            conn,
+            role="referentielKpi",
+            submission_uid_value=platform_submission_uid("referentiel", branch, pole_id, kpi_code or kpi_name),
+            pole_id=pole_id,
+            pole_name=pole_name,
+            branch=branch,
+            kpi_name=kpi_code or kpi_name,
+            period=text_or_empty(reference_payload["annee"]),
+            value=reference_payload["valeur_cible"],
+            validation_status=validation_status,
+            raw_payload=reference_payload,
+            session=session,
+        )
+        ensure_kpi(
+            conn,
+            {
+                "poleId": pole_id,
+                "poleName": pole_name,
+                "kpiName": kpi_name,
+                "catalogId": kpi_code,
+                "type": reference_payload["type_de_kpi"],
+                "unit": reference_payload["unite_de_mesure"],
+                "formula": reference_payload["formule_de_calcul"],
+                "target": reference_payload["valeur_cible"],
+                "frequency": reference_payload["frequence_de_collecte"],
+                "sourceData": source_data,
+                "sourceForm": source_form_uid,
+                "responsible": reference_payload["responsable_du_kpi"],
+                "respondent": reference_payload["repondant"],
+                "validation": validation_status,
+                "documentStatus": reference_payload["statut_documentaire"],
+            },
+        )
+        audit(conn, "Saisie plateforme referentiel KPI", "kobo_submission", kpi_code or kpi_name, reference_payload)
+        conn.commit()
+        return {"formUid": source_form_uid, "submissionUid": platform_submission_uid("referentiel", branch, pole_id, kpi_code or kpi_name)}
+
+
+def save_platform_monthly_objective(payload: dict, session: dict | None = None) -> dict:
+    pole_id = text_or_empty(payload.get("poleId") or payload.get("pole"))
+    branch = text_or_empty(payload.get("branch") or payload.get("countryName") or "Groupe") or "Groupe"
+    kpi_code = canonical_kpi_code(payload.get("catalogId") or payload.get("kpiId") or payload.get("idKpi"))
+    period_raw = text_or_empty(payload.get("period") or payload.get("month"))
+    target = text_or_empty(payload.get("target") or payload.get("objective"))
+    if not pole_id or not kpi_code or not period_raw or not target:
+        raise ValueError("Pays/filiale, pole, KPI, mois et objectif sont obligatoires.")
+
+    parsed_month = parse_period_month(period_raw)
+    period = parsed_month[0] if parsed_month else period_raw
+    with db_connect() as conn:
+        pole_row = conn.execute("SELECT id, name, owner FROM poles WHERE id = ?", (pole_id,)).fetchone()
+        pole_name = text_or_empty(payload.get("poleName") or (pole_row["name"] if pole_row else pole_id)) or pole_id
+        data_nature = normalize_collection_data_nature(payload.get("dataNature"))
+        validation_status = text_or_empty(payload.get("validation") or payload.get("validationStatus") or "A valider")
+        objective_payload = {
+            "pays_filiale": branch,
+            "pole": pole_id,
+            "id_kpi": kpi_code,
+            "periode_objectif": period,
+            "objectif_mensuel": target,
+            "unite": text_or_empty(payload.get("unit")),
+            "frequence": text_or_empty(payload.get("frequency") or "Mensuelle"),
+            "mode_repartition": text_or_empty(payload.get("distributionMode") or "Automatique selon unite KPI"),
+            "source_objectif": text_or_empty(payload.get("sourceData") or "Saisie interne Hub central"),
+            "responsable_objectif": text_or_empty(payload.get("responsible") or (pole_row["owner"] if pole_row else "")),
+            "validation_direction": validation_status,
+            "commentaires": text_or_empty(payload.get("attention") or payload.get("comments")),
+            "nature_donnee": "donnee test" if data_nature == "Test" else "donnee reelle",
+        }
+        source_form_uid = insert_platform_kobo_submission(
+            conn,
+            role="objectifsMensuels",
+            submission_uid_value=platform_submission_uid("objectif", branch, pole_id, kpi_code, period),
+            pole_id=pole_id,
+            pole_name=pole_name,
+            branch=branch,
+            kpi_name=kpi_code,
+            period=period,
+            value=target,
+            validation_status=validation_status,
+            raw_payload=objective_payload,
+            session=session,
+        )
+        audit(conn, "Saisie plateforme objectif mensuel", "kobo_submission", f"{branch}:{pole_id}:{kpi_code}:{period}", objective_payload)
+        conn.commit()
+        return {"formUid": source_form_uid, "submissionUid": platform_submission_uid("objectif", branch, pole_id, kpi_code, period)}
+
+
+def save_platform_calculation_data(payload: dict, session: dict | None = None) -> dict:
+    pole_id = text_or_empty(payload.get("poleId") or payload.get("pole"))
+    branch = text_or_empty(payload.get("branch") or payload.get("countryName") or "Groupe") or "Groupe"
+    kpi_code = canonical_kpi_code(payload.get("catalogId") or payload.get("kpiId") or payload.get("idKpi"))
+    date_raw = text_or_empty(payload.get("date") or payload.get("dataDate") or payload.get("period"))
+    data_date = parse_daily_period_date(date_raw)
+    if not pole_id or not kpi_code or not data_date:
+        raise ValueError("Pays/filiale, pole, KPI et date de collecte valide sont obligatoires.")
+
+    entry_mode = normalize_match_key(payload.get("entryMode") or "elements")
+    direct_value = payload.get("directValue")
+    elements = payload.get("elements") if isinstance(payload.get("elements"), list) else []
+    has_direct_value = direct_value not in (None, "")
+    usable_elements = [
+        {
+            "label": text_or_empty(item.get("label") or f"element {index + 1}"),
+            "value": item.get("value"),
+        }
+        for index, item in enumerate(elements[:3])
+        if item and item.get("value") not in (None, "")
+    ]
+    if "element" in entry_mode and not usable_elements:
+        raise ValueError("Renseignez au moins un element de calcul et sa valeur.")
+    if "element" not in entry_mode and not has_direct_value:
+        raise ValueError("Renseignez le taux realise ou la valeur directe.")
+
+    with db_connect() as conn:
+        pole_row = conn.execute("SELECT id, name FROM poles WHERE id = ?", (pole_id,)).fetchone()
+        pole_name = text_or_empty(payload.get("poleName") or (pole_row["name"] if pole_row else pole_id)) or pole_id
+        data_nature = normalize_collection_data_nature(payload.get("dataNature"))
+        validation_status = text_or_empty(payload.get("validation") or payload.get("validationStatus") or "A valider")
+        calculation_payload = {
+            "pays_filiale": branch,
+            "pole_id": pole_id,
+            "id_kpi": kpi_code,
+            "periode_reporting": data_date.isoformat(),
+            "date_collecte": data_date.isoformat(),
+            "mode_saisie_donnee": text_or_empty(payload.get("entryModeLabel") or payload.get("entryMode") or "Elements de calcul"),
+            "validation_hierarchique": validation_status,
+            "commentaires": text_or_empty(payload.get("comments")),
+            "nature_donnee": "donnee test" if data_nature == "Test" else "donnee reelle",
+        }
+        if "atteinte" in entry_mode or "taux" in entry_mode or "achievement" in entry_mode:
+            calculation_payload["taux_realise"] = direct_value
+            value_for_summary = direct_value
+        elif has_direct_value:
+            calculation_payload["valeur_realisee"] = direct_value
+            value_for_summary = direct_value
+        else:
+            value_for_summary = usable_elements[0]["value"] if usable_elements else ""
+            for index, item in enumerate(usable_elements, start=1):
+                calculation_payload[f"element_id_{index}"] = item["label"]
+                calculation_payload[f"valeur_element_{index}"] = item["value"]
+
+        submission_uid_value = platform_submission_uid("donnees", branch, pole_id, kpi_code, data_date.isoformat())
+        source_form_uid = insert_platform_kobo_submission(
+            conn,
+            role="donneesCalcul",
+            submission_uid_value=submission_uid_value,
+            pole_id=pole_id,
+            pole_name=pole_name,
+            branch=branch,
+            kpi_name=kpi_code,
+            period=data_date.isoformat(),
+            value=value_for_summary,
+            validation_status=validation_status,
+            raw_payload=calculation_payload,
+            session=session,
+        )
+        conn.execute(
+            "DELETE FROM kpi_daily_data WHERE source_form_uid = ? AND source_submission_uid = ?",
+            (source_form_uid, submission_uid_value),
+        )
+        audit(conn, "Saisie plateforme donnees de calcul", "kobo_submission", f"{branch}:{pole_id}:{kpi_code}:{data_date.isoformat()}", calculation_payload)
+        conn.commit()
+        return {"formUid": source_form_uid, "submissionUid": submission_uid_value}
+
+
 def utc_timestamp() -> str:
     return dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -3273,7 +3602,7 @@ def infer_performance_direction(raw_direction: str = "", kpi_name: str = "", for
 def effective_target_for_group(reference: dict, objective: dict | None, group: dict) -> dict:
     if not objective:
         return {
-            "label": "Objectif Kobo manquant",
+            "label": "Objectif manquant",
             "monthlyLabel": "",
             "numeric": None,
             "statusReady": False,
@@ -3286,7 +3615,7 @@ def effective_target_for_group(reference: dict, objective: dict | None, group: d
         target_number = parse_number(raw_target)
     if target_number is None:
         return {
-            "label": raw_target or "Objectif Kobo manquant",
+            "label": raw_target or "Objectif manquant",
             "monthlyLabel": raw_target,
             "numeric": None,
             "statusReady": False,
@@ -3884,7 +4213,7 @@ def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source
                 "sourceData": text_or_empty(source_raw),
                 "responsible": text_or_empty(responsible_raw or row["collector"]),
                 "validation": text_or_empty(validation_raw or row["validation_status"]),
-                "documentStatus": text_or_empty(status_raw or "Objectif Kobo"),
+                "documentStatus": text_or_empty(status_raw or "Objectif collecte"),
                 "attention": text_or_empty(attention_raw),
                 "dataNature": data_nature,
                 "sourceForm": objective_source["formId"],
@@ -4112,7 +4441,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "Configuration",
                 "Bloquant",
                 f"{KOBO_AUDIT_ROLE_LABELS.get(role, role)} non connecte.",
-                "Renseigner l'UID du formulaire dans Administration > KoboCollecte.",
+                "Renseigner l'UID du formulaire dans Administration > Collecte de donnees.",
                 role=role,
             )
             continue
@@ -4132,7 +4461,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
 
     if not reference_source:
         quality["proposals"].append(
-            "Configurer le formulaire KPI/formules dans Administration > KoboCollecte pour afficher les KPI par pole."
+            "Configurer le referentiel KPI/formules dans Administration > Collecte de donnees pour afficher les KPI par pole."
         )
         quality["anomalyCount"] = len(quality["anomalies"])
         quality["blockingAnomalyCount"] = sum(1 for item in quality["anomalies"] if item.get("severity") == "Bloquant")
@@ -4419,6 +4748,12 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
 
     def calculation_submission_elements(payload: dict, row: sqlite3.Row) -> list[dict]:
         elements = []
+        entry_mode_raw = mapped_submission_value(
+            calculation_source,
+            payload,
+            "entryMode",
+            ["mode_saisie_donnee", "mode_saisie"],
+        )
 
         direct_value = mapped_submission_value(
             calculation_source,
@@ -4435,7 +4770,15 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             ],
         )
         if direct_value not in (None, ""):
-            elements.append({"label": "valeur realisee", "value": direct_value})
+            direct_label = "valeur realisee"
+            entry_mode_key = normalize_match_key(entry_mode_raw)
+            if (
+                "taux" in entry_mode_key
+                or "atteinte" in entry_mode_key
+                or submission_value(payload, ["taux_realise", "taux_realisation", "atteinte_objectif", "vs_target"]) not in (None, "")
+            ):
+                direct_label = "taux realise"
+            elements.append({"label": direct_label, "value": direct_value})
 
         for index in range(1, 4):
             element_raw = mapped_submission_value(
@@ -4910,7 +5253,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     "poleName": pole_names.get(record["poleId"], record["poleId"]),
                     "kpiId": record["kpiId"],
                     "kpiName": record["kpiName"],
-                    "target": linked_objective["target"] if linked_objective else "Objectif Kobo mensuel attendu",
+                    "target": linked_objective["target"] if linked_objective else "Objectif mensuel attendu",
                     "monthlyTarget": linked_objective["target"] if linked_objective else "",
                     "unit": linked_objective.get("unit") or record["unit"] if linked_objective else record["unit"],
                     "formula": record["formula"] or "Formule a completer",
@@ -4926,7 +5269,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     "dataNature": record.get("dataNature") or "Reel",
                     "status": "gray",
                     "valueLabel": "--",
-                    "method": "Reference Kobo, donnees de calcul attendues",
+                    "method": "Reference collecte, donnees de calcul attendues",
                 }
             )(latest_objective_for_reference(record))
             for record in references
@@ -5044,7 +5387,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 ]
                 if direct_achievement_values:
                     direct_achievement = sum(direct_achievement_values) / len(direct_achievement_values)
-                    method = "Cumul mensuel a date: moyenne des taux de realisation Kobo"
+                    method = "Cumul mensuel a date: moyenne des taux de realisation"
             else:
                 value, method, formula_warnings = evaluate_kpi_formula(
                     reference["formula"],
@@ -5061,7 +5404,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             )
         if direct_achievement is not None:
             method = (
-                "Taux de realisation Kobo utilise directement"
+                "Taux de realisation utilise directement"
                 if not is_month_to_date
                 else method
             )
@@ -5073,7 +5416,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 add_anomaly(
                     "Calcul",
                     "Bloquant",
-                    "Formule Kobo non appliquee pour ce KPI.",
+                    "Formule non appliquee pour ce KPI.",
                     "Aligner les libelles element_id avec les termes utilises dans formule_de_calcul.",
                     role="donneesCalcul",
                     source=calculation_source,
@@ -5130,7 +5473,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             if achievement is not None
             else "empty"
         )
-        value_label = format_calculated_value(value, result_unit)
+        value_label = achievement_label if direct_achievement is not None else format_calculated_value(value, result_unit)
         day_value = day_point.get("value") if day_point else value if group.get("periodType") == "day" else None
         day_value_label = day_point.get("valueLabel") if day_point else value_label if group.get("periodType") == "day" else ""
         month_to_date_value = value if is_month_to_date else None
@@ -5168,7 +5511,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "collectionFrequency": reference.get("collectionFrequency", ""),
             "reportingFrequency": reference.get("reportingFrequency", ""),
             "status": status,
-            "trend": "Calcul Kobo",
+            "trend": "Calcul plateforme",
             "dataNature": group.get("dataNature") or "Reel",
             "source": calculation_source["formId"] if calculation_source else reference_source["formId"],
             "objectiveSource": objective.get("sourceForm") if objective else "",
@@ -5232,7 +5575,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     if quality["unmatchedObjectiveCount"]:
         quality["proposals"].append("Corriger les objectifs mensuels dont l'ID KPI n'existe pas dans le referentiel du Formulaire 1.")
     if quality["missingMonthlyObjectiveCount"]:
-        quality["proposals"].append("Renseigner les objectifs mensuels Kobo pour calculer le taux realise et le statut vert/orange/rouge.")
+        quality["proposals"].append("Renseigner les objectifs mensuels pour calculer le taux realise et le statut vert/orange/rouge.")
     if quality["missingFormulaCount"]:
         quality["proposals"].append("Formaliser les formules restantes avec les memes libelles que les elements collectes.")
     if references and not objective_source:
@@ -5240,7 +5583,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     if references and not calculation_source:
         quality["proposals"].append("Les KPI du referentiel sont visibles; ajouter le formulaire donnees de calcul pour obtenir les valeurs.")
     if not results and quality["configured"]:
-        quality["proposals"].append("Synchroniser le formulaire donnees de calcul pour remplacer les valeurs en attente.")
+        quality["proposals"].append("Renseigner ou synchroniser les donnees de calcul pour remplacer les valeurs en attente.")
     if not quality["proposals"]:
         quality["proposals"].append("Maintenir le meme pays / filiale, pole, id_kpi et mois dans les trois formulaires pour garder le calcul automatique stable.")
 
@@ -5341,16 +5684,32 @@ def sync_kobo_form(payload: dict) -> dict:
             if incoming_uids:
                 placeholders = ",".join("?" for _uid in incoming_uids)
                 conn.execute(
-                    f"DELETE FROM kobo_submissions WHERE form_uid = ? AND submission_uid NOT IN ({placeholders})",
-                    (form_uid, *incoming_uids),
+                    f"""
+                    DELETE FROM kobo_submissions
+                    WHERE form_uid = ?
+                      AND submission_uid NOT IN ({placeholders})
+                      AND COALESCE(submission_uid, '') NOT LIKE ?
+                    """,
+                    (form_uid, *incoming_uids, f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}%"),
                 )
                 conn.execute(
-                    f"DELETE FROM kpi_daily_data WHERE source_form_uid = ? AND source_submission_uid NOT IN ({placeholders})",
-                    (form_uid, *incoming_uids),
+                    f"""
+                    DELETE FROM kpi_daily_data
+                    WHERE source_form_uid = ?
+                      AND source_submission_uid NOT IN ({placeholders})
+                      AND COALESCE(source_submission_uid, '') NOT LIKE ?
+                    """,
+                    (form_uid, *incoming_uids, f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}%"),
                 )
             else:
-                conn.execute("DELETE FROM kobo_submissions WHERE form_uid = ?", (form_uid,))
-                conn.execute("DELETE FROM kpi_daily_data WHERE source_form_uid = ?", (form_uid,))
+                conn.execute(
+                    "DELETE FROM kobo_submissions WHERE form_uid = ? AND COALESCE(submission_uid, '') NOT LIKE ?",
+                    (form_uid, f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}%"),
+                )
+                conn.execute(
+                    "DELETE FROM kpi_daily_data WHERE source_form_uid = ? AND COALESCE(source_submission_uid, '') NOT LIKE ?",
+                    (form_uid, f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}%"),
+                )
 
         for submission, uid in zip(submissions[:KOBO_SUBMISSION_LIMIT], incoming_uids):
             values = {key: submission_value(submission, aliases) for key, aliases in KOBO_FIELD_ALIASES.items()}
@@ -5712,6 +6071,45 @@ class PMSHandler(BaseHTTPRequestHandler):
             if path == "/api/objectives":
                 require_admin_session(self.headers)
                 self.send_json(save_objective(payload))
+                return
+            if path == "/api/collection/reference-kpi":
+                session = require_payload_scope(
+                    self.headers,
+                    payload,
+                    permission_code="ajout",
+                    message="Droit d'ajout requis pour renseigner le referentiel KPI.",
+                    allow_group_record=False,
+                )
+                saved = save_platform_reference_kpi(payload, session)
+                refreshed = get_bootstrap_payload(session)
+                refreshed["savedCollection"] = saved
+                self.send_json(refreshed)
+                return
+            if path == "/api/collection/objective":
+                session = require_payload_scope(
+                    self.headers,
+                    payload,
+                    permission_code="ajout",
+                    message="Droit d'ajout requis pour renseigner un objectif KPI.",
+                    allow_group_record=False,
+                )
+                saved = save_platform_monthly_objective(payload, session)
+                refreshed = get_bootstrap_payload(session)
+                refreshed["savedCollection"] = saved
+                self.send_json(refreshed)
+                return
+            if path == "/api/collection/calculation":
+                session = require_payload_scope(
+                    self.headers,
+                    payload,
+                    permission_code="ajout",
+                    message="Droit d'ajout requis pour renseigner les donnees de calcul.",
+                    allow_group_record=False,
+                )
+                saved = save_platform_calculation_data(payload, session)
+                refreshed = get_bootstrap_payload(session)
+                refreshed["savedCollection"] = saved
+                self.send_json(refreshed)
                 return
             if path == "/api/reports":
                 require_payload_scope(
