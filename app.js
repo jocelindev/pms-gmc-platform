@@ -25,6 +25,7 @@
 
   const viewTitles = {
     dashboard: "Dashboard KPI par pole",
+    collection: "Collecte de donnees",
     internal: "Outil interne PMS",
     management: "Management performance groupe",
     poles: "Suivi des performances par pole",
@@ -1560,7 +1561,8 @@
   function canAccessView(view) {
     const permissions = state.currentPermissions || {};
     if (permissions.administration) return true;
-    if (view === "admin") return Boolean(permissions.ajout);
+    if (view === "collection") return Boolean(permissions.ajout);
+    if (view === "admin") return false;
     if (view === "internal") return Boolean(permissions.consultation || permissions.ajout || permissions.validation || permissions.management);
     if (view === "management") return Boolean(permissions.management);
     if (view === "reports") return Boolean(permissions.consultation || permissions.ajout || permissions.validation);
@@ -1570,7 +1572,7 @@
   }
 
   function firstAllowedView() {
-    return ["dashboard", "internal", "management", "poles", "alerts", "reports", "admin"].find(canAccessView) || "dashboard";
+    return ["dashboard", "collection", "internal", "management", "poles", "alerts", "reports", "admin"].find(canAccessView) || "dashboard";
   }
 
   function applyNavigationPermissions() {
@@ -3708,6 +3710,13 @@
     });
   }
 
+  function mountPlatformCollectionPanel() {
+    const target = $("#platform-collection-root");
+    const panel = $("#platform-collection-panel");
+    if (!target || !panel || panel.parentElement === target) return;
+    target.appendChild(panel);
+  }
+
   async function init() {
     const savedSession = loadSavedSession();
     let restoredSession = false;
@@ -3725,6 +3734,7 @@
     }
     applyCalculatedKpisToReporting();
     syncPeriodFilterFromCalendar();
+    mountPlatformCollectionPanel();
     renderAll(state);
     document.body.classList.add("dashboard-mode");
     bindNavigation();

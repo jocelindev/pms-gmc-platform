@@ -3384,9 +3384,7 @@
           state.currentPermissions?.ajout
       );
       adminShortcut.disabled = !canOpenCollection;
-      adminShortcut.textContent = state.currentPermissions?.administration
-        ? "Parametrer la collecte"
-        : "Ouvrir la collecte";
+      adminShortcut.textContent = "Ouvrir la collecte";
     }
 
     const commandCards = [
@@ -3612,13 +3610,15 @@
       const permissions = state.currentPermissions || {};
       const canConsult = Boolean(!state.currentUser || permissions.consultation || permissions.administration);
       const canManage = Boolean(!state.currentUser || permissions.management || permissions.administration);
+      const canCollect = Boolean(!state.currentUser || permissions.ajout || permissions.administration);
       const canAdmin = Boolean(!state.currentUser || permissions.administration);
       const shortcutItems = [
+        { label: "Collecte de donnees", body: "Referentiel, objectifs et realises", view: "collection", allowed: canCollect },
         { label: "Management", body: "Synthese PDG et scoring directions", view: "management", allowed: canManage },
         { label: "Suivi par pole", body: "KPI, preuves Kobo et publication", view: "poles", allowed: canConsult },
         { label: "Plans d'action", body: "Actions SMART et responsables", view: "actions", allowed: canConsult },
         { label: "Reporting", body: "Rapports periodiques et exports", view: "reports", allowed: canConsult },
-        { label: "Administration", body: "Kobo, droits et base", view: "admin", tab: "kobo", allowed: canAdmin },
+        { label: "Administration", body: "Droits, sources et base", view: "admin", tab: "kobo", allowed: canAdmin },
       ];
       shortcuts.innerHTML = shortcutItems
         .map(
@@ -4978,11 +4978,10 @@
     const canManageAdministration = Boolean(!state.currentUser || state.currentPermissions?.administration);
     const adminPageTitle = $("#admin-page-title");
     const adminPageDescription = $("#admin-page-description");
-    if (adminPageTitle) adminPageTitle.textContent = canManageAdministration ? "Administration" : "Collecte de donnees";
+    if (adminPageTitle) adminPageTitle.textContent = "Administration";
     if (adminPageDescription) {
-      adminPageDescription.textContent = canManageAdministration
-        ? "Renseigner les donnees dans la plateforme, garder Kobo comme import optionnel, gerer les droits et consulter la base."
-        : "Saisir les KPI de votre perimetre pays / pole. Les donnees alimentent automatiquement les objectifs, les calculs et les tableaux de bord.";
+      adminPageDescription.textContent =
+        "Gerer les droits d'acces, les sources de synchronisation, les controles de donnees et la base de la plateforme.";
     }
     if (!canManageAdministration && state.currentAdminTab !== "kobo") {
       state.currentAdminTab = "kobo";
@@ -5847,6 +5846,7 @@
       : selectedUserRules.map((rule) => rule.poleName || reporting.poles.find((pole) => pole.id === rule.poleId)?.name || rule.poleId);
     const menuItems = [
       ["Tableau de bord", selectedUserPermissions.consultation || selectedUserPermissions.administration],
+      ["Collecte de donnees", selectedUserPermissions.ajout || selectedUserPermissions.administration],
       ["Management", selectedUserPermissions.management || selectedUserPermissions.administration],
       ["Suivi par pole", selectedUserPermissions.consultation || selectedUserPermissions.administration],
       ["Notifications", selectedUserPermissions.consultation || selectedUserPermissions.validation || selectedUserPermissions.administration],

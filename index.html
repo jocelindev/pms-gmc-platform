@@ -135,12 +135,13 @@
 
         <nav class="nav-list">
           <button class="nav-item active" data-view="dashboard">Tableau de bord</button>
+          <button class="nav-item" data-view="collection">Collecte de donnees</button>
           <button class="nav-item" data-view="internal">Outil interne</button>
           <button class="nav-item" data-view="management">Management</button>
           <button class="nav-item" data-view="poles">Suivi par pole</button>
           <button class="nav-item" data-view="alerts">Notifications</button>
           <button class="nav-item" data-view="reports">Reporting</button>
-           <button class="nav-item" data-view="admin">Collecte / Administration</button>
+          <button class="nav-item" data-view="admin">Administration</button>
         </nav>
 
         <div class="sidebar-note">
@@ -347,7 +348,7 @@
             <div class="internal-meta-stack">
               <span class="status-pill gray" id="internal-scope-pill">Perimetre actif</span>
               <span class="status-pill gray" id="internal-kobo-pill">Collecte a verifier</span>
-              <button class="ghost-action" id="internal-admin-shortcut" type="button" data-open-view="admin" data-admin-target-tab="kobo">
+              <button class="ghost-action" id="internal-admin-shortcut" type="button" data-open-view="collection">
                 Ouvrir la collecte
               </button>
             </div>
@@ -1009,19 +1010,30 @@
           </div>
         </section>
 
+        <section class="view" id="collection">
+          <div class="section-intro">
+            <div>
+              <p class="eyebrow">Collecte de donnees</p>
+              <h2>Renseigner les donnees de performance</h2>
+              <p>Chaque pole renseigne son referentiel KPI, ses objectifs mensuels et ses donnees realisees sur son perimetre pays / filiale.</p>
+            </div>
+          </div>
+          <div class="dashboard-grid admin-objective-grid" id="platform-collection-root"></div>
+        </section>
+
         <section class="view" id="admin">
           <div class="section-intro">
             <div>
               <p class="eyebrow">Administration</p>
               <h2 id="admin-page-title">Administration</h2>
-              <p id="admin-page-description">Renseigner les donnees dans la plateforme, garder Kobo comme import optionnel, gerer les droits et consulter la base.</p>
+              <p id="admin-page-description">Gerer les droits d'acces, les sources de synchronisation, les controles de donnees et la base de la plateforme.</p>
             </div>
           </div>
 
           <div class="admin-submenu" role="tablist" aria-label="Sous-menu administration">
             <button class="admin-tab-button active" type="button" data-admin-tab="kobo">
-              <strong>Collecte de donnees</strong>
-              <span>Saisie interne et import Kobo</span>
+              <strong>Sources de donnees</strong>
+              <span>Import Kobo optionnel et controles</span>
             </button>
             <button class="admin-tab-button" type="button" data-admin-tab="objectives">
               <strong>Objectifs</strong>
@@ -1098,7 +1110,7 @@
 
           <div class="admin-tab-panel active" data-admin-panel="kobo">
             <div class="dashboard-grid admin-objective-grid">
-              <section class="panel span-3 platform-collection-panel">
+              <section class="panel span-3 platform-collection-panel" id="platform-collection-panel">
                 <div class="panel-header">
                   <div>
                     <p class="eyebrow">Collecte integree</p>

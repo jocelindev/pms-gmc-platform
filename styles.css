@@ -816,6 +816,8 @@ button {
 
 body[data-active-view="admin"] .topbar .filters label,
 body[data-active-view="admin"] .calendar-slicer,
+body[data-active-view="collection"] .topbar .filters label,
+body[data-active-view="collection"] .calendar-slicer,
 body[data-active-view="alerts"] .topbar .filters label,
 body[data-active-view="alerts"] .calendar-slicer {
   display: none;
