@@ -5081,13 +5081,177 @@
       setSelectOptions("#platform-reference-pole", poleOptionsHtml(referencePole), referencePole);
       setSelectOptions("#platform-objective-pole", poleOptionsHtml(objectivePole), objectivePole);
       setSelectOptions("#platform-calculation-pole", poleOptionsHtml(calculationPole), calculationPole);
-      setSelectOptions("#platform-objective-kpi", kpiOptionsForPole(objectivePole, state.currentPlatformObjectiveKpi || ""), state.currentPlatformObjectiveKpi || "");
-      setSelectOptions("#platform-calculation-kpi", kpiOptionsForPole(calculationPole, state.currentPlatformCalculationKpi || ""), state.currentPlatformCalculationKpi || "");
+      state.currentPlatformReferenceBranch = $("#platform-reference-branch")?.value || defaultCountry;
+      state.currentPlatformObjectiveBranch = $("#platform-objective-branch")?.value || defaultCountry;
+      state.currentPlatformCalculationBranch = $("#platform-calculation-branch")?.value || defaultCountry;
+      const resolvedReferencePole = $("#platform-reference-pole")?.value || referencePole;
+      const resolvedObjectivePole = $("#platform-objective-pole")?.value || objectivePole;
+      const resolvedCalculationPole = $("#platform-calculation-pole")?.value || calculationPole;
+      state.currentPlatformReferencePole = resolvedReferencePole;
+      state.currentPlatformObjectivePole = resolvedObjectivePole;
+      state.currentPlatformCalculationPole = resolvedCalculationPole;
+      setSelectOptions("#platform-objective-kpi", kpiOptionsForPole(resolvedObjectivePole, state.currentPlatformObjectiveKpi || ""), state.currentPlatformObjectiveKpi || "");
+      setSelectOptions("#platform-calculation-kpi", kpiOptionsForPole(resolvedCalculationPole, state.currentPlatformCalculationKpi || ""), state.currentPlatformCalculationKpi || "");
+      state.currentPlatformObjectiveKpi = $("#platform-objective-kpi")?.value || "";
+      state.currentPlatformCalculationKpi = $("#platform-calculation-kpi")?.value || "";
       const today = new Date();
       const todayIso = Number.isNaN(today.getTime()) ? "" : today.toISOString().slice(0, 10);
       const monthIso = (state.calendar?.start || todayIso).slice(0, 7);
       setDefaultInput("#platform-objective-period", monthIso);
       setDefaultInput("#platform-calculation-date", state.calendar?.end || todayIso);
+
+      const collectionTabs = ["reference", "objective", "calculation"];
+      const activeTab = collectionTabs.includes(state.currentCollectionTab) ? state.currentCollectionTab : "reference";
+      state.currentCollectionTab = activeTab;
+      document.querySelectorAll("[data-collection-tab]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.collectionTab === activeTab);
+      });
+      document.querySelectorAll("[data-collection-section]").forEach((section) => {
+        section.hidden = section.dataset.collectionSection !== activeTab;
+      });
+
+      const selectedBranch =
+        activeTab === "objective"
+          ? $("#platform-objective-branch")?.value
+          : activeTab === "calculation"
+            ? $("#platform-calculation-branch")?.value
+            : $("#platform-reference-branch")?.value;
+      const selectedPoleId =
+        activeTab === "objective"
+          ? $("#platform-objective-pole")?.value
+          : activeTab === "calculation"
+            ? $("#platform-calculation-pole")?.value
+            : $("#platform-reference-pole")?.value;
+      const selectedCountry = findCountryByValue(selectedBranch || defaultCountry);
+      const selectedPole = collectionPoles.find((pole) => pole.id === selectedPoleId) || collectionPoles[0] || {};
+      const selectedMonth = ($("#platform-objective-period")?.value || $("#platform-calculation-date")?.value || state.calendar?.start || todayIso).slice(0, 7);
+      const branchMatches = (branch) => {
+        const value = String(branch || "").trim();
+        return !value || isGroupCountry(selectedCountry) || matchesCountryScope(value, selectedCountry);
+      };
+      const keyForKpi = (kpi = {}) =>
+        normalizeLookup(kpi.kpiId || kpi.catalogId || kpi.id || kpi.kpiKey || kpi.code || kpi.name || kpi.kpiName || "");
+      const referenceByKey = new Map();
+      const addReference = (kpi = {}) => {
+        if (selectedPole.id && kpi.poleId && kpi.poleId !== selectedPole.id) return;
+        if (!branchMatches(kpi.branch || kpi.country || kpi.filiale || "")) return;
+        const key = keyForKpi(kpi);
+        if (!key || referenceByKey.has(key)) return;
+        referenceByKey.set(key, {
+          ...kpi,
+          kpiId: kpi.kpiId || kpi.catalogId || kpi.id || kpi.code || kpi.kpiKey || "",
+          kpiName: kpi.kpiName || kpi.name || kpi.title || kpi.kpiRaw || "",
+        });
+      };
+      (state.kpiCalculationQuality?.referenceKpis || []).forEach(addReference);
+      (reporting.kpisByPole[selectedPole.id] || []).forEach((kpi) => addReference({ ...kpi, poleId: selectedPole.id }));
+      const referenceRows = [...referenceByKey.values()];
+      const objectiveRows = (state.kpiObjectives || []).filter(
+        (objective) =>
+          (!selectedPole.id || objective.poleId === selectedPole.id) &&
+          branchMatches(objective.branch || objective.country || "") &&
+          String(objective.periodMonth || objective.period || "").slice(0, 7) === selectedMonth
+      );
+      const objectiveKeys = new Set(objectiveRows.map(keyForKpi).filter(Boolean));
+      const dailyRows = (state.kpiDailyDates || []).filter(
+        (row) =>
+          (!selectedPole.id || row.poleId === selectedPole.id) &&
+          branchMatches(row.branch || row.country || "") &&
+          String(row.date || row.period || "").slice(0, 7) === selectedMonth
+      );
+      const dailyKeys = new Set(dailyRows.map(keyForKpi).filter(Boolean));
+      const missingObjectives = referenceRows.filter((kpi) => !objectiveKeys.has(keyForKpi(kpi)));
+      const missingDailyRows = referenceRows.filter((kpi) => !dailyKeys.has(keyForKpi(kpi)));
+      const completionRate = referenceRows.length
+        ? Math.round(((referenceRows.length - missingObjectives.length + referenceRows.length - missingDailyRows.length) / (referenceRows.length * 2)) * 100)
+        : 0;
+      const collectionSummary = $("#platform-collection-summary");
+      if (collectionSummary) {
+        const card = (label, value, detail, status) => `
+          <article class="platform-collection-summary-card status-${escapeHtml(status)}">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(value)}</strong>
+            <small>${escapeHtml(detail)}</small>
+          </article>
+        `;
+        collectionSummary.innerHTML = [
+          card("Perimetre", selectedPole.name || "Pole a selectionner", selectedCountry.name || selectedBranch || "Groupe", selectedPole.id ? "green" : "amber"),
+          card("KPI references", referenceRows.length, "base attendue pour ce pole", referenceRows.length ? "green" : "amber"),
+          card("Objectifs du mois", objectiveRows.length, `${missingObjectives.length} objectif(s) manquant(s)`, missingObjectives.length ? "amber" : "green"),
+          card("Realises du mois", dailyRows.length, `${missingDailyRows.length} KPI sans donnee`, missingDailyRows.length ? "amber" : "green"),
+        ].join("");
+      }
+
+      const scopePill = $("#platform-collection-scope-pill");
+      if (scopePill) {
+        scopePill.className = `status-pill ${completionRate >= 80 ? "green" : completionRate >= 40 ? "amber" : "gray"}`;
+        scopePill.textContent = referenceRows.length ? `${completionRate}% collecte complete` : "Referentiel a renseigner";
+      }
+      const sideTitle = $("#platform-collection-side-title");
+      const sideDetail = $("#platform-collection-side-detail");
+      if (sideTitle) sideTitle.textContent = selectedPole.name || "Pole a selectionner";
+      if (sideDetail) {
+        const activeLabel = activeTab === "reference" ? "Referentiel KPI" : activeTab === "objective" ? "Objectifs mensuels" : "Donnees realisees";
+        sideDetail.textContent = `${activeLabel} - ${selectedCountry.name || selectedBranch || "Groupe"} - ${selectedMonth || "periode a choisir"}`;
+      }
+      const selectedKpiId = activeTab === "calculation" ? $("#platform-calculation-kpi")?.value : $("#platform-objective-kpi")?.value;
+      const selectedKpiKey = normalizeLookup(selectedKpiId || "");
+      const selectedKpi = referenceRows.find((kpi) => keyForKpi(kpi) === selectedKpiKey) || null;
+      const selectedKpiProfile = selectedKpi
+        ? getObjectiveCatalogProfile({ ...selectedKpi, name: selectedKpi.kpiName || selectedKpi.name || selectedKpi.kpiId }, selectedPole)
+        : null;
+      const formulaPreview = $("#platform-collection-formula-preview");
+      if (formulaPreview) {
+        const formula = selectedKpi?.formula || selectedKpiProfile?.formula || $("#platform-reference-formula")?.value || "A completer dans le referentiel KPI.";
+        const target = selectedKpi?.target || selectedKpiProfile?.target || $("#platform-reference-target")?.value || "Objectif a renseigner";
+        const frequency = selectedKpi?.collectionFrequency || selectedKpi?.frequency || selectedKpiProfile?.collectionFrequency || "A preciser";
+        formulaPreview.innerHTML = `
+          <span>Formule attendue</span>
+          <strong>${escapeHtml(selectedKpi?.kpiName || selectedKpi?.name || selectedKpiId || "KPI a selectionner")}</strong>
+          <small>${escapeHtml(formula)}</small>
+          <small>Objectif: ${escapeHtml(target)} | Frequence: ${escapeHtml(frequency)}</small>
+        `;
+      }
+      const tracker = $("#platform-collection-tracker");
+      if (tracker) {
+        const rowsToShow = activeTab === "objective" ? missingObjectives : activeTab === "calculation" ? missingDailyRows : referenceRows;
+        const emptyMessage =
+          activeTab === "reference"
+            ? "Aucun KPI reference pour ce perimetre. Commencez par creer les KPI du pole."
+            : activeTab === "objective"
+              ? "Tous les KPI references ont un objectif pour ce mois."
+              : "Tous les KPI references ont au moins une donnee realisee sur ce mois.";
+        tracker.innerHTML = `
+          <div class="platform-tracker-head">
+            <span>Suivi de remplissage</span>
+            <strong>${escapeHtml(activeTab === "reference" ? `${referenceRows.length} KPI` : `${rowsToShow.length} a completer`)}</strong>
+          </div>
+          ${
+            rowsToShow.length
+              ? `<ul>${rowsToShow
+                  .slice(0, 6)
+                  .map((kpi) => `<li><b>${escapeHtml(kpi.kpiId || kpi.catalogId || kpi.id || "KPI")}</b><span>${escapeHtml(kpi.kpiName || kpi.name || "Intitule a verifier")}</span></li>`)
+                  .join("")}</ul>`
+              : `<p>${escapeHtml(emptyMessage)}</p>`
+          }
+        `;
+      }
+      const authorizedCountries = getAuthorizedCountryOptions(state);
+      const lockCountry = Boolean(state.currentUser && !state.currentPermissions?.administration && authorizedCountries.length <= 1);
+      const lockPole = Boolean(state.currentUser && !state.currentPermissions?.administration && collectionPoles.length <= 1);
+      [
+        ["#platform-reference-branch", lockCountry],
+        ["#platform-objective-branch", lockCountry],
+        ["#platform-calculation-branch", lockCountry],
+        ["#platform-reference-pole", lockPole],
+        ["#platform-objective-pole", lockPole],
+        ["#platform-calculation-pole", lockPole],
+      ].forEach(([selector, locked]) => {
+        const select = $(selector);
+        if (!select) return;
+        select.disabled = locked;
+        select.closest("label")?.classList.toggle("platform-locked-field", locked);
+      });
       const mode = $("#platform-calculation-entry-mode")?.value || state.platformCalculationEntryMode || "elements";
       document.querySelectorAll("[data-platform-calculation-mode]").forEach((node) => {
         const isElements = node.dataset.platformCalculationMode === "elements";

@@ -3841,10 +3841,101 @@ button.dashboard-control-card {
   border-top: 4px solid var(--palladium-blue);
 }
 
+.platform-collection-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.platform-collection-summary-card {
+  background: #fff;
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.platform-collection-summary-card span,
+.platform-collection-summary-card small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.platform-collection-summary-card strong {
+  color: var(--palladium-blue);
+  font-size: 1.15rem;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+
+.platform-collection-summary-card.status-green {
+  border-color: rgba(20, 132, 76, 0.32);
+}
+
+.platform-collection-summary-card.status-amber {
+  border-color: rgba(230, 166, 34, 0.42);
+}
+
+.platform-collection-summary-card.status-gray {
+  background: var(--surface-soft);
+}
+
+.platform-collection-tabs {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.platform-collection-tab {
+  background: #fff;
+  border: 1px solid rgba(31, 56, 100, 0.16);
+  border-radius: 8px;
+  color: var(--palladium-blue);
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-height: 66px;
+  padding: 12px;
+  text-align: left;
+}
+
+.platform-collection-tab strong,
+.platform-collection-tab span {
+  display: block;
+}
+
+.platform-collection-tab strong {
+  font-size: 0.95rem;
+  font-weight: 950;
+}
+
+.platform-collection-tab span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.platform-collection-tab.active {
+  background: var(--palladium-blue);
+  border-color: var(--palladium-blue);
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(31, 56, 100, 0.16);
+}
+
+.platform-collection-tab.active span {
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .platform-collection-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
 }
 
 .platform-collection-form {
@@ -3856,6 +3947,10 @@ button.dashboard-control-card {
   gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 14px;
+}
+
+.platform-collection-form[hidden] {
+  display: none;
 }
 
 .platform-form-head,
@@ -3922,6 +4017,108 @@ button.dashboard-control-card {
 .platform-calculation-direct[hidden],
 .platform-calculation-elements[hidden] {
   display: none;
+}
+
+.platform-calculation-direct {
+  display: grid;
+  gap: 10px;
+}
+
+.platform-collection-side {
+  align-content: start;
+  background: #fff;
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.platform-collection-side strong {
+  color: var(--palladium-blue);
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 950;
+}
+
+.platform-collection-side span,
+.platform-collection-side small,
+.platform-collection-side p {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.platform-formula-preview {
+  background: var(--surface-soft);
+  border: 1px dashed rgba(31, 56, 100, 0.22);
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+}
+
+.platform-formula-preview > span,
+.platform-tracker-head span {
+  color: var(--palladium-gold-dark);
+  font-size: 0.76rem;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.platform-collection-tracker {
+  border-top: 1px solid rgba(31, 56, 100, 0.12);
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.platform-tracker-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.platform-tracker-head strong {
+  background: rgba(31, 56, 100, 0.08);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  padding: 5px 9px;
+}
+
+.platform-collection-tracker ul {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 0;
+}
+
+.platform-collection-tracker li {
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+}
+
+.platform-collection-tracker li b {
+  color: var(--palladium-blue);
+  font-size: 0.82rem;
+}
+
+.platform-collection-tracker li span {
+  font-size: 0.78rem;
+}
+
+.platform-locked-field {
+  opacity: 0.78;
 }
 
 .admin-advanced-mapping {
@@ -6218,6 +6415,7 @@ td small {
   .user-view-preview,
   .admin-kobo-form,
   .admin-kobo-actions,
+  .platform-collection-summary,
   .platform-collection-grid,
   .platform-collection-form,
   .platform-calculation-elements,
@@ -6345,6 +6543,8 @@ td small {
   .admin-summary-grid,
   .user-view-preview,
   .admin-kobo-form,
+  .platform-collection-summary,
+  .platform-collection-tabs,
   .platform-collection-grid,
   .platform-collection-form,
   .platform-calculation-elements,

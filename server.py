@@ -23,6 +23,16 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
+from database.db import (
+    database_backend,
+    database_display_name,
+    database_objects,
+    is_postgres_enabled,
+    open_database_connection,
+    table_columns,
+    table_exists,
+)
+
 
 ROOT_DIR = Path(__file__).resolve().parent
 DEFAULT_DB_PATH = ROOT_DIR / "database" / "pms_gmc.sqlite"
@@ -534,9 +544,7 @@ def slugify(value: str) -> str:
 
 
 def db_connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn = open_database_connection(DB_PATH)
     migrate_database(conn)
     return conn
 
@@ -699,14 +707,7 @@ def ensure_kpi_daily_data_schema(conn: sqlite3.Connection) -> bool:
 
 
 def migrate_reference_kobo_uid(conn: sqlite3.Connection) -> bool:
-    table = conn.execute(
-        """
-        SELECT name
-        FROM sqlite_master
-        WHERE type = 'table' AND name = 'kobo_forms'
-        """
-    ).fetchone()
-    if not table:
+    if not table_exists(conn, "kobo_forms"):
         return False
 
     changed = False
@@ -1768,27 +1769,19 @@ def quote_sql_identifier(identifier: str) -> str:
 
 
 def list_database_objects(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute(
-        """
-        SELECT name, type
-        FROM sqlite_master
-        WHERE type IN ('table', 'view')
-          AND name NOT LIKE 'sqlite_%'
-        ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END, name
-        """
-    ).fetchall()
+    rows = database_objects(conn)
     objects = []
     for row in rows:
         name = row["name"]
         quoted_name = quote_sql_identifier(name)
-        columns = conn.execute(f"PRAGMA table_info({quoted_name})").fetchall()
+        columns = table_columns(conn, name)
         sensitive_columns = [column["name"] for column in columns if is_sensitive_database_column(column["name"])]
         try:
             count_row = conn.execute(
                 f"SELECT COUNT(*) AS row_count FROM {quoted_name} {database_visible_where_clause(name)}"
             ).fetchone()
             row_count = int(count_row["row_count"] if count_row else 0)
-        except sqlite3.DatabaseError:
+        except Exception:
             row_count = 0
         objects.append(
             {
@@ -1844,8 +1837,9 @@ def get_database_overview() -> dict:
     with db_connect() as conn:
         tables = list_database_objects(conn)
         return {
-            "database": DB_PATH.name,
-            "updatedAt": dt.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "database": database_display_name(DB_PATH),
+            "backend": database_backend(),
+            "updatedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
             "tables": tables,
             "totalRows": sum(table["rowCount"] for table in tables),
         }
@@ -1862,7 +1856,7 @@ def get_database_table_preview(table_name: str, limit: int = 50) -> dict:
             raise ValueError("Table introuvable dans la base.")
 
         quoted_name = quote_sql_identifier(table_name)
-        columns = conn.execute(f"PRAGMA table_info({quoted_name})").fetchall()
+        columns = table_columns(conn, table_name)
         column_names = [column["name"] for column in columns]
         rows = conn.execute(
             f"SELECT * FROM {quoted_name} {database_visible_where_clause(table_name)} LIMIT ?",
@@ -6006,7 +6000,13 @@ class PMSHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed_url.query)
         try:
             if path == "/api/health":
-                self.send_json({"database": str(DB_PATH), "status": "ok"})
+                self.send_json(
+                    {
+                        "database": database_display_name(DB_PATH),
+                        "backend": database_backend(),
+                        "status": "ok",
+                    }
+                )
                 return
             if path == "/api/bootstrap":
                 session = require_permission_session(self.headers, "consultation", "Connexion requise pour charger la plateforme.")
@@ -6195,13 +6195,14 @@ def main() -> None:
     args = parser.parse_args()
 
     DB_PATH = Path(args.db).resolve()
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not is_postgres_enabled():
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with db_connect() as conn:
         apply_env_kobo_sources(conn)
     server = ThreadingHTTPServer((args.host, args.port), PMSHandler)
     start_kobo_auto_sync_scheduler()
     print(f"Palladium Africa Hub central API disponible sur http://{args.host}:{args.port}/")
-    print(f"Base SQLite: {DB_PATH}")
+    print(f"Base {database_backend()}: {database_display_name(DB_PATH)}")
     server.serve_forever()
 
 

@@ -1114,12 +1114,27 @@
                 <div class="panel-header">
                   <div>
                     <p class="eyebrow">Collecte integree</p>
-                    <h3>Saisir les KPI directement dans Hub central</h3>
+                    <h3>Saisir les donnees directement dans Hub central</h3>
                   </div>
-                  <span class="status-pill green">Saisie directe active</span>
+                  <span class="status-pill green" id="platform-collection-scope-pill">Saisie directe active</span>
+                </div>
+                <div class="platform-collection-summary" id="platform-collection-summary"></div>
+                <div class="platform-collection-tabs" role="tablist" aria-label="Types de donnees a renseigner">
+                  <button class="platform-collection-tab active" type="button" data-collection-tab="reference">
+                    <strong>Referentiel KPI</strong>
+                    <span>KPI, formule, unite</span>
+                  </button>
+                  <button class="platform-collection-tab" type="button" data-collection-tab="objective">
+                    <strong>Objectifs mensuels</strong>
+                    <span>Cibles par mois</span>
+                  </button>
+                  <button class="platform-collection-tab" type="button" data-collection-tab="calculation">
+                    <strong>Donnees realisees</strong>
+                    <span>Taux ou elements</span>
+                  </button>
                 </div>
                 <div class="platform-collection-grid">
-                  <form class="platform-collection-form" id="platform-reference-form">
+                  <form class="platform-collection-form" id="platform-reference-form" data-collection-section="reference">
                     <div class="platform-form-head">
                       <span>1</span>
                       <div>
@@ -1197,11 +1212,11 @@
                       Enregistrer le KPI
                     </button>
                     <div class="connector-status empty platform-wide-field" id="platform-reference-status">
-                      Pret pour une saisie referentiel.
+                      Pret pour une saisie referentiel. Les nouveaux KPI seront visibles apres controle.
                     </div>
                   </form>
 
-                  <form class="platform-collection-form" id="platform-objective-form">
+                  <form class="platform-collection-form" id="platform-objective-form" data-collection-section="objective" hidden>
                     <div class="platform-form-head">
                       <span>2</span>
                       <div>
@@ -1287,7 +1302,7 @@
                     </div>
                   </form>
 
-                  <form class="platform-collection-form" id="platform-calculation-form">
+                  <form class="platform-collection-form" id="platform-calculation-form" data-collection-section="calculation" hidden>
                     <div class="platform-form-head">
                       <span>3</span>
                       <div>
@@ -1373,6 +1388,19 @@
                       Pret pour une saisie donnees.
                     </div>
                   </form>
+                  <aside class="platform-collection-side" id="platform-collection-side" aria-label="Aide a la saisie">
+                    <div>
+                      <p class="eyebrow">Perimetre actif</p>
+                      <strong id="platform-collection-side-title">Collecte du pole</strong>
+                      <span id="platform-collection-side-detail">Selectionnez un onglet pour commencer.</span>
+                    </div>
+                    <div class="platform-formula-preview" id="platform-collection-formula-preview">
+                      <span>Formule attendue</span>
+                      <strong>Aucun KPI selectionne</strong>
+                      <small>La formule s'affichera ici pour guider la saisie.</small>
+                    </div>
+                    <div class="platform-collection-tracker" id="platform-collection-tracker"></div>
+                  </aside>
                 </div>
               </section>
 

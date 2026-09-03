@@ -52,7 +52,16 @@ Identifiant admin : admin
 Mot de passe admin : Admin@2026!
 ```
 
-Note importante : l'offre gratuite convient pour une demonstration externe. La base SQLite est creee automatiquement au premier demarrage si elle n'existe pas. Pour conserver les donnees entre redeploiements, configurer un stockage persistant Render et pointer `PMS_DB_PATH` vers ce volume, par exemple `/var/data/pms_gmc.sqlite`. Les mots de passe initiaux peuvent etre changes par variables d'environnement : `PMS_ADMIN_PASSWORD` et `PMS_DEFAULT_USER_PASSWORD`. Pour une exploitation officielle, il faudra ensuite migrer vers PostgreSQL, securiser les secrets Kobo, renforcer les mots de passe et prevoir les sauvegardes.
+Note importante : l'offre gratuite convient pour une demonstration externe. En local, la base SQLite est creee automatiquement au premier demarrage si elle n'existe pas. Pour conserver les donnees en production, configurer une base PostgreSQL et ajouter son URL dans Render via `DATABASE_URL` ou `PMS_DATABASE_URL`. Les mots de passe initiaux peuvent etre changes par variables d'environnement : `PMS_ADMIN_PASSWORD` et `PMS_DEFAULT_USER_PASSWORD`. Pour une exploitation officielle, il faudra aussi securiser les secrets Kobo, renforcer les mots de passe et prevoir les sauvegardes.
+
+## Base de donnees de production
+
+La plateforme sait maintenant fonctionner avec deux modes :
+
+- SQLite local : aucune configuration supplementaire, utile pour tester.
+- PostgreSQL production : ajouter `DATABASE_URL=postgresql://...` ou `PMS_DATABASE_URL=postgresql://...`.
+
+Au demarrage, `start.py` initialise les tables et les donnees de reference si necessaire. L'API `/api/health` indique le backend actif (`sqlite` ou `postgresql`).
 
 ## Ouvrir le prototype statique
 
@@ -75,7 +84,7 @@ La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'e
   - Formulaire Objectifs mensuels UID `aNdbykKVWBW8KeprR5M2Uj`.
   - Formulaire 2 UID `aCdB3YF8vSppFsVBroKm9W`.
 - Pour une synchronisation automatique, ajouter le token dans Render comme variable d'environnement secrete `PMS_KOBO_API_TOKEN`.
-- Sur Render gratuit, la base SQLite locale peut etre recreee apres redeploiement ou redemarrage. La plateforme reconstruit donc automatiquement la connexion Kobo au demarrage depuis les variables Render :
+- Si PostgreSQL n'est pas encore configure en production, la base SQLite locale peut etre recreee apres redeploiement ou redemarrage. La plateforme reconstruit donc automatiquement la connexion Kobo au demarrage depuis les variables Render :
   - `PMS_KOBO_SERVER_URL` : serveur Kobo, par defaut `https://kf.kobotoolbox.org`.
   - `PMS_KOBO_REFERENCE_FORM_UID` : UID du formulaire KPI et formules.
   - `PMS_KOBO_OBJECTIVES_FORM_UID` : UID du formulaire objectifs mensuels.
@@ -129,7 +138,8 @@ scripts/api.js          Connecteur entre l'interface et l'API locale
 app.js                  Etat, navigation et interactions utilisateur
 server.py               API locale et serveur web de developpement
 start.py                Demarrage avec creation automatique de la base si absente
-database/schema.sql     Schema de la base SQLite
+database/schema.sql     Schema relationnel compatible SQLite/PostgreSQL
+database/db.py          Couche de connexion SQLite/PostgreSQL
 database/init_database.py Script de creation et d'alimentation de la base
 database/pms_gmc.sqlite Base de donnees locale generee
 ```
@@ -144,15 +154,15 @@ database/pms_gmc.sqlite Base de donnees locale generee
 - Palette Palladium/GMC : bleu `#1F3864`, dore `#D6A838`, bleu secondaire `#2E75B6`.
 - RAG reserve aux statuts KPI et alertes.
 - Version sans dependances frontend pour demarrer rapidement.
-- Base SQLite locale branchee via une API Python legere.
-- Les objectifs KPI, droits par profil, affectations utilisateur, formulaires Kobo actifs et rapports generes sont persistables dans SQLite.
+- Base locale SQLite et base production PostgreSQL branchees via une API Python legere.
+- Les objectifs KPI, droits par profil, affectations utilisateur, formulaires de collecte actifs et rapports generes sont persistables en base.
 - Page de connexion locale avec mots de passe hashes, session utilisateur, profil et acces par pole.
 
 ## Prochaines etapes conseillees
 
 1. Transformer ce prototype en application React/Next.js.
 2. Migrer l'API locale vers FastAPI ou Node.js pour une exploitation multi-utilisateur.
-3. Migrer SQLite vers PostgreSQL : filiales, directions, poles, KPIs, soumissions Kobo, alertes, plans d'action.
-4. Brancher KoboToolbox via API ou webhook.
+3. Brancher une base PostgreSQL durable en production puis mettre en place les sauvegardes.
+4. Brancher KoboToolbox via API ou webhook si Kobo reste utilise en appoint.
 5. Ajouter authentification, roles RBAC et audit trail complet.
 6. Generer les rapports reels Word/PDF/PowerPoint/Excel a partir des donnees consolidees par pole et periodicite.

@@ -15,6 +15,11 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from database.db import database_backend, database_display_name, is_postgres_enabled, open_database_connection
+
 DATABASE_DIR = ROOT_DIR / "database"
 SCHEMA_PATH = DATABASE_DIR / "schema.sql"
 DEFAULT_DB_PATH = DATABASE_DIR / "pms_gmc.sqlite"
@@ -397,8 +402,10 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
         for code, permission_id in permission_ids.items():
             cur.execute(
                 """
-                INSERT OR REPLACE INTO profile_permissions (profile_id, permission_id, allowed)
+                INSERT INTO profile_permissions (profile_id, permission_id, allowed)
                 VALUES (?, ?, ?)
+                ON CONFLICT(profile_id, permission_id) DO UPDATE SET
+                  allowed = excluded.allowed
                 """,
                 (profile_id, permission_id, 1 if permissions.get(code) else 0),
             )
@@ -525,7 +532,8 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
                 VALUES ('OBJECTIFS-KPI', 'Formulaire objectifs KPI', 'Selon periode', 'Actif')
                 """
             )
-            form_id = int(cur.lastrowid)
+            cur.execute("SELECT id FROM kobo_forms WHERE uid = ?", ("OBJECTIFS-KPI",))
+            form_id = int(cur.fetchone()[0])
         else:
             form_id = int(row[0])
 
@@ -570,18 +578,21 @@ def count_tables(conn: sqlite3.Connection) -> dict[str, int]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Initialise la base SQLite Palladium Africa Hub central.")
+    parser = argparse.ArgumentParser(description="Initialise la base Palladium Africa Hub central.")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH, help="Chemin du fichier SQLite.")
-    parser.add_argument("--reset", action="store_true", help="Supprime et recree la base.")
+    parser.add_argument("--reset", action="store_true", help="Supprime et recree la base SQLite locale.")
     args = parser.parse_args()
 
     db_path = args.db.resolve()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    if args.reset and db_path.exists():
+    if args.reset and is_postgres_enabled():
+        raise SystemExit("--reset n'est pas applique sur PostgreSQL. Videz la base depuis son outil d'administration si necessaire.")
+    if not is_postgres_enabled():
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+    if args.reset and not is_postgres_enabled() and db_path.exists():
         db_path.unlink()
 
     data = load_frontend_data()
-    conn = sqlite3.connect(db_path)
+    conn = open_database_connection(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -590,7 +601,7 @@ def main() -> None:
     finally:
         conn.close()
 
-    print(f"Base creee: {db_path}")
+    print(f"Base initialisee ({database_backend()}): {database_display_name(db_path)}")
     print(json.dumps(counts, indent=2, ensure_ascii=False))
 
 

@@ -9,13 +9,18 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent
 DEFAULT_DB_PATH = ROOT_DIR / "database" / "pms_gmc.sqlite"
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from database.db import is_postgres_enabled
 
 
 def ensure_database(db_path: Path) -> None:
-    if db_path.exists():
+    if not is_postgres_enabled() and db_path.exists():
         return
 
-    db_path.parent.mkdir(parents=True, exist_ok=True)
+    if not is_postgres_enabled():
+        db_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [sys.executable, str(ROOT_DIR / "database" / "init_database.py"), "--db", str(db_path)],
         cwd=ROOT_DIR,
@@ -33,7 +38,8 @@ def main() -> None:
     db_path = Path(args.db).resolve()
     ensure_database(db_path)
 
-    os.environ["PMS_DB_PATH"] = str(db_path)
+    if not is_postgres_enabled():
+        os.environ["PMS_DB_PATH"] = str(db_path)
     command = [
         sys.executable,
         str(ROOT_DIR / "server.py"),
@@ -41,9 +47,9 @@ def main() -> None:
         str(args.host),
         "--port",
         str(args.port),
-        "--db",
-        str(db_path),
     ]
+    if not is_postgres_enabled():
+        command.extend(["--db", str(db_path)])
     raise SystemExit(subprocess.call(command, cwd=ROOT_DIR))
 
 

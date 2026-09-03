@@ -1,1 +1,1 @@
-# Aucune dependance externe pour le prototype actuel.
+psycopg[binary]>=3.2,<4

@@ -1066,6 +1066,7 @@
     currentAdminPole: PMS_DATA.reporting.defaultPole,
     currentAdminKpi: null,
     currentAdminTab: "kobo",
+    currentCollectionTab: "reference",
     currentPlatformReferenceBranch: "Groupe",
     currentPlatformReferencePole: PMS_DATA.reporting.defaultPole,
     currentPlatformObjectiveBranch: "Groupe",
@@ -2749,6 +2750,12 @@
       });
     });
     setAdminTab(state.currentAdminTab);
+    document.querySelectorAll("[data-collection-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.currentCollectionTab = button.dataset.collectionTab || "reference";
+        renderAdmin(state);
+      });
+    });
 
     const adminKoboReferenceButton = $("#admin-kobo-reference-save");
     const adminKoboMonthlyObjectiveButton = $("#admin-kobo-monthly-objective-save");
