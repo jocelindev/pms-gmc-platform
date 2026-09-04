@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS kpi_objectives (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   kpi_id INTEGER NOT NULL,
   pole_id TEXT NOT NULL,
+  branch TEXT NOT NULL DEFAULT 'Groupe',
   period TEXT NOT NULL,
   target TEXT NOT NULL,
   unit TEXT,
@@ -123,7 +124,7 @@ CREATE TABLE IF NOT EXISTS kpi_objectives (
   created_by_user_id INTEGER,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (kpi_id, pole_id, period),
+  UNIQUE (kpi_id, pole_id, branch, period),
   FOREIGN KEY (kpi_id) REFERENCES kpis(id) ON DELETE CASCADE,
   FOREIGN KEY (pole_id) REFERENCES poles(id) ON DELETE CASCADE,
   FOREIGN KEY (created_by_user_id) REFERENCES users(id)
@@ -186,6 +187,7 @@ CREATE TABLE IF NOT EXISTS kpi_daily_data (
   source_submission_uid TEXT NOT NULL,
   submitted_at TEXT,
   collector TEXT,
+  data_nature TEXT NOT NULL DEFAULT 'Reel',
   raw_payload_json TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -246,6 +248,7 @@ CREATE INDEX IF NOT EXISTS idx_user_access_pole ON user_access(pole_id);
 CREATE INDEX IF NOT EXISTS idx_user_access_branch ON user_access(branch);
 CREATE INDEX IF NOT EXISTS idx_kpis_pole ON kpis(pole_id);
 CREATE INDEX IF NOT EXISTS idx_objectives_period ON kpi_objectives(period);
+CREATE INDEX IF NOT EXISTS idx_objectives_scope ON kpi_objectives(pole_id, branch, period);
 CREATE INDEX IF NOT EXISTS idx_kobo_submissions_form ON kobo_submissions(form_uid);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_kobo_submissions_uid ON kobo_submissions(form_uid, submission_uid);
 CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_date ON kpi_daily_data(data_date);
