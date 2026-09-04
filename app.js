@@ -973,6 +973,7 @@
     kpiDailyDates: [],
     kpiCalculationQuality: null,
     kpiObjectives: [],
+    collectionRows: [],
     calendar: buildMonthToDateSelection(new Date()),
     calendarDateDropdownOpen: false,
     actorScope: "responsable",
@@ -1199,6 +1200,9 @@
     }
     if (Array.isArray(payload.kpiDailyDates)) {
       state.kpiDailyDates = payload.kpiDailyDates;
+    }
+    if (Array.isArray(payload.collectionRows)) {
+      state.collectionRows = payload.collectionRows;
     }
     if (payload.kpiCalculationQuality) {
       state.kpiCalculationQuality = payload.kpiCalculationQuality;
@@ -2865,6 +2869,172 @@
         node.hidden = isElements ? state.platformCalculationEntryMode !== "elements" : state.platformCalculationEntryMode === "elements";
       });
     };
+    const setFieldValue = (selector, value) => {
+      const input = $(selector);
+      if (!input) return;
+      input.value = value ?? "";
+    };
+    const setSelectValue = (selector, value, label = "") => {
+      const select = $(selector);
+      if (!select) return;
+      const normalizedValue = normalizeLookup(value || label || "");
+      if (!normalizedValue) {
+        select.value = "";
+        return;
+      }
+      const existingOption = [...select.options].find(
+        (option) =>
+          normalizeLookup(option.value) === normalizedValue ||
+          normalizeLookup(option.textContent) === normalizedValue
+      );
+      if (existingOption) {
+        select.value = existingOption.value;
+        return;
+      }
+      const option = document.createElement("option");
+      option.value = value || label;
+      option.textContent = label || value;
+      select.appendChild(option);
+      select.value = option.value;
+    };
+    const findCollectionRow = (rowId) => (state.collectionRows || []).find((row) => row.id === rowId);
+    const applyCollectionMutationResponse = (payload) => {
+      mergeDatabasePayload(payload);
+      ensureCalendarDateFromAvailableData();
+      applyCalculatedKpisToReporting();
+      renderAll(state);
+      setAdminTab("kobo");
+    };
+    const chooseCalculationEditMode = (row) => {
+      const elements = Array.isArray(row.elements) ? row.elements : [];
+      const directTaux = elements.find((item) => {
+        const label = normalizeLookup(item.label || "");
+        return label.includes("taux") && label.includes("realise");
+      });
+      if (directTaux) return { mode: "taux_realise", directValue: directTaux.value || "", elements };
+      const directValue = elements.find((item) => {
+        const label = normalizeLookup(item.label || "");
+        return label.includes("valeur") && label.includes("realisee");
+      });
+      if (directValue) return { mode: "valeur_realisee", directValue: directValue.value || "", elements };
+      return { mode: "elements", directValue: "", elements };
+    };
+    const fillPlatformCollectionForm = (row) => {
+      if (!row) {
+        showToast("Ligne de collecte introuvable.");
+        return;
+      }
+      if (!hasPermission("modification")) {
+        showToast("Droit de modification requis pour reprendre cette ligne.");
+        return;
+      }
+
+      const collectionType = row.collectionType || "reference";
+      const branch = findCountryName(row.branch || "Groupe");
+      state.currentCollectionTab = collectionType;
+      state.calendarBranchFilter = branch;
+      state.currentAdminPole = row.poleId || state.currentAdminPole;
+
+      if (collectionType === "reference") {
+        state.currentPlatformReferenceBranch = branch;
+        state.currentPlatformReferencePole = row.poleId || state.currentPlatformReferencePole;
+      } else if (collectionType === "objective") {
+        state.currentPlatformObjectiveBranch = branch;
+        state.currentPlatformObjectivePole = row.poleId || state.currentPlatformObjectivePole;
+        state.currentPlatformObjectiveKpi = row.kpiId || row.kpiName || state.currentPlatformObjectiveKpi;
+      } else {
+        state.currentPlatformCalculationBranch = branch;
+        state.currentPlatformCalculationPole = row.poleId || state.currentPlatformCalculationPole;
+        state.currentPlatformCalculationKpi = row.kpiId || row.kpiName || state.currentPlatformCalculationKpi;
+      }
+
+      renderAdmin(state);
+      setAdminTab("kobo");
+
+      if (collectionType === "reference") {
+        setSelectValue("#platform-reference-branch", branch);
+        setSelectValue("#platform-reference-pole", row.poleId, row.poleName);
+        setFieldValue("#platform-reference-kpi-id", row.kpiId || "");
+        setFieldValue("#platform-reference-kpi-name", row.kpiName || row.kpiId || "");
+        setSelectValue("#platform-reference-unit", row.unit || "Autre");
+        setSelectValue("#platform-reference-frequency", row.frequency || row.reportingFrequency || "Journalier");
+        setSelectValue("#platform-reference-performance-direction", row.performanceDirection || "higherBetter");
+        setFieldValue("#platform-reference-target", row.rawValue || row.value || "");
+        setFieldValue("#platform-reference-formula", row.formula || row.details || "");
+        setFieldValue("#platform-reference-responsible", row.responsible || "");
+        setSelectValue("#platform-reference-data-nature", row.dataNature || "Reel");
+        setPlatformStatus(
+          "#platform-reference-status",
+          "warning",
+          `<strong>Mode modification</strong><span>${escapeHtml(row.kpiId || row.kpiName || "KPI")} charge. Corrigez puis cliquez sur Enregistrer le KPI.</span>`
+        );
+      } else if (collectionType === "objective") {
+        setFieldValue("#platform-objective-period", String(row.period || "").slice(0, 7));
+        setSelectValue("#platform-objective-branch", branch);
+        setSelectValue("#platform-objective-pole", row.poleId, row.poleName);
+        setSelectValue("#platform-objective-kpi", row.kpiId || row.kpiName, row.kpiName || row.kpiId);
+        setFieldValue("#platform-objective-target", row.rawValue || row.value || "");
+        setSelectValue("#platform-objective-unit", row.unit || "Autre");
+        setSelectValue("#platform-objective-frequency", row.frequency || "Mensuel");
+        setFieldValue("#platform-objective-responsible", row.responsible || "");
+        setSelectValue("#platform-objective-validation", row.validation || "En attente");
+        setSelectValue("#platform-objective-data-nature", row.dataNature || "Reel");
+        setPlatformStatus(
+          "#platform-objective-status",
+          "warning",
+          `<strong>Mode modification</strong><span>${escapeHtml(row.kpiId || row.kpiName || "KPI")} / ${escapeHtml(String(row.period || "").slice(0, 7))} charge. Corrigez puis enregistrez.</span>`
+        );
+      } else {
+        const editMode = chooseCalculationEditMode(row);
+        setFieldValue("#platform-calculation-date", String(row.period || "").slice(0, 10));
+        setSelectValue("#platform-calculation-branch", branch);
+        setSelectValue("#platform-calculation-pole", row.poleId, row.poleName);
+        setSelectValue("#platform-calculation-kpi", row.kpiId || row.kpiName, row.kpiName || row.kpiId);
+        setSelectValue("#platform-calculation-entry-mode", editMode.mode);
+        setFieldValue("#platform-calculation-direct-value", editMode.directValue);
+        [1, 2, 3].forEach((index) => {
+          const element = editMode.elements[index - 1] || {};
+          setFieldValue(`#platform-calculation-element-${index}`, editMode.mode === "elements" ? element.label || "" : "");
+          setFieldValue(`#platform-calculation-value-${index}`, editMode.mode === "elements" ? element.value || "" : "");
+        });
+        setSelectValue("#platform-calculation-validation", row.validation || "En attente");
+        setSelectValue("#platform-calculation-data-nature", row.dataNature || "Reel");
+        updatePlatformCalculationMode();
+        setPlatformStatus(
+          "#platform-calculation-status",
+          "warning",
+          `<strong>Mode modification</strong><span>${escapeHtml(row.kpiId || row.kpiName || "KPI")} / ${escapeHtml(String(row.period || "").slice(0, 10))} charge. Corrigez puis enregistrez.</span>`
+        );
+      }
+
+      document.getElementById("platform-collection-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      showToast("Ligne chargee dans le formulaire. Modifiez puis enregistrez.");
+    };
+    const deletePlatformCollectionRow = async (row) => {
+      if (!row) {
+        showToast("Ligne de collecte introuvable.");
+        return;
+      }
+      if (!hasPermission("suppression")) {
+        showToast("Droit de suppression requis pour supprimer cette ligne.");
+        return;
+      }
+      const label = `${row.typeLabel || "Ligne"} - ${row.poleName || row.poleId || ""} - ${row.kpiId || row.kpiName || ""}`;
+      const confirmed = window.confirm(`Supprimer cette ligne de collecte ?\n\n${label}`);
+      if (!confirmed) return;
+      try {
+        const response = await api.deletePlatformCollectionRow({
+          rowId: row.id,
+          collectionType: row.collectionType,
+        });
+        applyCollectionMutationResponse(response);
+        const deleted = response?.deletedCollection || {};
+        showToast(`${deleted.label || row.kpiId || "Ligne"} supprime de la collecte.`);
+      } catch (error) {
+        console.warn("Suppression collecte impossible.", error);
+        showToast(error.message || "Impossible de supprimer cette ligne.");
+      }
+    };
     [
       ["#platform-reference-branch", "currentPlatformReferenceBranch"],
       ["#platform-reference-pole", "currentPlatformReferencePole"],
@@ -2878,6 +3048,12 @@
       const input = $(selector);
       input?.addEventListener("change", () => {
         state[stateKey] = input.value;
+        refreshPlatformCollectionPanel();
+        updatePlatformCalculationMode();
+      });
+    });
+    ["#platform-objective-period", "#platform-calculation-date"].forEach((selector) => {
+      $(selector)?.addEventListener("change", () => {
         refreshPlatformCollectionPanel();
         updatePlatformCalculationMode();
       });
@@ -3714,6 +3890,18 @@
       const button = event.target.closest("[data-database-table]");
       if (!button) return;
       loadDatabaseTable(button.dataset.databaseTable);
+    });
+
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-edit-collection-row]");
+      if (!button) return;
+      fillPlatformCollectionForm(findCollectionRow(button.dataset.editCollectionRow));
+    });
+
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-delete-collection-row]");
+      if (!button) return;
+      deletePlatformCollectionRow(findCollectionRow(button.dataset.deleteCollectionRow));
     });
   }
 

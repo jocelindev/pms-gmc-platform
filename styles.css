@@ -4117,6 +4117,69 @@ button.dashboard-control-card {
   font-size: 0.78rem;
 }
 
+.platform-collection-records {
+  background: #fff;
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.platform-collection-record-table {
+  min-width: 1120px;
+}
+
+.platform-collection-record-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.platform-collection-record-table td {
+  vertical-align: top;
+}
+
+.platform-collection-record-table strong,
+.platform-collection-record-table small {
+  display: block;
+}
+
+.platform-collection-record-table small {
+  color: var(--muted);
+  line-height: 1.35;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.table-action {
+  background: #fff;
+  border: 1px solid rgba(31, 56, 100, 0.22);
+  border-radius: 8px;
+  color: var(--palladium-blue);
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 900;
+  justify-content: center;
+  line-height: 1;
+  margin: 0 6px 6px 0;
+  min-height: 32px;
+  padding: 9px 10px;
+  white-space: nowrap;
+}
+
+.table-action:hover {
+  background: rgba(31, 56, 100, 0.07);
+}
+
+.table-action.danger {
+  border-color: rgba(220, 38, 38, 0.26);
+  color: #b42318;
+}
+
+.table-action.danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+
 .platform-locked-field {
   opacity: 0.78;
 }

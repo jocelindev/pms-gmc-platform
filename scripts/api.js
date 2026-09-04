@@ -108,6 +108,13 @@
         timeout: 15000,
       });
     },
+    deletePlatformCollectionRow(row) {
+      return request("/collection/delete", {
+        method: "POST",
+        body: row,
+        timeout: 15000,
+      });
+    },
     saveReport(report) {
       return request("/reports", {
         method: "POST",

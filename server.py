@@ -2012,6 +2012,7 @@ def get_bootstrap_payload(session: dict) -> dict:
         reports = list_reports(conn)
         kobo_submissions = list_kobo_submissions(conn)
         kpi_daily_dates = list_kpi_daily_dates(conn)
+        collection_rows = list_platform_collection_rows(conn)
 
         if has_global_scope:
             scoped_results = kpi_results
@@ -2019,12 +2020,14 @@ def get_bootstrap_payload(session: dict) -> dict:
             scoped_reports = reports
             scoped_submissions = kobo_submissions
             scoped_daily_dates = kpi_daily_dates
+            scoped_collection_rows = collection_rows
         else:
             scoped_results = filter_records_by_access_rules(kpi_results, access_rules)
             scoped_objectives = filter_records_by_access_rules(objectives, access_rules, allow_group_record=True)
             scoped_reports = filter_records_by_access_rules(reports, access_rules, allow_group_record=True)
             scoped_submissions = filter_records_by_access_rules(kobo_submissions, access_rules)
             scoped_daily_dates = filter_records_by_access_rules(kpi_daily_dates, access_rules)
+            scoped_collection_rows = filter_records_by_access_rules(collection_rows, access_rules, allow_group_record=True)
 
         scoped_quality = scoped_kpi_quality(
             kpi_quality,
@@ -2043,6 +2046,7 @@ def get_bootstrap_payload(session: dict) -> dict:
             "koboSources": kobo_sources if is_admin else [],
             "koboSubmissions": scoped_submissions,
             "kpiDailyDates": scoped_daily_dates,
+            "collectionRows": scoped_collection_rows,
             "kpiCalculationResults": scoped_results,
             "kpiCalculationQuality": scoped_quality,
             "koboAnomalies": scoped_quality.get("anomalies", []),
@@ -4714,6 +4718,418 @@ def list_kpi_daily_dates(conn: sqlite3.Connection) -> list[dict]:
     ]
 
 
+def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
+    pole_names = {row["id"]: row["name"] for row in conn.execute("SELECT id, name FROM poles").fetchall()}
+    rows: list[dict] = []
+
+    reference_rows = conn.execute(
+        """
+        SELECT
+          k.id,
+          k.code,
+          k.pole_id,
+          p.name AS pole_name,
+          k.name,
+          k.type,
+          k.unit,
+          k.formula,
+          k.target,
+          k.collection_frequency,
+          k.reporting_frequency,
+          k.data_source,
+          k.source_form_uid,
+          k.responsible,
+          k.respondent,
+          k.validator,
+          k.document_status,
+          k.updated_at,
+          k.created_at,
+          (
+            SELECT s.branch
+            FROM kobo_submissions s
+            LEFT JOIN kobo_forms f ON f.uid = s.form_uid
+            WHERE s.pole_id = k.pole_id
+              AND s.form_uid = k.source_form_uid
+              AND (
+                LOWER(COALESCE(f.source_type, '')) LIKE '%referentiel%'
+                OR LOWER(COALESCE(f.source_type, '')) LIKE '%objectifs kpi%'
+              )
+              AND (
+                COALESCE(s.kpi_name, '') = COALESCE(k.code, '')
+                OR COALESCE(s.kpi_name, '') = COALESCE(k.name, '')
+              )
+            ORDER BY s.submitted_at DESC, s.id DESC
+            LIMIT 1
+          ) AS reference_branch,
+          (
+            SELECT s.submission_uid
+            FROM kobo_submissions s
+            LEFT JOIN kobo_forms f ON f.uid = s.form_uid
+            WHERE s.pole_id = k.pole_id
+              AND s.form_uid = k.source_form_uid
+              AND (
+                LOWER(COALESCE(f.source_type, '')) LIKE '%referentiel%'
+                OR LOWER(COALESCE(f.source_type, '')) LIKE '%objectifs kpi%'
+              )
+              AND (
+                COALESCE(s.kpi_name, '') = COALESCE(k.code, '')
+                OR COALESCE(s.kpi_name, '') = COALESCE(k.name, '')
+              )
+            ORDER BY s.submitted_at DESC, s.id DESC
+            LIMIT 1
+          ) AS reference_submission_uid
+        FROM kpis k
+        LEFT JOIN poles p ON p.id = k.pole_id
+        ORDER BY k.updated_at DESC, k.id DESC
+        LIMIT 1000
+        """
+    ).fetchall()
+    for row in reference_rows:
+        kpi_id = text_or_empty(row["code"] or f"KPI-DB-{row['id']}")
+        kpi_name = text_or_empty(row["name"] or kpi_id)
+        rows.append(
+            {
+                "id": f"reference:{row['id']}",
+                "dbId": row["id"],
+                "collectionType": "reference",
+                "typeLabel": "Referentiel KPI",
+                "branch": text_or_empty(row["reference_branch"] or "Groupe") or "Groupe",
+                "poleId": row["pole_id"],
+                "poleName": text_or_empty(row["pole_name"] or pole_names.get(row["pole_id"], row["pole_id"])),
+                "kpiId": kpi_id,
+                "kpiName": kpi_name,
+                "period": "",
+                "value": text_or_empty(row["target"]),
+                "rawValue": text_or_empty(row["target"]),
+                "unit": text_or_empty(row["unit"]),
+                "frequency": text_or_empty(row["collection_frequency"]),
+                "reportingFrequency": text_or_empty(row["reporting_frequency"]),
+                "formula": text_or_empty(row["formula"]),
+                "performanceDirection": infer_performance_direction("", kpi_name, row["formula"], row["target"]),
+                "responsible": text_or_empty(row["responsible"]),
+                "validation": text_or_empty(row["validator"] or "A valider"),
+                "statusClass": status_class_from_validation(text_or_empty(row["validator"] or "A valider")),
+                "dataNature": "Reel",
+                "sourceForm": text_or_empty(row["source_form_uid"] or "Base plateforme"),
+                "sourceSubmissionUid": text_or_empty(row["reference_submission_uid"]),
+                "sourceLabel": "Referentiel plateforme",
+                "details": text_or_empty(row["formula"] or row["data_source"] or "KPI reference"),
+                "updatedAt": text_or_empty(row["updated_at"] or row["created_at"]),
+            }
+        )
+
+    objective_rows = conn.execute(
+        """
+        SELECT
+          obj.id,
+          obj.pole_id,
+          obj.branch,
+          obj.period,
+          obj.target,
+          obj.unit,
+          obj.frequency,
+          obj.source_form_uid,
+          obj.source_data,
+          obj.responsible,
+          obj.validation_status,
+          obj.document_status,
+          obj.attention_points,
+          obj.updated_at,
+          obj.created_at,
+          p.name AS pole_name,
+          k.code,
+          k.name AS kpi_name
+        FROM kpi_objectives obj
+        LEFT JOIN poles p ON p.id = obj.pole_id
+        LEFT JOIN kpis k ON k.id = obj.kpi_id
+        ORDER BY obj.updated_at DESC, obj.id DESC
+        LIMIT 1000
+        """
+    ).fetchall()
+    for row in objective_rows:
+        target_text = text_or_empty(row["target"])
+        unit_text = text_or_empty(row["unit"])
+        rows.append(
+            {
+                "id": f"objective:{row['id']}",
+                "dbId": row["id"],
+                "collectionType": "objective",
+                "typeLabel": "Objectif mensuel",
+                "branch": text_or_empty(row["branch"] or "Groupe") or "Groupe",
+                "poleId": row["pole_id"],
+                "poleName": text_or_empty(row["pole_name"] or pole_names.get(row["pole_id"], row["pole_id"])),
+                "kpiId": text_or_empty(row["code"] or row["kpi_name"]),
+                "kpiName": text_or_empty(row["kpi_name"] or row["code"]),
+                "period": text_or_empty(row["period"]),
+                "value": format_objective_target(target_text, unit_text) or target_text,
+                "rawValue": target_text,
+                "unit": unit_text,
+                "frequency": text_or_empty(row["frequency"]),
+                "formula": "",
+                "responsible": text_or_empty(row["responsible"]),
+                "validation": text_or_empty(row["validation_status"] or "A valider"),
+                "statusClass": status_class_from_validation(text_or_empty(row["validation_status"] or "A valider")),
+                "dataNature": "Reel",
+                "sourceForm": text_or_empty(row["source_form_uid"] or "Base plateforme"),
+                "sourceLabel": "Objectif plateforme",
+                "details": text_or_empty(row["source_data"] or row["attention_points"] or row["document_status"] or "Objectif renseigne"),
+                "updatedAt": text_or_empty(row["updated_at"] or row["created_at"]),
+            }
+        )
+
+    kpi_lookup: dict[tuple[str, str], dict] = {}
+    for row in reference_rows:
+        for value in (row["code"], row["name"]):
+            key = normalize_match_key(value)
+            if key:
+                kpi_lookup[(row["pole_id"], key)] = {
+                    "kpiId": text_or_empty(row["code"] or row["name"]),
+                    "kpiName": text_or_empty(row["name"] or row["code"]),
+                    "unit": text_or_empty(row["unit"]),
+                    "frequency": text_or_empty(row["collection_frequency"]),
+                }
+
+    daily_rows = conn.execute(
+        """
+        SELECT
+          id,
+          data_date,
+          pole_id,
+          branch,
+          kpi_key,
+          kpi_raw,
+          element_key,
+          element_label,
+          raw_value,
+          numeric_value,
+          validation_status,
+          source_form_uid,
+          source_submission_uid,
+          data_nature,
+          updated_at,
+          created_at
+        FROM kpi_daily_data
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 3000
+        """
+    ).fetchall()
+    groups: dict[tuple[str, str, str, str, str, str], dict] = {}
+    for row in daily_rows:
+        source_form_uid = text_or_empty(row["source_form_uid"])
+        source_submission_uid = text_or_empty(row["source_submission_uid"])
+        group_key = (
+            source_form_uid,
+            source_submission_uid,
+            text_or_empty(row["data_date"]),
+            text_or_empty(row["pole_id"]),
+            text_or_empty(row["branch"] or "Groupe") or "Groupe",
+            text_or_empty(row["kpi_key"]),
+        )
+        reference = kpi_lookup.get((row["pole_id"], row["kpi_key"])) or {}
+        group = groups.setdefault(
+            group_key,
+            {
+                "id": f"calculation:{row['id']}",
+                "dbId": row["id"],
+                "collectionType": "calculation",
+                "typeLabel": "Donnees realisees",
+                "branch": text_or_empty(row["branch"] or "Groupe") or "Groupe",
+                "poleId": row["pole_id"],
+                "poleName": text_or_empty(pole_names.get(row["pole_id"], row["pole_id"])),
+                "kpiId": text_or_empty(row["kpi_raw"] or reference.get("kpiId") or row["kpi_key"]),
+                "kpiName": text_or_empty(reference.get("kpiName") or row["kpi_raw"] or row["kpi_key"]),
+                "period": text_or_empty(row["data_date"]),
+                "value": "",
+                "rawValue": "",
+                "unit": text_or_empty(reference.get("unit")),
+                "frequency": text_or_empty(reference.get("frequency")),
+                "formula": "",
+                "responsible": "",
+                "validation": text_or_empty(row["validation_status"] or "A valider"),
+                "statusClass": status_class_from_validation(text_or_empty(row["validation_status"] or "A valider")),
+                "dataNature": text_or_empty(row["data_nature"] or "Reel") or "Reel",
+                "sourceForm": source_form_uid,
+                "sourceSubmissionUid": source_submission_uid,
+                "sourceLabel": "Collecte interne" if source_submission_uid.startswith(PLATFORM_COLLECTION_SUBMISSION_PREFIX) else "Import Kobo / historique",
+                "details": "",
+                "updatedAt": text_or_empty(row["updated_at"] or row["created_at"]),
+                "elements": [],
+            },
+        )
+        if row["id"] < group["dbId"]:
+            group["dbId"] = row["id"]
+            group["id"] = f"calculation:{row['id']}"
+        raw_value = row["raw_value"] if row["raw_value"] not in (None, "") else row["numeric_value"]
+        label = semantic_kobo_element_label(row["element_label"] or row["element_key"] or "valeur")
+        group["elements"].append(
+            {
+                "label": label,
+                "value": "" if raw_value is None else str(raw_value),
+            }
+        )
+
+    for group in groups.values():
+        elements = group.get("elements") or []
+        direct = next((item for item in elements if normalize_match_key(item.get("label")) == "taux realise"), None)
+        if not direct:
+            direct = next((item for item in elements if normalize_match_key(item.get("label")) == "valeur realisee"), None)
+        if not direct and len(elements) == 1:
+            direct = elements[0]
+        if direct:
+            group["value"] = text_or_empty(direct.get("value"))
+            group["rawValue"] = group["value"]
+        else:
+            group["value"] = f"{len(elements)} element(s)"
+        group["details"] = " | ".join(
+            f"{text_or_empty(item.get('label'))}: {text_or_empty(item.get('value'))}"
+            for item in elements[:3]
+        )
+        rows.append(group)
+
+    rows.sort(key=lambda item: item.get("updatedAt") or "", reverse=True)
+    return rows[:1500]
+
+
+def collection_row_kind_and_key(row_id: str, row_type: str = "") -> tuple[str, str]:
+    clean_row_id = text_or_empty(row_id)
+    clean_type = text_or_empty(row_type)
+    if ":" in clean_row_id:
+        prefix, key = clean_row_id.split(":", 1)
+        return clean_type or prefix, key
+    return clean_type, clean_row_id
+
+
+def collection_numeric_key(row_key: str) -> int:
+    try:
+        return int(row_key)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Identifiant de ligne invalide.") from exc
+
+
+def require_collection_row_scope(conn: sqlite3.Connection, session: dict, pole_id: str, branch: str) -> None:
+    if not session_can_access_scope(conn, session, pole_id=pole_id, branch=branch or "Groupe", allow_group_record=True):
+        raise PermissionError("Acces refuse: cette ligne n'est pas dans votre perimetre.")
+
+
+def delete_platform_collection_row(payload: dict, session: dict) -> dict:
+    row_type, row_key = collection_row_kind_and_key(payload.get("rowId") or payload.get("id"), payload.get("type") or payload.get("collectionType"))
+    if row_type not in {"reference", "objective", "calculation"} or not row_key:
+        raise ValueError("Ligne de collecte introuvable.")
+
+    with db_connect() as conn:
+        row_db_id = collection_numeric_key(row_key)
+        if row_type == "reference":
+            row = conn.execute(
+                """
+                SELECT id, code, name, pole_id, source_form_uid
+                FROM kpis
+                WHERE id = ?
+                """,
+                (row_db_id,),
+            ).fetchone()
+            if not row:
+                raise ValueError("KPI introuvable dans le referentiel.")
+            require_collection_row_scope(conn, session, row["pole_id"], "Groupe")
+            kpi_keys = [normalize_match_key(row["code"]), normalize_match_key(row["name"])]
+            for key in [item for item in kpi_keys if item]:
+                conn.execute("DELETE FROM kpi_daily_data WHERE pole_id = ? AND kpi_key = ?", (row["pole_id"], key))
+            for kpi_value in (row["code"], row["name"]):
+                uid = platform_submission_uid("referentiel", "Groupe", row["pole_id"], kpi_value)
+                conn.execute(
+                    "DELETE FROM kobo_submissions WHERE submission_uid = ? AND COALESCE(submission_uid, '') LIKE ?",
+                    (uid, f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}%"),
+                )
+            conn.execute(
+                """
+                DELETE FROM kobo_submissions
+                WHERE pole_id = ?
+                  AND COALESCE(submission_uid, '') LIKE ?
+                  AND (
+                    COALESCE(kpi_name, '') = COALESCE(?, '')
+                    OR COALESCE(kpi_name, '') = COALESCE(?, '')
+                  )
+                """,
+                (row["pole_id"], f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}%", row["code"], row["name"]),
+            )
+            conn.execute("DELETE FROM kpis WHERE id = ?", (row["id"],))
+            audit(conn, "Suppression collecte referentiel KPI", "kpi", str(row["id"]), {"rowId": payload.get("rowId")})
+            deleted_label = text_or_empty(row["code"] or row["name"])
+
+        elif row_type == "objective":
+            row = conn.execute(
+                """
+                SELECT
+                  obj.id,
+                  obj.pole_id,
+                  obj.branch,
+                  obj.period,
+                  obj.source_form_uid,
+                  k.code,
+                  k.name
+                FROM kpi_objectives obj
+                JOIN kpis k ON k.id = obj.kpi_id
+                WHERE obj.id = ?
+                """,
+                (row_db_id,),
+            ).fetchone()
+            if not row:
+                raise ValueError("Objectif introuvable.")
+            require_collection_row_scope(conn, session, row["pole_id"], row["branch"])
+            uid = platform_submission_uid("objectif", row["branch"], row["pole_id"], row["code"] or row["name"], row["period"])
+            conn.execute("DELETE FROM kpi_objectives WHERE id = ?", (row["id"],))
+            conn.execute(
+                "DELETE FROM kobo_submissions WHERE submission_uid = ? AND COALESCE(submission_uid, '') LIKE ?",
+                (uid, f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}%"),
+            )
+            audit(conn, "Suppression collecte objectif mensuel", "kpi_objective", str(row["id"]), {"rowId": payload.get("rowId")})
+            deleted_label = text_or_empty(row["code"] or row["name"])
+
+        else:
+            row = conn.execute(
+                """
+                SELECT
+                  id,
+                  data_date,
+                  pole_id,
+                  branch,
+                  kpi_key,
+                  kpi_raw,
+                  source_form_uid,
+                  source_submission_uid
+                FROM kpi_daily_data
+                WHERE id = ?
+                """,
+                (row_db_id,),
+            ).fetchone()
+            if not row:
+                raise ValueError("Donnee realisee introuvable.")
+            require_collection_row_scope(conn, session, row["pole_id"], row["branch"])
+            if row["source_form_uid"] and row["source_submission_uid"]:
+                conn.execute(
+                    """
+                    DELETE FROM kpi_daily_data
+                    WHERE source_form_uid = ? AND source_submission_uid = ?
+                    """,
+                    (row["source_form_uid"], row["source_submission_uid"]),
+                )
+                if text_or_empty(row["source_submission_uid"]).startswith(PLATFORM_COLLECTION_SUBMISSION_PREFIX):
+                    conn.execute(
+                        "DELETE FROM kobo_submissions WHERE form_uid = ? AND submission_uid = ?",
+                        (row["source_form_uid"], row["source_submission_uid"]),
+                    )
+            else:
+                conn.execute("DELETE FROM kpi_daily_data WHERE id = ?", (row["id"],))
+            audit(conn, "Suppression collecte donnees realisees", "kpi_daily_data", str(row["id"]), {"rowId": payload.get("rowId")})
+            deleted_label = text_or_empty(row["kpi_raw"] or row["kpi_key"])
+
+        conn.commit()
+        return {
+            "rowId": payload.get("rowId") or payload.get("id"),
+            "type": row_type,
+            "label": deleted_label,
+        }
+
+
 def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         """
@@ -6618,6 +7034,17 @@ class PMSHandler(BaseHTTPRequestHandler):
                 saved = save_platform_calculation_data(payload, session)
                 refreshed = get_bootstrap_payload(session)
                 refreshed["savedCollection"] = saved
+                self.send_json(refreshed)
+                return
+            if path == "/api/collection/delete":
+                session = require_permission_session(
+                    self.headers,
+                    "suppression",
+                    "Droit de suppression requis pour supprimer une ligne de collecte.",
+                )
+                deleted = delete_platform_collection_row(payload, session)
+                refreshed = get_bootstrap_payload(session)
+                refreshed["deletedCollection"] = deleted
                 self.send_json(refreshed)
                 return
             if path == "/api/reports":

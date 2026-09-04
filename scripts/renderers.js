@@ -5124,7 +5124,13 @@
             : $("#platform-reference-pole")?.value;
       const selectedCountry = findCountryByValue(selectedBranch || defaultCountry);
       const selectedPole = collectionPoles.find((pole) => pole.id === selectedPoleId) || collectionPoles[0] || {};
-      const selectedMonth = ($("#platform-objective-period")?.value || $("#platform-calculation-date")?.value || state.calendar?.start || todayIso).slice(0, 7);
+      const selectedPeriodValue =
+        activeTab === "calculation"
+          ? $("#platform-calculation-date")?.value
+          : activeTab === "objective"
+            ? $("#platform-objective-period")?.value
+            : state.calendar?.start;
+      const selectedMonth = (selectedPeriodValue || state.calendar?.start || todayIso).slice(0, 7);
       const branchMatches = (branch) => {
         const value = String(branch || "").trim();
         return !value || isGroupCountry(selectedCountry) || matchesCountryScope(value, selectedCountry);
@@ -5235,6 +5241,73 @@
               : `<p>${escapeHtml(emptyMessage)}</p>`
           }
         `;
+      }
+      const recordTitle = $("#platform-collection-record-title");
+      const recordStatus = $("#platform-collection-record-status");
+      const recordBody = $("#platform-collection-records-body");
+      if (recordTitle || recordStatus || recordBody) {
+        const titleByTab = {
+          reference: "Referentiel KPI renseigne",
+          objective: "Objectifs mensuels renseignes",
+          calculation: "Donnees realisees renseignees",
+        };
+        const typeLabelByTab = {
+          reference: "referentiel",
+          objective: "objectif",
+          calculation: "realise",
+        };
+        const canModify = Boolean(!state.currentUser || state.currentPermissions?.administration || state.currentPermissions?.modification);
+        const canDelete = Boolean(!state.currentUser || state.currentPermissions?.administration || state.currentPermissions?.suppression);
+        const rowMatchesScope = (row = {}) => {
+          if (row.collectionType !== activeTab) return false;
+          if (selectedPole.id && row.poleId && row.poleId !== selectedPole.id) return false;
+          const rowBranch = row.branch || "Groupe";
+          const rowIsReference = row.collectionType === "reference";
+          const branchOk = rowIsReference && normalizeLookup(rowBranch) === "groupe" ? true : branchMatches(rowBranch);
+          if (!branchOk) return false;
+          if (row.collectionType === "reference") return true;
+          return String(row.period || "").slice(0, 7) === selectedMonth;
+        };
+        const collectionRows = filterItemsByDataMode(state.collectionRows || [], state.dataModeFilter)
+          .filter(rowMatchesScope)
+          .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")));
+        if (recordTitle) recordTitle.textContent = titleByTab[activeTab] || "Donnees renseignees";
+        if (recordStatus) {
+          recordStatus.className = `status-pill ${collectionRows.length ? "green" : "gray"}`;
+          recordStatus.textContent = `${collectionRows.length} ligne${collectionRows.length > 1 ? "s" : ""}`;
+        }
+        if (recordBody) {
+          recordBody.innerHTML = collectionRows.length
+            ? collectionRows
+                .slice(0, 80)
+                .map((row) => {
+                  const kpiLabel = row.kpiId && row.kpiName && normalizeLookup(row.kpiId) !== normalizeLookup(row.kpiName)
+                    ? `${row.kpiId} - ${row.kpiName}`
+                    : row.kpiId || row.kpiName || "KPI";
+                  const actionButtons = [
+                    canModify
+                      ? `<button class="table-action" type="button" data-edit-collection-row="${escapeHtml(row.id)}">Modifier</button>`
+                      : "",
+                    canDelete
+                      ? `<button class="table-action danger" type="button" data-delete-collection-row="${escapeHtml(row.id)}">Supprimer</button>`
+                      : "",
+                  ].join("");
+                  return `
+                    <tr>
+                      <td>${escapeHtml(row.branch || "Groupe")}</td>
+                      <td><strong>${escapeHtml(row.poleName || row.poleId || "")}</strong><br><small>${escapeHtml(row.poleId || "")}</small></td>
+                      <td><strong>${escapeHtml(kpiLabel)}</strong><br><small>${escapeHtml(row.sourceLabel || typeLabelByTab[activeTab] || "")}</small></td>
+                      <td>${escapeHtml(row.period || (activeTab === "reference" ? "Referentiel" : ""))}</td>
+                      <td><strong>${escapeHtml(row.value || row.rawValue || "--")}</strong><br><small>${escapeHtml(row.unit || row.frequency || "")}</small></td>
+                      <td>${escapeHtml(row.details || row.formula || "--")}</td>
+                      <td>${statusPill(row.validation || "A valider", row.statusClass || "gray")}</td>
+                      <td>${actionButtons || "<small>Droit requis</small>"}</td>
+                    </tr>
+                  `;
+                })
+                .join("")
+            : `<tr><td colspan="8">Aucune ligne renseignee pour ce perimetre. Les donnees apparaitront ici apres enregistrement.</td></tr>`;
+        }
       }
       const authorizedCountries = getAuthorizedCountryOptions(state);
       const lockCountry = Boolean(state.currentUser && !state.currentPermissions?.administration && authorizedCountries.length <= 1);
