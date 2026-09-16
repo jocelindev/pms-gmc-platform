@@ -2299,6 +2299,46 @@ def get_database_table_preview(table_name: str, limit: int = 50) -> dict:
         }
 
 
+def clear_business_data(session: dict | None = None) -> dict:
+    tables = [
+        ("kpi_daily_data", "Donnees realisees"),
+        ("kpi_objectives", "Objectifs mensuels"),
+        ("validation_queue", "File de validation"),
+        ("reports", "Rapports"),
+        ("notifications", "Notifications"),
+        ("kobo_submissions", "Soumissions / imports"),
+        ("kpis", "Referentiel KPI"),
+        ("audit_logs", "Historique actions"),
+    ]
+    summary = []
+    total_deleted = 0
+    with db_connect() as conn:
+        for table_name, label in tables:
+            if not table_exists(conn, table_name):
+                summary.append({"table": table_name, "label": label, "deletedRows": 0, "status": "absente"})
+                continue
+            quoted_name = quote_sql_identifier(table_name)
+            row = conn.execute(f"SELECT COUNT(*) AS count FROM {quoted_name}").fetchone()
+            before = int(row["count"] if row else 0)
+            conn.execute(f"DELETE FROM {quoted_name}")
+            total_deleted += before
+            summary.append({"table": table_name, "label": label, "deletedRows": before, "status": "videe"})
+        conn.commit()
+    return {
+        "deletedRows": total_deleted,
+        "tables": summary,
+        "kept": [
+            "Utilisateurs",
+            "Profils et droits",
+            "Poles / directions",
+            "Configuration de la plateforme",
+            "Modeles de sources de collecte",
+        ],
+        "clearedAt": utc_timestamp(),
+        "actor": session.get("fullName") if session else "",
+    }
+
+
 def require_authenticated_session(headers, message: str = "Connexion requise.") -> dict:
     authorization = str(headers.get("Authorization") or "").strip()
     if not authorization.lower().startswith("bearer "):
@@ -7526,6 +7566,13 @@ class PMSHandler(BaseHTTPRequestHandler):
             if path == "/api/access/user-access":
                 require_admin_session(self.headers)
                 self.send_json(save_user_access(payload))
+                return
+            if path == "/api/database/clear-business-data":
+                session = require_admin_session(self.headers)
+                cleared = clear_business_data(session)
+                refreshed = get_bootstrap_payload(session)
+                refreshed["clearBusinessData"] = cleared
+                self.send_json(refreshed)
                 return
             if path == "/api/objectives":
                 require_admin_session(self.headers)
