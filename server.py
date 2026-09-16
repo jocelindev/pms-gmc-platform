@@ -5,9 +5,11 @@ import ast
 import base64
 import binascii
 import calendar
+import csv
 import datetime as dt
 import hashlib
 import hmac
+import io
 import json
 import mimetypes
 import os
@@ -406,6 +408,91 @@ COUNTRY_ALIASES = {
     "guinee bissau": "gw",
     "nig": "nig",
     "niger": "nig",
+}
+IMPORT_REFERENCE_ALIASES = {
+    "catalogId": (
+        "id_kpi_final",
+        "id_kpi",
+        "id kpi",
+        "id kpi officiel",
+        "kpi_id",
+        "kpi",
+        "code",
+        "code kpi",
+    ),
+    "branch": (
+        "pays_filiale",
+        "pays filiale",
+        "pays / filiale",
+        "pays",
+        "filiale",
+        "perimetre",
+        "perimetre objectif",
+        "branch",
+    ),
+    "pole": (
+        "pole_id",
+        "pole",
+        "pole direction",
+        "direction pole",
+        "direction / pole",
+        "direction / pôle",
+        "direction",
+        "groupe_de_rattachement",
+        "entite_direction",
+        "sous_entite_pole_filiale",
+    ),
+    "kpiName": (
+        "intitule_du_kpi",
+        "intitule du kpi",
+        "indicateur kpi",
+        "indicateur / kpi",
+        "indicateur",
+        "nom kpi",
+        "kpi name",
+        "name",
+    ),
+    "definition": ("description_definition", "description definition", "definition", "interpretation usage", "interpretation & usage"),
+    "type": ("type_de_kpi", "type de kpi", "categorie", "category", "categorie kpi"),
+    "unit": ("unite_de_mesure", "unite mesure", "unite de mesure", "unite", "unité", "unit"),
+    "formula": ("formule_de_calcul", "formule de calcul", "formule", "formula"),
+    "target": ("valeur_cible", "valeur cible", "seuil cible", "seuil", "objectif", "target"),
+    "performanceDirection": ("sens_performance", "sens performance", "sens de performance", "orientation", "direction"),
+    "collectionFrequency": ("frequence_de_collecte", "frequence collecte", "frequence de collecte", "frequence", "fréquence"),
+    "reportingFrequency": ("periodicite_du_reporting", "periodicite reporting", "periodicite du reporting", "reporting frequency"),
+    "sourceData": ("source_de_la_donnee", "source donnee", "source de la donnee", "source"),
+    "responsible": ("responsable_du_kpi", "responsable kpi", "responsable", "owner"),
+    "respondent": ("repondant", "repondant kpi", "repondant donnees"),
+    "validator": ("validateur", "validator"),
+    "validation": ("validation_hierarchique", "validation hierarchique", "validation", "statut validation"),
+    "documentStatus": ("statut_documentaire", "statut documentaire", "statut", "status"),
+    "attention": ("points_d_attention", "points attention", "commentaires", "commentaire", "comments"),
+    "dataNature": ("nature_donnee", "nature donnee", "nature des donnees", "type donnee"),
+}
+IMPORT_OBJECTIVE_ALIASES = {
+    "branch": IMPORT_REFERENCE_ALIASES["branch"],
+    "pole": IMPORT_REFERENCE_ALIASES["pole"],
+    "catalogId": ("id_kpi", "id kpi", "id kpi officiel", "kpi_id", "kpi", "code kpi", "catalog id"),
+    "kpiName": IMPORT_REFERENCE_ALIASES["kpiName"],
+    "period": (
+        "periode_objectif",
+        "periode objectif",
+        "mois objectif",
+        "mois de l objectif",
+        "mois",
+        "period",
+        "periode",
+        "date objectif",
+    ),
+    "target": ("objectif_mensuel", "objectif mensuel", "objectif", "cible", "target"),
+    "unit": ("unite", "unite_mesure", "unite mesure", "unite de mesure", "unité", "unit"),
+    "frequency": ("frequence", "frequence_objectif", "frequence objectif", "fréquence"),
+    "distributionMode": ("mode_repartition", "mode repartition", "mode de repartition", "repartition"),
+    "sourceData": ("source_objectif", "source objectif", "source", "source_data"),
+    "responsible": ("responsable_objectif", "responsable objectif", "responsable", "owner"),
+    "validation": ("validation_direction", "validation direction", "validation_hierarchique", "validation hierarchique", "validation"),
+    "attention": ("commentaires", "commentaire", "points_d_attention", "points attention"),
+    "dataNature": IMPORT_REFERENCE_ALIASES["dataNature"],
 }
 LOWER_IS_BETTER_TERMS = {
     "abandon",
@@ -3443,6 +3530,248 @@ def save_platform_monthly_objective(payload: dict, session: dict | None = None) 
         audit(conn, "Saisie plateforme objectif mensuel", "kobo_submission", f"{branch}:{pole_id}:{kpi_code}:{period}", objective_payload)
         conn.commit()
         return {"formUid": source_form_uid, "submissionUid": platform_submission_uid("objectif", branch, pole_id, kpi_code, period)}
+
+
+def import_header_key(value) -> str:
+    return normalize_match_key(value).replace(" ", "_")
+
+
+def import_alias_keys(aliases: tuple[str, ...] | list[str]) -> set[str]:
+    return {import_header_key(alias) for alias in aliases if alias}
+
+
+def import_cell_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, dt.datetime):
+        return value.date().isoformat() if value.time() == dt.time(0, 0) else value.isoformat(sep=" ", timespec="minutes")
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
+
+
+def import_row_value(row: dict, aliases: tuple[str, ...] | list[str]) -> str:
+    for key in import_alias_keys(aliases):
+        value = text_or_empty(row.get(key))
+        if value:
+            return value
+    return ""
+
+
+def decode_collection_import_content(payload: dict) -> bytes:
+    content = text_or_empty(payload.get("contentBase64") or payload.get("content"))
+    if "," in content and content.lower().startswith("data:"):
+        content = content.split(",", 1)[1]
+    if not content:
+        raise ValueError("Aucun fichier a importer.")
+    try:
+        return base64.b64decode(content, validate=False)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("Fichier illisible: contenu base64 invalide.") from exc
+
+
+def rows_from_csv_bytes(raw_content: bytes) -> list[dict]:
+    for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        try:
+            text = raw_content.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            text = ""
+    if not text:
+        raise ValueError("Fichier CSV illisible.")
+    sample = text[:4096]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=";,|\t,")
+        reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+    except csv.Error:
+        reader = csv.DictReader(io.StringIO(text), delimiter=";")
+    rows = []
+    for raw_row in reader:
+        normalized = {import_header_key(key): import_cell_text(value) for key, value in (raw_row or {}).items() if key}
+        if any(normalized.values()):
+            rows.append(normalized)
+    return rows
+
+
+def row_looks_like_import_header(values: list[str], kind: str) -> bool:
+    alias_map = IMPORT_REFERENCE_ALIASES if kind == "reference" else IMPORT_OBJECTIVE_ALIASES
+    header_keys = {import_header_key(value) for value in values if value}
+    wanted_keys = set()
+    for aliases in alias_map.values():
+        wanted_keys.update(import_alias_keys(aliases))
+    return len(header_keys & wanted_keys) >= 2
+
+
+def rows_from_xlsx_bytes(raw_content: bytes, kind: str) -> list[dict]:
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:
+        raise ValueError("Lecture Excel indisponible. Installez openpyxl ou importez un CSV.") from exc
+
+    workbook = load_workbook(io.BytesIO(raw_content), read_only=True, data_only=True)
+    worksheet = workbook.active
+    header_row_index = None
+    headers: list[str] = []
+    for index, row in enumerate(worksheet.iter_rows(values_only=True), start=1):
+        values = [import_cell_text(cell) for cell in row]
+        if row_looks_like_import_header(values, kind):
+            header_row_index = index
+            headers = values
+            break
+        if index >= 20:
+            break
+    if header_row_index is None:
+        raise ValueError("Aucune ligne d'en-tete reconnue dans le fichier Excel.")
+
+    rows = []
+    normalized_headers = [import_header_key(header) for header in headers]
+    for index, row in enumerate(worksheet.iter_rows(min_row=header_row_index + 1, values_only=True), start=header_row_index + 1):
+        normalized = {}
+        for header, value in zip(normalized_headers, row):
+            if header:
+                normalized[header] = import_cell_text(value)
+        if any(normalized.values()):
+            normalized["_row_number"] = str(index)
+            rows.append(normalized)
+        if len(rows) >= 2000:
+            break
+    return rows
+
+
+def parse_collection_import_rows(payload: dict) -> list[dict]:
+    file_name = text_or_empty(payload.get("fileName") or "import.csv")
+    kind = text_or_empty(payload.get("kind") or "reference")
+    raw_content = decode_collection_import_content(payload)
+    lower_name = file_name.lower()
+    if lower_name.endswith((".xlsx", ".xlsm", ".xltx", ".xltm")):
+        return rows_from_xlsx_bytes(raw_content, kind)
+    if lower_name.endswith(".xls"):
+        raise ValueError("Le format .xls n'est pas accepte. Enregistrez le fichier en .xlsx ou .csv.")
+    return rows_from_csv_bytes(raw_content)
+
+
+def map_reference_import_payload(conn: sqlite3.Connection, row: dict, file_name: str) -> dict:
+    branch = import_row_value(row, IMPORT_REFERENCE_ALIASES["branch"]) or "Groupe"
+    pole_raw = import_row_value(row, IMPORT_REFERENCE_ALIASES["pole"])
+    pole_id = resolve_catalog_pole_id(conn, pole_raw)
+    catalog_id = canonical_kpi_code(import_row_value(row, IMPORT_REFERENCE_ALIASES["catalogId"]))
+    kpi_name = import_row_value(row, IMPORT_REFERENCE_ALIASES["kpiName"]) or catalog_id
+    formula = import_row_value(row, IMPORT_REFERENCE_ALIASES["formula"])
+    target = import_row_value(row, IMPORT_REFERENCE_ALIASES["target"])
+    unit = import_row_value(row, IMPORT_REFERENCE_ALIASES["unit"]) or "Autre"
+    frequency = import_row_value(row, IMPORT_REFERENCE_ALIASES["collectionFrequency"]) or "Mensuel"
+    performance_direction = (
+        import_row_value(row, IMPORT_REFERENCE_ALIASES["performanceDirection"])
+        or infer_performance_direction("", kpi_name, formula, target)
+        or "higherBetter"
+    )
+    if not pole_id:
+        raise ValueError(f"Pole introuvable: {pole_raw or 'non renseigne'}")
+    if not (catalog_id or kpi_name):
+        raise ValueError("ID KPI ou intitule KPI obligatoire.")
+    return {
+        "branch": branch,
+        "poleId": pole_id,
+        "catalogId": catalog_id,
+        "kpiName": kpi_name,
+        "definition": import_row_value(row, IMPORT_REFERENCE_ALIASES["definition"]),
+        "type": import_row_value(row, IMPORT_REFERENCE_ALIASES["type"]),
+        "unit": unit,
+        "frequency": frequency,
+        "collectionFrequency": frequency,
+        "reportingFrequency": import_row_value(row, IMPORT_REFERENCE_ALIASES["reportingFrequency"]) or frequency,
+        "performanceDirection": performance_direction,
+        "target": target,
+        "formula": formula,
+        "sourceData": import_row_value(row, IMPORT_REFERENCE_ALIASES["sourceData"]) or f"Import fichier {file_name}",
+        "responsible": import_row_value(row, IMPORT_REFERENCE_ALIASES["responsible"]),
+        "respondent": import_row_value(row, IMPORT_REFERENCE_ALIASES["respondent"]),
+        "validator": import_row_value(row, IMPORT_REFERENCE_ALIASES["validator"]),
+        "validation": import_row_value(row, IMPORT_REFERENCE_ALIASES["validation"]) or "En attente",
+        "documentStatus": import_row_value(row, IMPORT_REFERENCE_ALIASES["documentStatus"]) or "Importe",
+        "attention": import_row_value(row, IMPORT_REFERENCE_ALIASES["attention"]),
+        "dataNature": import_row_value(row, IMPORT_REFERENCE_ALIASES["dataNature"]) or "Reel",
+    }
+
+
+def map_objective_import_payload(conn: sqlite3.Connection, row: dict, file_name: str) -> dict:
+    branch = import_row_value(row, IMPORT_OBJECTIVE_ALIASES["branch"]) or "Groupe"
+    pole_raw = import_row_value(row, IMPORT_OBJECTIVE_ALIASES["pole"])
+    pole_id = resolve_catalog_pole_id(conn, pole_raw)
+    catalog_id = canonical_kpi_code(import_row_value(row, IMPORT_OBJECTIVE_ALIASES["catalogId"]))
+    period = import_row_value(row, IMPORT_OBJECTIVE_ALIASES["period"])
+    target = import_row_value(row, IMPORT_OBJECTIVE_ALIASES["target"])
+    unit = import_row_value(row, IMPORT_OBJECTIVE_ALIASES["unit"]) or "Autre"
+    if not pole_id:
+        raise ValueError(f"Pole introuvable: {pole_raw or 'non renseigne'}")
+    if not catalog_id:
+        raise ValueError("ID KPI obligatoire.")
+    if not period:
+        raise ValueError("Mois objectif obligatoire.")
+    if not target:
+        raise ValueError("Objectif mensuel obligatoire.")
+    return {
+        "branch": branch,
+        "poleId": pole_id,
+        "catalogId": catalog_id,
+        "kpiName": import_row_value(row, IMPORT_OBJECTIVE_ALIASES["kpiName"]),
+        "period": period,
+        "target": target,
+        "unit": unit,
+        "frequency": import_row_value(row, IMPORT_OBJECTIVE_ALIASES["frequency"]) or "Mensuel",
+        "distributionMode": import_row_value(row, IMPORT_OBJECTIVE_ALIASES["distributionMode"]) or "Automatique selon unite KPI",
+        "sourceData": import_row_value(row, IMPORT_OBJECTIVE_ALIASES["sourceData"]) or f"Import fichier {file_name}",
+        "responsible": import_row_value(row, IMPORT_OBJECTIVE_ALIASES["responsible"]),
+        "validation": import_row_value(row, IMPORT_OBJECTIVE_ALIASES["validation"]) or "En attente",
+        "attention": import_row_value(row, IMPORT_OBJECTIVE_ALIASES["attention"]),
+        "dataNature": import_row_value(row, IMPORT_OBJECTIVE_ALIASES["dataNature"]) or "Reel",
+    }
+
+
+def import_platform_collection_file(payload: dict, session: dict) -> dict:
+    kind = text_or_empty(payload.get("kind") or "reference")
+    if kind not in {"reference", "objective"}:
+        raise ValueError("Type d'import invalide. Choisissez reference ou objective.")
+    file_name = text_or_empty(payload.get("fileName") or "import.csv")
+    rows = parse_collection_import_rows(payload)
+    if not rows:
+        raise ValueError("Aucune ligne exploitable dans le fichier.")
+
+    imported = 0
+    skipped = 0
+    errors: list[dict] = []
+    mapper = map_reference_import_payload if kind == "reference" else map_objective_import_payload
+    saver = save_platform_reference_kpi if kind == "reference" else save_platform_monthly_objective
+    with db_connect() as conn:
+        for index, row in enumerate(rows, start=1):
+            row_number = text_or_empty(row.get("_row_number") or index)
+            try:
+                row_payload = mapper(conn, row, file_name)
+                if not session_can_access_scope(
+                    conn,
+                    session,
+                    pole_id=row_payload["poleId"],
+                    branch=row_payload.get("branch") or "Groupe",
+                    allow_group_record=False,
+                ):
+                    raise PermissionError("Ligne hors de votre perimetre d'acces.")
+                saver(row_payload, session)
+                imported += 1
+            except Exception as exc:
+                skipped += 1
+                if len(errors) < 20:
+                    errors.append({"row": row_number, "error": str(exc)})
+
+    return {
+        "kind": kind,
+        "fileName": file_name,
+        "totalRows": len(rows),
+        "importedRows": imported,
+        "skippedRows": skipped,
+        "errors": errors,
+    }
 
 
 def save_platform_calculation_data(payload: dict, session: dict | None = None) -> dict:
@@ -7239,6 +7568,17 @@ class PMSHandler(BaseHTTPRequestHandler):
                 saved = save_platform_calculation_data(payload, session)
                 refreshed = get_bootstrap_payload(session)
                 refreshed["savedCollection"] = saved
+                self.send_json(refreshed)
+                return
+            if path == "/api/collection/import":
+                session = require_permission_session(
+                    self.headers,
+                    "ajout",
+                    "Droit d'ajout requis pour importer les donnees de collecte.",
+                )
+                summary = import_platform_collection_file(payload, session)
+                refreshed = get_bootstrap_payload(session)
+                refreshed["importSummary"] = summary
                 self.send_json(refreshed)
                 return
             if path == "/api/collection/delete":

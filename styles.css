@@ -3966,6 +3966,47 @@ button.dashboard-control-card {
   color: rgba(255, 255, 255, 0.82);
 }
 
+.platform-import-card {
+  align-items: end;
+  background: #fff;
+  border: 1px solid rgba(31, 56, 100, 0.16);
+  border-left: 4px solid var(--palladium-gold);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(240px, 1.2fr) minmax(180px, 0.5fr) minmax(220px, 0.7fr) auto;
+  margin-bottom: 14px;
+  padding: 14px;
+}
+
+.platform-import-card > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.platform-import-card strong,
+.platform-import-card span {
+  display: block;
+}
+
+.platform-import-card strong {
+  color: var(--palladium-blue);
+  font-size: 0.95rem;
+  font-weight: 950;
+}
+
+.platform-import-card span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.platform-import-card .connector-status {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
 .platform-collection-grid {
   display: grid;
   gap: 14px;
@@ -6605,6 +6646,7 @@ td small {
   .user-view-preview,
   .admin-kobo-form,
   .admin-kobo-actions,
+  .platform-import-card,
   .platform-collection-summary,
   .platform-collection-grid,
   .platform-collection-form,
@@ -6735,6 +6777,7 @@ td small {
   .admin-summary-grid,
   .user-view-preview,
   .admin-kobo-form,
+  .platform-import-card,
   .platform-collection-summary,
   .platform-collection-tabs,
   .platform-collection-grid,

@@ -1134,6 +1134,28 @@
                     <span>Taux ou elements</span>
                   </button>
                 </div>
+                <div class="platform-import-card" id="platform-import-card">
+                  <div>
+                    <p class="eyebrow">Import interne</p>
+                    <strong>Importer les donnees du Formulaire 1 ou du Formulaire 2</strong>
+                    <span>Formats acceptes : .xlsx ou .csv. Les lignes existantes sont mises a jour sans creer de doublon.</span>
+                  </div>
+                  <label>
+                    Type de donnees
+                    <select id="platform-import-kind" class="search-input">
+                      <option value="reference">Formulaire 1 - Referentiel KPI</option>
+                      <option value="objective">Formulaire 2 - Objectifs mensuels</option>
+                    </select>
+                  </label>
+                  <label>
+                    Fichier
+                    <input id="platform-import-file" class="search-input" type="file" accept=".xlsx,.xlsm,.csv" />
+                  </label>
+                  <button class="primary-action" id="platform-import-save" type="button">Importer</button>
+                  <div class="connector-status empty" id="platform-import-status">
+                    Aucune importation lancee.
+                  </div>
+                </div>
                 <div class="platform-collection-grid">
                   <form class="platform-collection-form" id="platform-reference-form" data-collection-section="reference">
                     <div class="platform-form-head">

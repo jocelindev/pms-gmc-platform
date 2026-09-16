@@ -2988,6 +2988,13 @@
         node.hidden = isElements ? state.platformCalculationEntryMode !== "elements" : state.platformCalculationEntryMode === "elements";
       });
     };
+    const readFileAsDataUrl = (file) =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.addEventListener("load", () => resolve(reader.result || ""));
+        reader.addEventListener("error", () => reject(reader.error || new Error("Lecture du fichier impossible.")));
+        reader.readAsDataURL(file);
+      });
     const setFieldValue = (selector, value) => {
       const input = $(selector);
       if (!input) return;
@@ -3198,6 +3205,55 @@
     });
     $("#platform-calculation-entry-mode")?.addEventListener("change", updatePlatformCalculationMode);
     updatePlatformCalculationMode();
+
+    $("#platform-import-save")?.addEventListener("click", async () => {
+      if (!api?.importPlatformCollection) {
+        showToast("Import interne indisponible sur ce serveur.");
+        return;
+      }
+      if (!hasPermission("ajout")) {
+        showToast("Droit d'ajout requis pour importer des donnees.");
+        return;
+      }
+      const file = $("#platform-import-file")?.files?.[0];
+      const kind = fieldValue("#platform-import-kind") || "reference";
+      if (!file) {
+        showPlatformValidation("#platform-import-status", "Selectionnez un fichier .xlsx ou .csv a importer.");
+        return;
+      }
+      if (!/\.(xlsx|xlsm|csv)$/i.test(file.name)) {
+        showPlatformValidation("#platform-import-status", "Format accepte: .xlsx, .xlsm ou .csv.");
+        return;
+      }
+      await withLoading($("#platform-import-save"), "Import en cours...", async () => {
+        try {
+          const contentBase64 = await readFileAsDataUrl(file);
+          const response = await api.importPlatformCollection({
+            kind,
+            fileName: file.name,
+            contentBase64,
+          });
+          applyCollectionMutationResponse(response);
+          const summary = response?.importSummary || {};
+          const importedRows = Number(summary.importedRows || 0);
+          const skippedRows = Number(summary.skippedRows || 0);
+          const errors = Array.isArray(summary.errors) ? summary.errors.slice(0, 4) : [];
+          const errorDetails = errors.length
+            ? `<small>${errors.map((item) => `Ligne ${escapeHtml(item.row)}: ${escapeHtml(item.error)}`).join("<br>")}</small>`
+            : "";
+          setPlatformStatus(
+            "#platform-import-status",
+            skippedRows ? "warning" : "success",
+            `<strong>${escapeHtml(importedRows)} ligne(s) importee(s)</strong><span>${escapeHtml(skippedRows)} ligne(s) ignoree(s) sur ${escapeHtml(summary.totalRows || 0)}.</span>${errorDetails}`
+          );
+          showToast(`${importedRows} ligne(s) importee(s) dans la collecte interne.`);
+        } catch (error) {
+          console.warn("Import collecte impossible.", error);
+          setPlatformStatus("#platform-import-status", "warning", `Import impossible: ${escapeHtml(error.message)}`);
+          showToast(error.message || "Impossible d'importer le fichier.");
+        }
+      });
+    });
 
     $("#platform-reference-form")?.addEventListener("submit", async (event) => {
       event.preventDefault();

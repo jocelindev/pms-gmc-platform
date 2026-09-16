@@ -108,6 +108,13 @@
         timeout: 15000,
       });
     },
+    importPlatformCollection(fileImport) {
+      return request("/collection/import", {
+        method: "POST",
+        body: fileImport,
+        timeout: 60000,
+      });
+    },
     deletePlatformCollectionRow(row) {
       return request("/collection/delete", {
         method: "POST",
