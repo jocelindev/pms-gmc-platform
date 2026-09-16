@@ -545,6 +545,33 @@
       ])
     );
 
+    if (Array.isArray(context.heatmap) && context.heatmap.length) {
+      const heatmapRows = context.heatmap
+        .filter((cell) => Number(cell.total || 0) > 0)
+        .sort((left, right) => {
+          const leftScore = Number.isFinite(Number(left.score)) ? Number(left.score) : 999;
+          const rightScore = Number.isFinite(Number(right.score)) ? Number(right.score) : 999;
+          return leftScore - rightScore;
+        });
+      slides.push(
+        pptxSlideXml([
+          ...headerShape("Carte de chaleur Pays x Pole", "Lecture rapide des zones vertes, orange, rouges ou en attente."),
+          ...buildKpiTableShapes(heatmapRows, {
+            y: 1550000,
+            limit: 11,
+            empty: "Aucune cellule de heatmap disponible pour cette periode.",
+            columns: [
+              { title: "Pays / Filiale", x: 520000, w: 2100000, value: (cell) => truncate(cell.country || cell.countryCode || "--", 28) },
+              { title: "Pole", x: 2620000, w: 3100000, value: (cell) => truncate(cell.poleName || cell.poleId || "--", 40) },
+              { title: "Score", x: 5720000, w: 1200000, value: (cell) => Number.isFinite(Number(cell.score)) ? `${Math.round(Number(cell.score))}/100` : "--", className: (cell) => cell.className || scoreClass(cell.score), bold: true },
+              { title: "KPI", x: 6920000, w: 1000000, value: (cell) => cell.total || "--" },
+              { title: "Statut", x: 7920000, w: 2300000, value: (cell) => cell.className === "red" ? "Rouge" : cell.className === "amber" ? "Orange" : cell.className === "green" ? "Vert" : "En attente", className: (cell) => cell.className || "gray", bold: true },
+            ],
+          }),
+        ])
+      );
+    }
+
     slides.push(
       pptxSlideXml([
         ...headerShape("Top priorites de la periode", "KPI critiques a traiter en premier."),
@@ -588,6 +615,88 @@
     return `"${String(value ?? "").replaceAll('"', '""')}"`;
   }
 
+  function xlsxColumnName(index) {
+    let name = "";
+    let current = index + 1;
+    while (current > 0) {
+      const remainder = (current - 1) % 26;
+      name = String.fromCharCode(65 + remainder) + name;
+      current = Math.floor((current - 1) / 26);
+    }
+    return name;
+  }
+
+  function xlsxCell(value, rowIndex, columnIndex) {
+    const ref = `${xlsxColumnName(columnIndex)}${rowIndex + 1}`;
+    const text = xmlEscape(value ?? "");
+    return `<c r="${ref}" t="inlineStr"><is><t>${text}</t></is></c>`;
+  }
+
+  function xlsxSheetXml(rows = []) {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <sheetViews><sheetView workbookViewId="0"/></sheetViews>
+        <sheetFormatPr defaultRowHeight="18"/>
+        <sheetData>
+          ${rows
+            .map(
+              (row, rowIndex) => `
+                <row r="${rowIndex + 1}">
+                  ${(row || []).map((cell, columnIndex) => xlsxCell(cell, rowIndex, columnIndex)).join("")}
+                </row>
+              `
+            )
+            .join("")}
+        </sheetData>
+      </worksheet>`;
+  }
+
+  function safeSheetName(name, fallback) {
+    return truncate(String(name || fallback || "Feuille").replace(/[\\/*?:[\]]/g, " "), 31) || fallback || "Feuille";
+  }
+
+  function xlsxPackage(sheets = []) {
+    const sheetItems = sheets.length ? sheets : [{ name: "Donnees", rows: [["Aucune donnee"]] }];
+    const workbookSheets = sheetItems
+      .map((sheet, index) => `<sheet name="${xmlEscape(safeSheetName(sheet.name, `Feuille ${index + 1}`))}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`)
+      .join("");
+    const workbookRels = sheetItems
+      .map((_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`)
+      .join("");
+    const contentOverrides = sheetItems
+      .map((_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`)
+      .join("");
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+        ${contentOverrides}
+      </Types>`;
+    const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+        <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+      </Relationships>`;
+    const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <sheets>${workbookSheets}</sheets>
+      </workbook>`;
+    const relationships = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+        ${workbookRels}
+      </Relationships>`;
+    const files = [
+      { name: "[Content_Types].xml", data: contentTypes },
+      { name: "_rels/.rels", data: rootRels },
+      { name: "xl/workbook.xml", data: workbook },
+      { name: "xl/_rels/workbook.xml.rels", data: relationships },
+      ...sheetItems.map((sheet, index) => ({ name: `xl/worksheets/sheet${index + 1}.xml`, data: xlsxSheetXml(sheet.rows) })),
+    ];
+    return new Blob([createStoredZip(files)], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+  }
+
   function buildReportTableRows(kpis = []) {
     return kpis
       .map((kpi) => {
@@ -619,7 +728,7 @@
             <td class="achievement-${escapeHtml(achievement.className)}"><strong>${escapeHtml(achievement.label)}</strong></td>
             <td>${escapeHtml(kpi.value || "--")}</td>
             <td>${escapeHtml(kpi.target || "--")}</td>
-            <td>${escapeHtml(context.pole?.owner || kpi.poleOwner || "A affecter")}</td>
+            <td>${escapeHtml(kpi.poleOwner || context.pole?.owner || "A affecter")}</td>
             <td>${escapeHtml(kpiAction(kpi))}</td>
           </tr>
         `;
@@ -695,6 +804,87 @@
     return [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\n");
   }
 
+  function buildReportWorkbookSheets(context) {
+    const generatedAt = new Date().toLocaleString("fr-FR");
+    const critical = reportCriticalKpis(context.kpis, 20);
+    const summaryRows = [
+      ["Champ", "Valeur"],
+      ["Rapport", context.isGroup ? "Rapport groupe" : context.pole?.name || ""],
+      ["Periode", context.period || ""],
+      ["Cycle", context.cycle?.value || ""],
+      ["Score", context.score ?? context.pole?.score ?? ""],
+      ["KPI calcules", context.kpis?.length || 0],
+      ["Commentaire", context.comment || "A completer"],
+      ["Genere le", generatedAt],
+    ];
+    const dataRows = [
+      ["Pole", "KPI", "Valeur", "Objectif", "Tendance", "Source", "Taux realise", "Statut", "Responsable"],
+      ...(context.kpis || []).map((kpi) => [
+        kpi.poleName || context.pole?.name || "",
+        kpi.name || "",
+        kpi.value || "",
+        kpi.target || "",
+        kpi.trend || "",
+        kpi.source || "",
+        reportAchievement(kpi).label,
+        kpi.status || "",
+        kpi.poleOwner || context.pole?.owner || "",
+      ]),
+    ];
+    const actionRows = [
+      ["Pole", "KPI", "Taux realise", "Valeur", "Objectif", "Responsable", "Action proposee"],
+      ...(critical.length
+        ? critical.map((kpi) => [
+            kpi.poleName || context.pole?.name || "",
+            kpi.name || "",
+            reportAchievement(kpi).label,
+            kpi.value || "",
+            kpi.target || "",
+            kpi.poleOwner || context.pole?.owner || "A affecter",
+            kpiAction(kpi),
+          ])
+        : [["", "Aucun KPI rouge ou orange", "", "", "", "", "Maintenir le suivi"]]),
+    ];
+    const sheets = [
+      { name: "Synthese", rows: summaryRows },
+      { name: "Donnees KPI", rows: dataRows },
+      { name: "Plan action", rows: actionRows },
+    ];
+    if (Array.isArray(context.directionScores) && context.directionScores.length) {
+      sheets.push({
+        name: "Scores poles",
+        rows: [
+          ["Pole", "Score", "KPI", "Rouge", "Orange", "Vert", "Action"],
+          ...context.directionScores.map((row) => [
+            row.poleName || row.poleId || "",
+            Number.isFinite(Number(row.score)) ? `${Math.round(Number(row.score))}/100` : "",
+            row.total || 0,
+            row.red || 0,
+            row.amber || 0,
+            row.green || 0,
+            row.action || "",
+          ]),
+        ],
+      });
+    }
+    if (Array.isArray(context.heatmap) && context.heatmap.length) {
+      sheets.push({
+        name: "Heatmap",
+        rows: [
+          ["Pays / Filiale", "Pole", "Score", "KPI", "Statut"],
+          ...context.heatmap.map((cell) => [
+            cell.country || "",
+            cell.poleName || cell.poleId || "",
+            Number.isFinite(Number(cell.score)) ? `${Math.round(Number(cell.score))}/100` : "",
+            cell.total || 0,
+            cell.className || "",
+          ]),
+        ],
+      });
+    }
+    return sheets;
+  }
+
   function exportReportPdf(context, slug, options = {}) {
     const html = reportDocumentHtml(context, "pdf");
     const printWindow = window.open("", "_blank");
@@ -712,14 +902,13 @@
   }
 
   function exportReportExcel(context, slug, options = {}) {
-    const html = reportDocumentHtml(context, "excel");
-    downloadTextFile(`rapport-${slug}.xls`, html, "application/vnd.ms-excel;charset=utf-8");
-    options.toast?.("Export Excel genere.");
+    downloadBlobFile(`rapport-${slug}.xlsx`, xlsxPackage(buildReportWorkbookSheets(context)));
+    options.toast?.("Export Excel .xlsx genere.");
   }
 
   function exportReportPowerPoint(context, slug, options = {}) {
     try {
-      downloadBlobFile(`rapport-${slug}.pptx`, buildPoleReportPptx(context));
+      downloadBlobFile(`rapport-${slug}.pptx`, context.isGroup ? buildManagementReportPptx(context) : buildPoleReportPptx(context));
       options.toast?.("Export PowerPoint executif .pptx genere.");
     } catch (error) {
       console.error(error);

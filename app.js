@@ -68,6 +68,7 @@
   }
 
   const OPERATIONAL_KOBO_ROLES = new Set(["referentielKpi", "objectifsMensuels", "donneesCalcul"]);
+  const REPORT_GROUP_ID = "__GROUP__";
   const defaultKoboSources = Array.isArray(PMS_DATA.koboConfiguredSources) ? PMS_DATA.koboConfiguredSources : [];
   const defaultObjectiveKoboSource = defaultKoboSources.find((source) => source.role === "referentielKpi") || null;
   const defaultMonthlyObjectiveKoboSource = defaultKoboSources.find((source) => source.role === "objectifsMensuels") || null;
@@ -1113,6 +1114,15 @@
     window.setTimeout(() => toast.classList.remove("show"), 2600);
   }
 
+  function fileSlug(value) {
+    return String(value || "rapport")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9_-]+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  }
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -1555,6 +1565,9 @@
   }
 
   function getAllowedPoleFromScope(requestedPoleId) {
+    if (requestedPoleId === REPORT_GROUP_ID && canAccessManagement()) {
+      return REPORT_GROUP_ID;
+    }
     const authorizedPoleIds = getAuthorizedPoleIds();
     if (!authorizedPoleIds.length || authorizedPoleIds.includes(requestedPoleId)) {
       return requestedPoleId;
@@ -1753,32 +1766,35 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function getCurrentReportContext() {
-    const reporting = PMS_DATA.reporting;
-    const pole = reporting.poles.find((item) => item.id === state.currentReportPole) || reporting.poles[0];
-    const cycle = reporting.cycles.find((item) => item.value === state.currentReportCycle) || reporting.cycles[0];
-    const kpis = reporting.kpisByPole[pole.id] || [];
-    return {
-      pole,
-      cycle,
-      kpis,
-      period: $("#period-filter").value,
-      format: $("#report-format-select").value,
-      comment: $("#report-comment").value.trim(),
-    };
+  function latestReportComment(poleId, cycleValue, period) {
+    const normalizedPole = normalizeLookup(poleId);
+    const normalizedCycle = normalizeLookup(cycleValue);
+    const normalizedPeriod = normalizeLookup(period);
+    const match = (state.reportHistory || []).find((report) => {
+      if (!report.comment) return false;
+      const samePole = normalizeLookup(report.pole || report.poleId) === normalizedPole;
+      const sameCycle = normalizeLookup(report.cycle) === normalizedCycle;
+      const samePeriod = !normalizedPeriod || normalizeLookup(report.period) === normalizedPeriod;
+      return samePole && sameCycle && samePeriod;
+    });
+    return match?.comment || "";
   }
 
-  function getCurrentManagementReportContext() {
-    const reporting = PMS_DATA.reporting;
-    const activeCountry = ensureAllowedCountry(state.calendarBranchFilter || "Groupe");
+  function reportMeasuredKpis(kpis = []) {
+    return kpis.filter((kpi) => kpi.calculated && ["green", "amber", "red"].includes(kpi.status));
+  }
+
+  function groupReportVisiblePoles(activeCountry = state.calendarBranchFilter || "Groupe") {
     const authorizedPoleIds = new Set(getAuthorizedPoleIds(activeCountry));
     const countryPoleIds = new Set(selectedCountryPoleIds(activeCountry));
-    const visiblePoles = reporting.poles.filter(
+    return PMS_DATA.reporting.poles.filter(
       (pole) => (!authorizedPoleIds.size || authorizedPoleIds.has(pole.id)) && countryPoleIds.has(pole.id)
     );
-    const calculatedStatuses = new Set(["green", "amber", "red"]);
-    const visibleKpis = visiblePoles.flatMap((pole) =>
-      (reporting.kpisByPole[pole.id] || [])
+  }
+
+  function groupReportKpis(poles, activeCountry) {
+    return poles.flatMap((pole) =>
+      (PMS_DATA.reporting.kpisByPole[pole.id] || [])
         .filter((kpi) => itemMatchesDataMode(kpi, state.dataModeFilter))
         .filter((kpi) => referenceKpiMatchesCountry(kpi, activeCountry))
         .map((kpi) => ({
@@ -1789,14 +1805,16 @@
           owner: pole.owner,
         }))
     );
-    const calculatedKpis = visibleKpis.filter((kpi) => kpi.calculated && calculatedStatuses.has(kpi.status));
-    const directionScores = visiblePoles.map((pole) => {
-      const poleKpis = visibleKpis.filter((kpi) => kpi.poleId === pole.id);
-      const measured = poleKpis.filter((kpi) => kpi.calculated && calculatedStatuses.has(kpi.status));
+  }
+
+  function groupDirectionScores(poles, kpis) {
+    return poles.map((pole) => {
+      const poleKpis = kpis.filter((kpi) => kpi.poleId === pole.id);
+      const measured = reportMeasuredKpis(poleKpis);
       const red = measured.filter((kpi) => kpi.status === "red").length;
       const amber = measured.filter((kpi) => kpi.status === "amber").length;
       const green = measured.filter((kpi) => kpi.status === "green").length;
-      const score = scoreFromKpis(poleKpis);
+      const score = scoreFromKpis(measured);
       return {
         poleId: pole.id,
         poleName: pole.name,
@@ -1815,24 +1833,99 @@
               : "Maintenir",
       };
     });
-    const priorities = calculatedKpis
+  }
+
+  function groupHeatmapCells(poles, kpis, activeCountry) {
+    const countries = isGroupCountryValue(activeCountry)
+      ? countryOptions().filter((country) => !isGroupCountryValue(country.name || country.id)).slice(0, 8)
+      : countryOptions().filter((country) => countryMatches(country.name || country.id, activeCountry)).slice(0, 1);
+    return poles.flatMap((pole) =>
+      countries.map((country) => {
+        const countryName = country.name || country.id;
+        const cellKpis = reportMeasuredKpis(
+          kpis.filter((kpi) => kpi.poleId === pole.id && resultMatchesCountry(kpi, countryName))
+        );
+        const score = scoreFromKpis(cellKpis);
+        return {
+          poleId: pole.id,
+          poleName: pole.name,
+          country: countryName,
+          countryCode: country.code || countryName,
+          score,
+          total: cellKpis.length,
+          className: score === null ? "gray" : score >= 80 ? "green" : score >= 70 ? "amber" : "red",
+        };
+      })
+    );
+  }
+
+  function buildGroupReportContext({ cycle, period, comment }) {
+    const activeCountry = ensureAllowedCountry(state.calendarBranchFilter || "Groupe");
+    const poles = groupReportVisiblePoles(activeCountry);
+    const kpis = groupReportKpis(poles, activeCountry);
+    const measuredKpis = reportMeasuredKpis(kpis);
+    const directionScores = groupDirectionScores(poles, kpis);
+    const priorities = measuredKpis
       .filter((kpi) => ["red", "amber"].includes(kpi.status))
       .sort((left, right) => {
         if (left.status !== right.status) return left.status === "red" ? -1 : 1;
         return Number(left.vsTargetValue ?? 999) - Number(right.vsTargetValue ?? 999);
       })
-      .slice(0, 5);
-
+      .slice(0, 8);
     return {
+      isGroup: true,
+      pole: {
+        id: REPORT_GROUP_ID,
+        name: "Rapport groupe",
+        owner: "Direction Generale",
+        score: scoreFromKpis(measuredKpis),
+      },
+      cycle,
+      kpis: measuredKpis,
+      period,
+      format: $("#report-format-select")?.value || "PowerPoint",
+      comment,
       country: activeCountry,
-      period: state.calendar?.label || $("#period-filter")?.value || "",
       dataMode: state.dataModeFilter || "all",
-      kpis: calculatedKpis,
       directionScores,
       priorities,
-      score: scoreFromKpis(calculatedKpis),
+      score: scoreFromKpis(measuredKpis),
+      heatmap: groupHeatmapCells(poles, kpis, activeCountry),
       quality: state.kpiCalculationQuality,
     };
+  }
+
+  function getCurrentReportContext() {
+    const reporting = PMS_DATA.reporting;
+    const cycle = reporting.cycles.find((item) => item.value === state.currentReportCycle) || reporting.cycles[0];
+    const period = state.calendar?.label || $("#period-filter")?.value || "";
+    const typedComment = $("#report-comment")?.value?.trim() || "";
+    const savedComment = latestReportComment(state.currentReportPole, cycle.value, period);
+    const comment = typedComment || savedComment || "";
+    if (state.currentReportPole === REPORT_GROUP_ID) {
+      return buildGroupReportContext({ cycle, period, comment });
+    }
+    const pole = reporting.poles.find((item) => item.id === state.currentReportPole) || reporting.poles[0];
+    const kpis = reporting.kpisByPole[pole.id] || [];
+    return {
+      pole,
+      cycle,
+      kpis,
+      period,
+      format: $("#report-format-select").value,
+      comment,
+    };
+  }
+
+  function getCurrentManagementReportContext() {
+    const reporting = PMS_DATA.reporting;
+    const cycle =
+      reporting.cycles.find((item) => normalizeLookup(item.value).includes("mensuel")) ||
+      reporting.cycles.find((item) => item.value === state.currentReportCycle) ||
+      reporting.cycles[0];
+    const period = state.calendar?.label || $("#period-filter")?.value || "";
+    const comment = latestReportComment(REPORT_GROUP_ID, cycle.value, period);
+    return buildGroupReportContext({ cycle, period, comment });
   }
 
   function bindNavigation() {
@@ -1879,7 +1972,7 @@
           return;
         }
         const context = getCurrentManagementReportContext();
-        const slug = `${context.country}-${context.period}`.replaceAll(" ", "_");
+        const slug = fileSlug(`${context.country}-${context.period}`);
         reportingExports.exportManagementPowerPoint?.(context, slug, { toast: showToast });
         return;
       }
@@ -2564,7 +2657,9 @@
       event.target.value = allowedPole;
       renderReportWorkspace(state);
       showToast(
-        allowedPole === requestedPole
+        allowedPole === REPORT_GROUP_ID
+          ? "Rapport groupe prepare."
+          : allowedPole === requestedPole
           ? "Apercu du rapport mis a jour pour le pole selectionne."
           : "Acces limite: le rapport reste sur le pole autorise."
       );
@@ -2577,7 +2672,8 @@
     });
 
     $("#generate-report").addEventListener("click", async () => {
-      if (!hasPermission("ajout")) {
+      const isGroupGeneration = state.currentReportPole === REPORT_GROUP_ID;
+      if (!hasPermission("ajout") && !(isGroupGeneration && canAccessManagement())) {
         showToast("Droit d'ajout requis pour generer un rapport.");
         return;
       }
@@ -2586,7 +2682,9 @@
       renderReportWorkspace(state);
       const format = $("#report-format-select").value;
       const poleOption = $("#report-pole-select").selectedOptions[0];
-      const pole = poleOption.textContent.trim();
+      const isGroupReport = state.currentReportPole === REPORT_GROUP_ID;
+      const pole = isGroupReport ? "Rapport groupe" : poleOption.textContent.trim();
+      const reportPeriod = state.calendar?.label || $("#period-filter").value;
       const generatedAt = new Date().toLocaleString("fr-FR", {
         day: "2-digit",
         month: "2-digit",
@@ -2595,12 +2693,12 @@
         minute: "2-digit",
       });
       const report = {
-        id: `RPT-${Date.now().toString().slice(-6)}-${state.currentReportPole}`,
+        id: `RPT-${Date.now().toString().slice(-6)}-${isGroupReport ? "GROUPE" : state.currentReportPole}`,
         pole: state.currentReportPole,
         poleName: pole,
         branch: state.calendarBranchFilter || "Groupe",
         cycle: state.currentReportCycle,
-        period: $("#period-filter").value,
+        period: reportPeriod,
         format,
         status: "Brouillon",
         generatedAt,
@@ -2635,7 +2733,8 @@
     });
 
     $("#save-report-comment").addEventListener("click", async () => {
-      if (!hasPermission("ajout") && !hasPermission("modification")) {
+      const isGroupComment = state.currentReportPole === REPORT_GROUP_ID;
+      if (!hasPermission("ajout") && !hasPermission("modification") && !(isGroupComment && canAccessManagement())) {
         showToast("Droit de modification requis pour enregistrer un commentaire.");
         return;
       }
@@ -2645,9 +2744,10 @@
         return;
       }
       const poleOption = $("#report-pole-select").selectedOptions[0];
-      const poleName = poleOption?.textContent?.trim() || state.currentReportPole;
-      const period = $("#period-filter").value;
-      const reportId = `COMMENT-${state.currentReportPole}-${state.currentReportCycle}-${period}`
+      const isGroupReport = state.currentReportPole === REPORT_GROUP_ID;
+      const poleName = isGroupReport ? "Rapport groupe" : poleOption?.textContent?.trim() || state.currentReportPole;
+      const period = state.calendar?.label || $("#period-filter").value;
+      const reportId = `COMMENT-${isGroupReport ? "GROUPE" : state.currentReportPole}-${state.currentReportCycle}-${period}`
         .replace(/[^A-Za-z0-9-]+/g, "-")
         .replace(/-+/g, "-")
         .slice(0, 80);
@@ -2680,14 +2780,20 @@
         showToast(savedInDatabase ? "Commentaire enregistre dans la base." : "Commentaire enregistre en local.");
       } catch (error) {
         console.warn("Enregistrement commentaire indisponible.", error);
-        showToast(error.message || "Impossible d'enregistrer le commentaire.");
+        state.reportHistory = [
+          savedReport,
+          ...state.reportHistory.filter((item) => item.id !== savedReport.id),
+        ];
+        renderReportHistory(state);
+        renderReports(state);
+        showToast("Commentaire conserve localement pour l'export en cours.");
       }
     });
 
     document.querySelectorAll("[data-report-export]").forEach((button) => {
       button.addEventListener("click", () => {
         const context = getCurrentReportContext();
-        const slug = `${context.pole.id}-${context.cycle.value}-${context.period}`.replaceAll(" ", "_");
+        const slug = fileSlug(`${context.pole.id}-${context.cycle.value}-${context.period}`);
         if (button.dataset.reportExport === "pdf") {
           reportingExports.exportReportPdf?.(context, slug, { toast: showToast });
           return;

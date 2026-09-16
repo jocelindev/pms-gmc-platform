@@ -1,5 +1,6 @@
 (function () {
   const { PMS_DATA } = window;
+  const REPORT_GROUP_ID = "__GROUP__";
 
   function $(selector) {
     return document.querySelector(selector);
@@ -1222,6 +1223,29 @@
 
   function metricStatusOrPending(pole = {}) {
     return hasPoleData(pole) ? pole.status || ragLabel(pole.rag || "gray") : "En attente collecte";
+  }
+
+  function canRenderGroupReport(state = {}, accessContext = {}) {
+    if (state.currentPermissions?.administration || state.currentPermissions?.management) return true;
+    return !state.currentUser && !accessContext.isRestricted;
+  }
+
+  function reportScoreFromKpis(kpis = []) {
+    const measured = kpis.filter(hasKpiData);
+    if (!measured.length) return null;
+    const weights = { green: 100, amber: 70, red: 35 };
+    return Math.round(measured.reduce((sum, kpi) => sum + (weights[kpi.status] || 0), 0) / measured.length);
+  }
+
+  function reportGroupKpis(poles = []) {
+    return poles.flatMap((pole) =>
+      (PMS_DATA.reporting.kpisByPole[pole.id] || []).map((kpi) => ({
+        ...kpi,
+        poleId: pole.id,
+        poleName: pole.name,
+        poleOwner: pole.owner,
+      }))
+    );
   }
 
   function metricClassOrPending(pole = {}, value) {
@@ -4509,13 +4533,16 @@
           .slice(0, 8)
           .map((item) => {
             const pole = PMS_DATA.reporting.poles.find((candidate) => candidate.id === item.pole);
+            const isGroupReport = item.pole === REPORT_GROUP_ID || item.pole === "Groupe";
+            const poleLabel = isGroupReport ? "Groupe" : item.pole;
+            const ownerLabel = isGroupReport ? "Direction Generale" : pole?.owner || "Responsable pole";
             return `
           <tr>
-            <td><strong>${escapeHtml(item.pole)}</strong></td>
+            <td><strong>${escapeHtml(poleLabel)}</strong></td>
             <td>${escapeHtml(item.cycle)}</td>
             <td>${escapeHtml(item.period)}</td>
             <td>${escapeHtml(item.generatedAt || "Genere")}</td>
-            <td>${escapeHtml(pole?.owner || "Responsable pole")}</td>
+            <td>${escapeHtml(ownerLabel)}</td>
             <td>${statusPill(item.status, reportStatusClass(item.status))}</td>
           </tr>
         `;
@@ -4528,19 +4555,21 @@
     const reports = Array.isArray(state.reportHistory) ? state.reportHistory : [];
     $("#report-history-table").innerHTML = reports.length
       ? reports
-          .map(
-            (item) => `
+          .map((item) => {
+            const isGroupReport = item.pole === REPORT_GROUP_ID || item.pole === "Groupe";
+            const poleLabel = isGroupReport ? "Groupe" : item.pole;
+            return `
           <tr>
             <td><strong>${escapeHtml(item.id)}</strong></td>
-            <td>${escapeHtml(item.pole)}</td>
+            <td>${escapeHtml(poleLabel)}</td>
             <td>${escapeHtml(item.cycle)}</td>
             <td>${escapeHtml(item.period)}</td>
             <td>${escapeHtml(item.format)}</td>
             <td>${statusPill(item.status, reportStatusClass(item.status))}</td>
             <td>${escapeHtml(item.generatedAt)}</td>
           </tr>
-        `
-          )
+        `;
+          })
           .join("")
       : `<tr><td colspan="7">Aucun rapport genere depuis les donnees pour le moment.</td></tr>`;
   }
@@ -4577,11 +4606,14 @@
     const reporting = PMS_DATA.reporting;
     const accessContext = getPoleAccessContext(state);
     const authorizedPoles = accessContext.isRestricted ? accessContext.poles : reporting.poles;
+    const canGroupReport = canRenderGroupReport(state, accessContext);
     const poleSelect = $("#report-pole-select");
     if (!authorizedPoles.length) {
       if (poleSelect) {
-        poleSelect.innerHTML = `<option>Aucun pole autorise</option>`;
-        poleSelect.disabled = true;
+        poleSelect.innerHTML = canGroupReport
+          ? `<option value="${REPORT_GROUP_ID}">Groupe - rapport mensuel</option>`
+          : `<option>Aucun pole autorise</option>`;
+        poleSelect.disabled = !canGroupReport;
       }
       const cycleSelect = $("#report-cycle-select");
       if (cycleSelect) {
@@ -4591,11 +4623,17 @@
       }
       return;
     }
-    if (!authorizedPoles.some((pole) => pole.id === state.currentReportPole)) {
+    if (state.currentReportPole === REPORT_GROUP_ID && !canGroupReport) {
+      state.currentReportPole = authorizedPoles[0]?.id || reporting.defaultPole;
+    }
+    if (state.currentReportPole !== REPORT_GROUP_ID && !authorizedPoles.some((pole) => pole.id === state.currentReportPole)) {
       state.currentReportPole = authorizedPoles[0]?.id || reporting.defaultPole;
     }
 
-    poleSelect.innerHTML = authorizedPoles
+    const groupOption = canGroupReport
+      ? `<option value="${REPORT_GROUP_ID}" ${state.currentReportPole === REPORT_GROUP_ID ? "selected" : ""}>Groupe - rapport mensuel</option>`
+      : "";
+    poleSelect.innerHTML = groupOption + authorizedPoles
       .map(
         (pole) => `
           <option value="${escapeHtml(pole.id)}" ${pole.id === state.currentReportPole ? "selected" : ""}>
@@ -4604,7 +4642,7 @@
         `
       )
       .join("");
-    poleSelect.disabled = accessContext.isRestricted && authorizedPoles.length === 1;
+    poleSelect.disabled = !canGroupReport && accessContext.isRestricted && authorizedPoles.length === 1;
 
     $("#report-cycle-select").innerHTML = reporting.cycles
       .map(
@@ -4633,6 +4671,172 @@
       if (reportAutoPlan) reportAutoPlan.innerHTML = "";
       const reportActionPlan = $("#report-action-plan");
       if (reportActionPlan) reportActionPlan.innerHTML = "";
+      return;
+    }
+    const canGroupReport = canRenderGroupReport(state, accessContext);
+    if (state.currentReportPole === REPORT_GROUP_ID && canGroupReport) {
+      const cycle = reporting.cycles.find((item) => item.value === state.currentReportCycle) || reporting.cycles[0];
+      const kpis = reportGroupKpis(authorizedPoles);
+      const dataKpis = kpis.filter(hasKpiData);
+      const score = reportScoreFromKpis(dataKpis);
+      const statusClass = dataKpis.length ? scoreClass(score) : "gray";
+      const redCount = dataKpis.filter((item) => item.status === "red").length;
+      const amberCount = dataKpis.filter((item) => item.status === "amber").length;
+      const greenCount = dataKpis.filter((item) => item.status === "green").length;
+      const polesWithData = authorizedPoles.filter((pole) => poleDataKpis(pole).length).length;
+      const activePeriod = state.calendar?.label || $("#period-filter")?.value || cycle.value;
+      const criticalKpis = [
+        ...dataKpis.filter((kpi) => kpi.status === "red"),
+        ...dataKpis.filter((kpi) => kpi.status === "amber"),
+      ].slice(0, 8);
+
+      $("#report-preview-title").textContent = `${cycle.value} - Rapport groupe`;
+      $("#report-status-pill").className = `status-pill ${statusClass}`;
+      $("#report-status-pill").textContent = dataKpis.length ? ragLabel(statusClass) : "En attente collecte";
+
+      $("#report-summary").innerHTML = `
+        <article class="report-kpi-card">
+          <span>Score groupe</span>
+          <strong>${escapeHtml(score === null ? "--" : `${score}/100`)}</strong>
+          ${statusPill(dataKpis.length ? ragLabel(statusClass) : "En attente collecte", statusClass)}
+        </article>
+        <article class="report-kpi-card">
+          <span>Poles avec donnees</span>
+          <strong>${escapeHtml(`${polesWithData}/${authorizedPoles.length}`)}</strong>
+          <small>perimetre visible du rapport</small>
+        </article>
+        <article class="report-kpi-card">
+          <span>KPI calcules</span>
+          <strong>${escapeHtml(dataKpis.length)}</strong>
+          <small>${greenCount} verts, ${amberCount} orange, ${redCount} rouges</small>
+        </article>
+        <article class="report-kpi-card">
+          <span>Periode</span>
+          <strong>${escapeHtml(activePeriod)}</strong>
+          <small>Deadline: ${escapeHtml(cycle.deadline)}</small>
+        </article>
+      `;
+
+      const reportAutoPlan = $("#report-auto-plan");
+      if (reportAutoPlan) {
+        reportAutoPlan.innerHTML = `
+          <div class="report-auto-card">
+            <span>rapport groupe</span>
+            <strong>Rapport mensuel automatique</strong>
+            <small>Score groupe, score par pole, top priorites, brief PDG et plan d'action.</small>
+          </div>
+          <div class="report-auto-card">
+            <span>exports</span>
+            <strong>PowerPoint + Excel</strong>
+            <small>Livrables consolides a partir des donnees internes.</small>
+          </div>
+        `;
+      }
+
+      $("#report-preview").innerHTML = `
+        <div class="report-cover">
+          <div>
+            <p class="eyebrow">Rapport ${escapeHtml(cycle.value)}</p>
+            <h4>Rapport groupe</h4>
+            <p>Periode: ${escapeHtml(activePeriod)} | Responsable: Direction Generale | Donnees: ${escapeHtml(dataKpis.length ? `${dataKpis.length} KPI calcules` : "en attente collecte")}</p>
+          </div>
+          <button class="ghost-action" id="submit-report">Soumettre validation</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Pole</th>
+                <th>KPI</th>
+                <th>Valeur</th>
+                <th>Objectif</th>
+                <th>Tendance</th>
+                <th>Taux realise</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${dataKpis.length
+                ? dataKpis
+                    .slice(0, 80)
+                    .map(
+                      (kpi) => `
+                        <tr>
+                          <td><strong>${escapeHtml(kpi.poleName || kpi.poleId || "--")}</strong></td>
+                          <td><strong>${escapeHtml(kpi.name)}</strong></td>
+                          <td>${escapeHtml(kpi.value)}</td>
+                          <td>${escapeHtml(kpi.target)}</td>
+                          <td>${escapeHtml(kpi.trend)}</td>
+                          <td>${targetAchievementPill(kpi)}</td>
+                        </tr>
+                      `
+                    )
+                    .join("")
+                : `<tr><td colspan="6">Aucun KPI groupe calcule pour la periode selectionnee.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+        <div class="report-narrative">
+          <strong>Synthese automatique groupe</strong>
+          <p>
+            ${dataKpis.length
+              ? `Le rapport groupe consolide ${escapeHtml(dataKpis.length)} KPI calcules sur ${escapeHtml(polesWithData)} pole(s). Les KPI rouges et orange alimentent automatiquement le plan d'action et le brief PDG.`
+              : "Le rapport groupe sera complete automatiquement apres saisie et calcul des donnees internes."}
+          </p>
+        </div>
+      `;
+
+      const actionStatus = $("#report-action-plan-status");
+      const actionPlan = $("#report-action-plan");
+      if (actionStatus) {
+        actionStatus.className = `status-pill ${redCount ? "red" : amberCount ? "amber" : dataKpis.length ? "green" : "gray"}`;
+        actionStatus.textContent = redCount
+          ? `${redCount} KPI rouge${redCount > 1 ? "s" : ""}`
+          : amberCount
+            ? `${amberCount} KPI orange${amberCount > 1 ? "s" : ""}`
+            : dataKpis.length
+              ? "RAS critique"
+              : "En attente collecte";
+      }
+      if (actionPlan) {
+        actionPlan.innerHTML = criticalKpis.length
+          ? criticalKpis
+              .slice(0, 8)
+              .map((kpi) => {
+                const action = kpi.status === "red"
+                  ? "Decision attendue: action corrective prioritaire et responsable a confirmer."
+                  : "Decision attendue: suivi rapproche et commentaire responsable au prochain reporting.";
+                const targetMetric = metricFromTarget(kpi);
+                return `
+                  <article class="report-action-row status-${escapeHtml(kpi.status)}">
+                    <strong>${escapeHtml(kpi.poleName || kpi.poleId || "--")} - ${escapeHtml(kpi.name)}</strong>
+                    <span>${escapeHtml(action)}</span>
+                    <div class="report-action-meta">
+                      <small>Responsable: ${escapeHtml(kpi.poleOwner || "A affecter")}</small>
+                      <small>Echeance: ${escapeHtml(cycle.deadline)}</small>
+                      <small>Taux realise: ${escapeHtml(targetMetric.display)}</small>
+                      <small>Realise: ${escapeHtml(kpi.value || "--")}</small>
+                      <small>Objectif: ${escapeHtml(kpi.target || "--")}</small>
+                    </div>
+                  </article>
+                `;
+              })
+              .join("")
+          : `<div class="empty-kpi-state">${dataKpis.length ? "Aucun KPI rouge ou orange a transformer en plan d'action groupe." : "Le plan d'action groupe sera genere apres reception des donnees collectees."}</div>`;
+      }
+
+      $("#report-workflow").innerHTML = reporting.workflow
+        .map(
+          (item, index) => `
+            <div class="workflow-step">
+              <span>${index + 1}</span>
+              <div>
+                <strong>${escapeHtml(item.step)}</strong>
+                <p>${escapeHtml(item.detail)}</p>
+              </div>
+            </div>
+          `
+        )
+        .join("");
       return;
     }
     if (!authorizedPoles.some((item) => item.id === state.currentReportPole)) {

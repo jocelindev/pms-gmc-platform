@@ -1429,13 +1429,14 @@ def report_to_front(row: sqlite3.Row) -> dict:
         "format": row["format"],
         "status": row["status"],
         "generatedAt": row["generated_at"] or row["created_at"],
+        "comment": row["comment"] if "comment" in row.keys() else "",
     }
 
 
 def list_reports(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
         """
-        SELECT id, pole_id, cycle, period, format, status, generated_at, created_at
+        SELECT id, pole_id, cycle, period, format, status, generated_at, created_at, comment
         FROM reports
         WHERE id NOT LIKE 'CAL-%'
           AND id NOT LIKE 'RPT-2026-%'
@@ -2853,7 +2854,8 @@ def save_report(payload: dict) -> dict:
         raise ValueError("Rapport incomplet.")
 
     with db_connect() as conn:
-        ensure_pole(conn, pole_id, str(payload.get("poleName") or pole_id))
+        if pole_id not in {"Groupe", "__GROUP__"}:
+            ensure_pole(conn, pole_id, str(payload.get("poleName") or pole_id))
         conn.execute(
             """
             INSERT INTO reports (id, pole_id, cycle, period, format, status, generated_at, comment)
@@ -2882,7 +2884,7 @@ def save_report(payload: dict) -> dict:
         conn.commit()
         row = conn.execute(
             """
-            SELECT id, pole_id, cycle, period, format, status, generated_at, created_at
+            SELECT id, pole_id, cycle, period, format, status, generated_at, created_at, comment
             FROM reports
             WHERE id = ?
             """,
