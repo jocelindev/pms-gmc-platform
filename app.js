@@ -78,7 +78,7 @@
     if (!source?.role || !OPERATIONAL_KOBO_ROLES.has(source.role)) return null;
     return {
       role: source.role,
-      serverUrl: source.serverUrl || source.origin || "https://kf.kobotoolbox.org",
+      serverUrl: source.serverUrl || source.origin || "",
       formId: source.formId || source.uid || source.name || "",
       title: source.title || source.name || "",
       mode: source.mode || "",
@@ -1152,7 +1152,7 @@
     try {
       window.localStorage.setItem(KOBO_SOURCE_STORAGE_KEY, JSON.stringify(sources));
     } catch (error) {
-      console.warn("Sauvegarde locale des UID Kobo indisponible.", error);
+      console.warn("Sauvegarde locale des sources de collecte indisponible.", error);
     }
   }
 
@@ -1285,7 +1285,7 @@
         if (refreshed) {
           renderAll(state);
           renderKoboActiveForm();
-          showToast(status.lastError ? "Synchronisation Kobo terminee avec alerte." : "Synchronisation Kobo automatique terminee.");
+          showToast(status.lastError ? "Synchronisation de collecte terminee avec alerte." : "Synchronisation de collecte terminee.");
         }
       }
     } catch (error) {
@@ -1377,7 +1377,7 @@
       }
       showToast(`${successMessage} Base de donnees mise a jour.`);
     } catch (error) {
-      console.warn("Enregistrement Kobo indisponible.", error);
+      console.warn("Enregistrement de la source de collecte indisponible.", error);
       showToast(`${successMessage} Enregistrement local uniquement.`);
     }
   }
@@ -1565,6 +1565,7 @@
 
   function canAccessView(view) {
     const permissions = state.currentPermissions || {};
+    if (view === "kobo") return false;
     if (permissions.administration) return true;
     if (view === "collection") return Boolean(permissions.ajout);
     if (view === "admin") return false;
@@ -1798,7 +1799,7 @@
         amber,
         green,
         action: !measured.length
-          ? "Attente donnees Kobo"
+          ? "Attente donnees collectees"
           : red
             ? "Plan de rattrapage"
             : amber
@@ -1911,20 +1912,20 @@
       const hasServerToken = Boolean(state.koboAutoSync?.tokenConfigured);
 
       if (!serverUrl || !formUid || (!token && !hasServerToken)) {
-        setKoboStatus("warning", "Renseignez le serveur, l'ID formulaire et le jeton API, ou configurez PMS_KOBO_API_TOKEN sur Render.");
-        showToast("Synchronisation Kobo incomplete: informations manquantes.");
+        setKoboStatus("warning", "Import externe desactive. Utilisez la zone Collecte de donnees.");
+        showToast("Synchronisation de collecte incomplete: informations manquantes.");
         return;
       }
 
       if (/\s/.test(formUid)) {
         setKoboStatus("warning", "L'ID formulaire ne doit pas contenir d'espace.");
-        showToast("ID formulaire Kobo a verifier.");
+        showToast("ID formulaire a verifier.");
         return;
       }
 
       if (!api?.syncKoboForm) {
-        setKoboStatus("warning", "Le service de synchronisation Kobo n'est pas disponible.");
-        showToast("Synchronisation Kobo indisponible pour le moment.");
+        setKoboStatus("warning", "Le service d'import externe n'est pas disponible.");
+        showToast("Import externe indisponible pour le moment.");
         return;
       }
 
@@ -1933,7 +1934,7 @@
         triggerButton.disabled = true;
         triggerButton.textContent = "Synchronisation...";
       }
-      setKoboStatus("warning", `<strong>${escapeHtml(formUid)}</strong><span>Connexion a KoboToolbox en cours...</span>`);
+      setKoboStatus("warning", `<strong>${escapeHtml(formUid)}</strong><span>Connexion a la source externe en cours...</span>`);
 
       try {
         const result = await api.syncKoboForm({ serverUrl, formUid, token });
@@ -1977,11 +1978,11 @@
           result.syncWarning ? "warning" : "success",
           `<strong>${escapeHtml(uidInput.value)}</strong><span>${fieldsDetected} champ(s) detecte(s) - ${submissionsImported} soumission(s) lue(s)</span>${warning}`
         );
-        showToast(`Kobo synchronise: ${fieldsDetected} champ(s), ${submissionsImported} soumission(s).`);
+        showToast(`Collecte synchronisee: ${fieldsDetected} champ(s), ${submissionsImported} soumission(s).`);
       } catch (error) {
-        console.warn("Synchronisation Kobo impossible.", error);
+        console.warn("Synchronisation de collecte impossible.", error);
         setKoboStatus("warning", `Synchronisation impossible: ${escapeHtml(error.message)}`);
-        showToast(`Synchronisation Kobo impossible: ${error.message}`);
+        showToast(`Synchronisation de collecte impossible: ${error.message}`);
       } finally {
         if (triggerButton) {
           triggerButton.disabled = false;
@@ -2007,12 +2008,12 @@
       fileInput.value = "";
       dropZone.classList.remove("drag-over");
       $("#kobo-connection-status").className = "connector-status empty";
-      $("#kobo-connection-status").textContent = "Aucun formulaire Kobo connecte.";
+      $("#kobo-connection-status").textContent = "Aucune source externe connectee.";
       $("#kobo-upload-summary").className = "upload-summary empty";
       $("#kobo-upload-summary").textContent = "Aucun formulaire charge.";
       state.koboActiveForm = null;
       renderKoboActiveForm();
-      showToast("Configuration Kobo reinitialisee.");
+      showToast("Configuration de collecte reinitialisee.");
     });
 
     fileInput.addEventListener("change", (event) => {
@@ -2070,7 +2071,7 @@
       card.innerHTML = `
         <div class="active-empty-state">
           <strong>Aucune source active</strong>
-          <span>Connecter un formulaire KoboToolbox ou charger un fichier KoboCollect pour afficher les champs detectes.</span>
+          <span>Connecter une source externe ou charger un fichier de collecte pour afficher les champs detectes.</span>
         </div>
       `;
       table.innerHTML = `<tr><td colspan="3">Aucun champ detecte pour le moment.</td></tr>`;
@@ -2114,7 +2115,7 @@
     if (!acceptedExtensions.includes(extension)) {
       summary.className = "upload-summary warning";
       summary.textContent = "Format non accepte. Utilisez .xlsx, .xls, .xml, .xform ou .csv.";
-      showToast("Format de formulaire Kobo non accepte.");
+      showToast("Format de formulaire non accepte.");
       return;
     }
 
@@ -2131,7 +2132,7 @@
       reader.addEventListener("error", () => {
         summary.className = "upload-summary warning";
         summary.textContent = "Impossible de lire le fichier selectionne.";
-        showToast("Lecture du formulaire Kobo impossible.");
+        showToast("Lecture du formulaire impossible.");
       });
       reader.readAsText(file);
       return;
@@ -2141,7 +2142,7 @@
       file,
       [
         { name: "survey", type: "Onglet XLSForm", label: "Structure du formulaire a analyser au branchement backend." },
-        { name: "choices", type: "Onglet XLSForm", label: "Listes de choix KoboCollect." },
+        { name: "choices", type: "Onglet XLSForm", label: "Listes de choix du formulaire." },
         { name: "settings", type: "Onglet XLSForm", label: "Parametres du formulaire." },
       ],
       "XLSForm"
@@ -2161,7 +2162,7 @@
     $("#kobo-upload-summary").className = "upload-summary success";
     $("#kobo-upload-summary").innerHTML = `<strong>${escapeHtml(file.name)}</strong><span>${escapeHtml(formType)} - ${formatBytes(file.size)}</span>`;
     renderKoboActiveForm();
-    persistKoboActiveForm("Formulaire KoboCollect charge dans la plateforme.");
+    persistKoboActiveForm("Formulaire de collecte charge dans la plateforme.");
   }
 
   function extractXmlFields(content) {
@@ -2177,7 +2178,7 @@
       .slice(0, 40)
       .map((node) => {
         const rawName = node.getAttribute("ref") || node.getAttribute("nodeset") || node.getAttribute("name") || node.localName;
-        const label = Array.from(node.children).find((child) => child.localName === "label")?.textContent?.trim() || "Champ KoboCollect";
+        const label = Array.from(node.children).find((child) => child.localName === "label")?.textContent?.trim() || "Champ de collecte";
         return {
           name: rawName.split("/").filter(Boolean).pop() || rawName,
           type: node.localName,
@@ -2323,7 +2324,7 @@
         state.calendarDateDropdownOpen = false;
         ensureCalendarDateFromAvailableData();
         renderCalendarSlicer(state);
-        showToast("Aucune donnee Kobo n'a encore ete montee pour cette date.");
+        showToast("Aucune donnee collectee n'a encore ete montee pour cette date.");
         return;
       }
       state.calendarDateDropdownOpen = false;
@@ -3266,7 +3267,7 @@
       );
 
       if (!serverUrl || !formId) {
-        updateAdminKoboStatus(statusId, "warning", "Renseignez le serveur Kobo et l'ID du formulaire.");
+        updateAdminKoboStatus(statusId, "warning", "Renseignez le serveur et l'ID du formulaire.");
         showToast(`${successLabel} incomplet.`);
         return;
       }
@@ -3291,7 +3292,7 @@
             })),
           });
         } catch (error) {
-          console.warn("Enregistrement de la source Kobo indisponible.", error);
+          console.warn("Enregistrement de la source de collecte indisponible.", error);
         }
       }
       updateAdminKoboStatus(
@@ -3312,14 +3313,14 @@
         updateAdminKoboStatus(
           config.statusId,
           "warning",
-          "Renseignez le token API Kobo ou configurez PMS_KOBO_API_TOKEN sur Render."
+          "L'import externe est desactive. Utilisez la zone Collecte de donnees."
         );
-        showToast("Token API Kobo requis pour importer les soumissions.");
+        showToast("Import externe desactive.");
         return;
       }
       if (!api?.syncKoboForm) {
-        updateAdminKoboStatus(config.statusId, "warning", "Synchronisation Kobo indisponible pour le moment.");
-        showToast("Synchronisation Kobo indisponible.");
+        updateAdminKoboStatus(config.statusId, "warning", "Import externe indisponible pour le moment.");
+        showToast("Import externe indisponible.");
         return;
       }
 
@@ -3334,7 +3335,7 @@
         updateAdminKoboStatus(
           config.statusId,
           "warning",
-          `<strong>${escapeHtml(savedSource.formId)}</strong><span>Connexion a KoboToolbox et import des soumissions...</span>`
+          `<strong>${escapeHtml(savedSource.formId)}</strong><span>Connexion a la source externe et import des soumissions...</span>`
         );
         const result = await api.syncKoboForm({
           serverUrl: savedSource.serverUrl,
@@ -3375,7 +3376,7 @@
         );
         showToast(`${config.successLabel} synchronise: ${result.submissionsImported || 0} soumission(s).`);
       } catch (error) {
-        console.warn("Synchronisation admin Kobo impossible.", error);
+        console.warn("Synchronisation admin de collecte impossible.", error);
         updateAdminKoboStatus(config.statusId, "warning", `Synchronisation impossible: ${escapeHtml(error.message)}`);
         showToast(`Synchronisation impossible: ${error.message}`);
       } finally {
@@ -3394,7 +3395,7 @@
           statusId: "#admin-kobo-reference-status",
           serverInputId: "#admin-kobo-reference-server",
           formInputId: "#admin-kobo-reference-form-id",
-          mode: "KoboCollect Referentiel KPI",
+          mode: "Collecte referentiel KPI",
           detail: "KPI et formules de calcul par pole.",
           successLabel: "Formulaire KPI et formules",
           fieldType: "Champ referentiel KPI",
@@ -3413,7 +3414,7 @@
           serverInputId: "#admin-kobo-reference-server",
           formInputId: "#admin-kobo-reference-form-id",
           tokenInputId: "#admin-kobo-reference-token",
-          mode: "KoboCollect Referentiel KPI",
+          mode: "Collecte referentiel KPI",
           detail: "KPI et formules de calcul par pole.",
           successLabel: "Formulaire KPI et formules",
           fieldType: "Champ referentiel KPI",
@@ -3430,7 +3431,7 @@
           statusId: "#admin-kobo-monthly-objective-status",
           serverInputId: "#admin-kobo-monthly-objective-server",
           formInputId: "#admin-kobo-monthly-objective-form-id",
-          mode: "KoboCollect Objectifs mensuels",
+          mode: "Collecte objectifs mensuels",
           detail: "Objectifs mensuels par pays / filiale, pole, KPI et mois.",
           successLabel: "Formulaire objectifs mensuels",
           fieldType: "Champ objectifs mensuels",
@@ -3449,7 +3450,7 @@
           serverInputId: "#admin-kobo-monthly-objective-server",
           formInputId: "#admin-kobo-monthly-objective-form-id",
           tokenInputId: "#admin-kobo-monthly-objective-token",
-          mode: "KoboCollect Objectifs mensuels",
+          mode: "Collecte objectifs mensuels",
           detail: "Objectifs mensuels par pays / filiale, pole, KPI et mois.",
           successLabel: "Formulaire objectifs mensuels",
           fieldType: "Champ objectifs mensuels",
@@ -3466,7 +3467,7 @@
           statusId: "#admin-kobo-calculation-status",
           serverInputId: "#admin-kobo-calculation-server",
           formInputId: "#admin-kobo-calculation-form-id",
-          mode: "KoboCollect Donnees de calcul",
+          mode: "Collecte donnees de calcul",
           detail: "Elements bruts utilises pour calculer les KPI.",
           successLabel: "Formulaire donnees de calcul",
           fieldType: "Champ donnees de calcul",
@@ -3485,7 +3486,7 @@
           serverInputId: "#admin-kobo-calculation-server",
           formInputId: "#admin-kobo-calculation-form-id",
           tokenInputId: "#admin-kobo-calculation-token",
-          mode: "KoboCollect Donnees de calcul",
+          mode: "Collecte donnees de calcul",
           detail: "Elements bruts utilises pour calculer les KPI.",
           successLabel: "Formulaire donnees de calcul",
           fieldType: "Champ donnees de calcul",

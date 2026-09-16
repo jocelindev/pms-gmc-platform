@@ -26,12 +26,12 @@ DEFAULT_DB_PATH = DATABASE_DIR / "pms_gmc.sqlite"
 PASSWORD_ITERATIONS = 210_000
 DEFAULT_ADMIN_PASSWORD = os.environ.get("PMS_ADMIN_PASSWORD", "Admin@2026!")
 DEFAULT_USER_PASSWORD = os.environ.get("PMS_DEFAULT_USER_PASSWORD", "Palladium@2026!")
-DEFAULT_KOBO_SERVER_URL = "https://kf.kobotoolbox.org"
+DEFAULT_KOBO_SERVER_URL = ""
 DEFAULT_KOBO_SOURCES = [
     {
         "uid": "aJSryGjJv4Jzz9YRcP8D67",
         "title": "PMS GMC - Formulaire 1 - Referentiel KPI et formules",
-        "source_type": "KoboCollect Referentiel KPI",
+        "source_type": "Collecte referentiel KPI",
         "cadence": "Selon periode",
         "fields": {
             "id": "id_kpi",
@@ -68,7 +68,7 @@ DEFAULT_KOBO_SOURCES = [
     {
         "uid": "aNdbykKVWBW8KeprR5M2Uj",
         "title": "PMS GMC - Formulaire Objectifs mensuels",
-        "source_type": "KoboCollect Objectifs mensuels",
+        "source_type": "Collecte objectifs mensuels",
         "cadence": "Mensuel",
         "fields": {
             "branch": "pays_filiale",
@@ -88,7 +88,7 @@ DEFAULT_KOBO_SOURCES = [
     {
         "uid": "aCdB3YF8vSppFsVBroKm9W",
         "title": "PMS GMC - Formulaire 2 - Donnees de calcul journalieres",
-        "source_type": "KoboCollect Donnees de calcul",
+        "source_type": "Collecte donnees de calcul",
         "cadence": "Journalier",
         "fields": {
             "pole": "pole_id",

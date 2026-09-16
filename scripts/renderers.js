@@ -483,7 +483,7 @@
 
   function fallbackTrendMetric(kpi = {}, pole = {}, label) {
     const trend = String(kpi.trend || "").trim();
-    if (!trend || ["calcul kobo", "reference kobo", "a synchroniser", "stable"].includes(normalizeLookup(trend))) {
+    if (!trend || ["calcul kobo", "reference kobo", "calcul collecte", "reference collecte", "a synchroniser", "stable"].includes(normalizeLookup(trend))) {
       return { label, display: "--", className: trend && normalizeLookup(trend) === "stable" ? "neutral" : "empty" };
     }
     const cadence = normalizeLookup(`${kpiCollectionFrequency(kpi, pole)} ${kpi.source || ""}`);
@@ -1774,7 +1774,7 @@
       red,
       amber,
       green,
-      label: rows.length ? `${rows.length} KPI` : "Kobo",
+      label: rows.length ? `${rows.length} KPI` : "Collecte",
     };
   }
 
@@ -2500,7 +2500,7 @@
         ? actionRecommendation(topDecisionRow)
         : dataRows.length
           ? "Continuer le suivi de la periode et preparer la validation du rapport."
-          : "Synchroniser Kobo puis controler le rapprochement des trois formulaires.";
+          : "Renseigner la collecte de donnees puis controler le rapprochement des trois blocs.";
       const coverageHint = dataRows.length
         ? `${scoredDirectionCount} pole(s), ${dataCountryNames.length || 1} pays/filiale, ${activeDataMode.toLowerCase()}`
         : `${context.visiblePoles.length} pole(s) visibles, donnees attendues`;
@@ -2547,19 +2547,19 @@
         ? bestDirection
           ? `${bestDirection.pole.name} porte le meilleur score du perimetre avec ${bestDirection.scoreValue}/100. ${greenRows.length} KPI sont au vert.`
           : `${greenRows.length} KPI sont au vert sur le perimetre actif.`
-        : "Les points forts seront identifies apres reception et calcul des donnees Kobo.";
+        : "Les points forts seront identifies apres reception et calcul des donnees collectees.";
       const blockMessage = dataRows.length
         ? redRows.length || amberRows.length
-          ? `${redRows.length} KPI rouge(s), ${amberRows.length} KPI orange(s) et ${koboIssueCount} ecart(s) Kobo restent a traiter.`
+          ? `${redRows.length} KPI rouge(s), ${amberRows.length} KPI orange(s) et ${koboIssueCount} ecart(s) de collecte restent a traiter.`
           : koboIssueCount
-            ? `${koboIssueCount} ecart(s) Kobo sont a corriger pour fiabiliser le pilotage.`
+            ? `${koboIssueCount} ecart(s) de collecte sont a corriger pour fiabiliser le pilotage.`
             : "Aucun blocage critique detecte sur les KPI calcules."
         : "Le blocage principal est l'absence de donnees calculees sur le perimetre actif.";
       const decisionMessage = topDecisionRow
         ? `${actionRecommendation(topDecisionRow)} Priorite: ${topDecisionRow.kpi.name} / ${topDecisionRow.pole.name}.`
         : dataRows.length
           ? "Maintenir le rythme de collecte et valider les rapports de la periode."
-          : "Demander la synchronisation Kobo et la publication des donnees de calcul.";
+          : "Demander la saisie des donnees realisees et la publication des calculs.";
       const briefCards = [
         { label: "Ce qui va bien", title: bestDirection ? bestDirection.pole.id : "Performance", body: goodMessage },
         { label: "Ce qui bloque", title: redRows.length ? "Alerte KPI" : koboIssueCount ? "Qualite collecte" : "Controle", body: blockMessage },
@@ -2623,7 +2623,7 @@
               `
             )
             .join("")
-        : `<div class="empty-kpi-state">La comparaison entre poles sera disponible apres calcul des donnees Kobo.</div>`;
+        : `<div class="empty-kpi-state">La comparaison entre poles sera disponible apres calcul des donnees collectees.</div>`;
     }
 
     const directionScoreStatus = $("#management-direction-score-status");
@@ -2742,7 +2742,7 @@
                             ${cell.hasData ? "" : "disabled"}
                           >
                             <strong>${escapeHtml(cell.score === null ? "--" : cell.score)}</strong>
-                            <small>${escapeHtml(cell.hasData ? cell.label : "Kobo")}</small>
+                            <small>${escapeHtml(cell.hasData ? cell.label : "Collecte")}</small>
                           </button>
                         </td>
                       `;
@@ -2790,7 +2790,7 @@
               `;
             })
             .join("")
-        : `<div class="empty-kpi-state">${dataRows.length ? "Aucune priorite critique sur le perimetre actif." : "Les priorites PDG apparaitront apres synchronisation et calcul Kobo."}</div>`;
+        : `<div class="empty-kpi-state">${dataRows.length ? "Aucune priorite critique sur le perimetre actif." : "Les priorites PDG apparaitront apres saisie et calcul des donnees collectees."}</div>`;
     }
 
     const objectiveStatus = $("#management-objective-status");
@@ -3066,7 +3066,7 @@
         `
           )
           .join("")
-      : `<tr><td colspan="6">Aucune soumission Kobo visible pour ${escapeHtml(activeCountry.name)}.</td></tr>`;
+      : `<tr><td colspan="6">Aucune donnee collectee visible pour ${escapeHtml(activeCountry.name)}.</td></tr>`;
   }
 
   function renderCollectionForms() {
@@ -3216,13 +3216,13 @@
             <td>${escapeHtml(item.frequency)}</td>
             <td>${escapeHtml(target || "A completer")}</td>
             <td>${escapeHtml(item.formula || "Formule a completer")}</td>
-            <td>${escapeHtml(item.source || "KoboCollect")} #${escapeHtml(item.id || "")}</td>
+            <td>${escapeHtml(item.source || "Collecte")} #${escapeHtml(item.id || "")}</td>
             <td>${statusPill(item.calculated ? ragLabel(status) : "Reference collecte", status)}</td>
           </tr>
         `;
       })
       .join("")
-      : `<tr><td colspan="7">Aucun KPI disponible. Le formulaire 1 Kobo doit d'abord alimenter le referentiel.</td></tr>`;
+      : `<tr><td colspan="7">Aucun KPI disponible. Le referentiel KPI doit d'abord etre alimente.</td></tr>`;
   }
 
   function renderGroups() {
@@ -3272,7 +3272,7 @@
               <article class="alert-card ${item.severity === "Bloquant" ? "critical" : "warning"}">
                 ${statusPill(item.severity || "A corriger", item.statusClass || (item.severity === "Bloquant" ? "red" : "amber"))}
                 <h3>${escapeHtml(item.kpi || item.poleName || "Ligne a verifier")}</h3>
-                <strong>${escapeHtml(item.form || "KoboCollect")} - ${escapeHtml(item.period || "Periode a verifier")}</strong>
+                <strong>${escapeHtml(item.form || "Collecte de donnees")} - ${escapeHtml(item.period || "Periode a verifier")}</strong>
                 <p>${escapeHtml(item.issue || "Anomalie de rapprochement")} ${item.action ? `- ${escapeHtml(item.action)}` : ""}</p>
               </article>
             `
@@ -3541,8 +3541,8 @@
                 <article class="internal-correction-item status-${escapeHtml(item.statusClass || (item.severity === "Bloquant" ? "red" : "amber"))}">
                   ${statusPill(item.severity || "A corriger", item.statusClass || (item.severity === "Bloquant" ? "red" : "amber"))}
                   <div>
-                    <strong>${escapeHtml(item.issue || item.category || "Correction Kobo")}</strong>
-                    <p>${escapeHtml(item.form || "KoboCollect")} - ${escapeHtml(item.poleName || item.pole || "Perimetre a verifier")}</p>
+                    <strong>${escapeHtml(item.issue || item.category || "Correction collecte")}</strong>
+                    <p>${escapeHtml(item.form || "Collecte de donnees")} - ${escapeHtml(item.poleName || item.pole || "Perimetre a verifier")}</p>
                     <small>${escapeHtml(item.action || "Verifier le mapping et la soumission source.")}</small>
                   </div>
                 </article>
@@ -3615,10 +3615,10 @@
       const shortcutItems = [
         { label: "Collecte de donnees", body: "Referentiel, objectifs et realises", view: "collection", allowed: canCollect },
         { label: "Management", body: "Synthese PDG et scoring directions", view: "management", allowed: canManage },
-        { label: "Suivi par pole", body: "KPI, preuves Kobo et publication", view: "poles", allowed: canConsult },
+        { label: "Suivi par pole", body: "KPI, preuves de collecte et publication", view: "poles", allowed: canConsult },
         { label: "Plans d'action", body: "Actions SMART et responsables", view: "actions", allowed: canConsult },
         { label: "Reporting", body: "Rapports periodiques et exports", view: "reports", allowed: canConsult },
-        { label: "Administration", body: "Droits, sources et base", view: "admin", tab: "kobo", allowed: canAdmin },
+        { label: "Administration", body: "Droits, collecte et base", view: "admin", tab: "kobo", allowed: canAdmin },
       ];
       shortcuts.innerHTML = shortcutItems
         .map(
@@ -3669,7 +3669,7 @@
     const context = getDashboardContext(state);
     const rows = scopedKpiDataRows(context.kpiRows).filter((row) => Array.isArray(row.kpi.trendHistory) && row.kpi.trendHistory.length);
     if (!rows.length) {
-      target.innerHTML = `<div class="empty-kpi-state">La matrice d'amelioration sera alimentee par l'historique Kobo des KPI.</div>`;
+      target.innerHTML = `<div class="empty-kpi-state">La matrice d'amelioration sera alimentee par l'historique de collecte des KPI.</div>`;
       return;
     }
     const periods = [...new Set(rows.flatMap((row) => row.kpi.trendHistory.map((point) => point.period).filter(Boolean)))].slice(-6);
@@ -3693,7 +3693,7 @@
     const results = stateKpiResults(state);
     const hourlyResults = results.filter((item) => normalizeLookup(item.collectionFrequency || item.reportingFrequency || "").includes("horaire"));
     if (!hourlyResults.length) {
-      target.innerHTML = `<div class="empty-kpi-state">Analyse horaire disponible apres collecte horaire Kobo.</div>`;
+      target.innerHTML = `<div class="empty-kpi-state">Analyse horaire disponible apres saisie des donnees horaires.</div>`;
       return;
     }
     target.innerHTML = hourlyResults.slice(0, 12)
@@ -3729,7 +3729,7 @@
             `
           )
           .join("")
-      : `<div class="empty-kpi-state">Les pertes et ecarts seront calcules depuis les donnees Kobo validees.</div>`;
+      : `<div class="empty-kpi-state">Les pertes et ecarts seront calcules depuis les donnees collectees validees.</div>`;
   }
 
   function renderTimeHeatmap(state = {}) {
@@ -3737,7 +3737,7 @@
     if (!target) return;
     const dates = stateDailyDates(state);
     if (!dates.length) {
-      target.innerHTML = `<div class="empty-kpi-state">La heatmap temps sera disponible apres reception de donnees journalieres Kobo.</div>`;
+      target.innerHTML = `<div class="empty-kpi-state">La heatmap temps sera disponible apres reception de donnees journalieres.</div>`;
       return;
     }
     const grouped = dates.slice(0, 25).map((item) => ({
@@ -4413,7 +4413,7 @@
       </div>
       <div>
         <span>Rapport</span>
-        <strong>${escapeHtml(hasData ? `${pole.lastReport} - ${pole.status}` : "En attente donnees Kobo")}</strong>
+        <strong>${escapeHtml(hasData ? `${pole.lastReport} - ${pole.status}` : "En attente donnees collectees")}</strong>
       </div>
     `;
     $("#selected-kpi-cards").innerHTML = kpis.length
@@ -4563,7 +4563,7 @@
         `
           )
           .join("")
-      : `<div class="empty-kpi-state">La diffusion sera disponible apres generation d'un rapport base sur les donnees Kobo.</div>`;
+      : `<div class="empty-kpi-state">La diffusion sera disponible apres generation d'un rapport base sur les donnees collectees.</div>`;
   }
 
   function reportStatusClass(status) {
@@ -4724,7 +4724,7 @@
               <th>Valeur</th>
               <th>Objectif</th>
               <th>Tendance</th>
-              <th>Source Kobo</th>
+              <th>Source collecte</th>
               <th>Taux realise</th>
             </tr>
           </thead>
@@ -4751,8 +4751,8 @@
         <p>
           ${
             hasData
-              ? `Le rapport ${escapeHtml(cycle.value.toLowerCase())} du ${escapeHtml(pole.name)} sur ${escapeHtml(activePeriod)} consolide les donnees Kobo, les ecarts aux objectifs, les alertes RAG et les plans d'action. Les KPI rouges doivent obligatoirement etre commentes avant validation N+1.`
-              : `Le rapport ${escapeHtml(cycle.value.toLowerCase())} du ${escapeHtml(pole.name)} est pret a recevoir les donnees Kobo. Les indicateurs de performance seront generes automatiquement des que des soumissions seront importees.`
+              ? `Le rapport ${escapeHtml(cycle.value.toLowerCase())} du ${escapeHtml(pole.name)} sur ${escapeHtml(activePeriod)} consolide les donnees collectees, les ecarts aux objectifs, les alertes RAG et les plans d'action. Les KPI rouges doivent obligatoirement etre commentes avant validation N+1.`
+              : `Le rapport ${escapeHtml(cycle.value.toLowerCase())} du ${escapeHtml(pole.name)} est pret a recevoir les donnees collectees. Les indicateurs de performance seront generes automatiquement des que les donnees seront saisies.`
           }
         </p>
       </div>
@@ -4798,7 +4798,7 @@
                 `;
               })
               .join("")
-          : `<div class="empty-kpi-state">${dataKpis.length ? "Aucun KPI rouge ou orange a transformer en plan d'action." : "Le plan d'action sera genere apres reception des donnees Kobo."}</div>`;
+          : `<div class="empty-kpi-state">${dataKpis.length ? "Aucun KPI rouge ou orange a transformer en plan d'action." : "Le plan d'action sera genere apres reception des donnees collectees."}</div>`;
       }
     }
 
@@ -4884,7 +4884,7 @@
       <div class="admin-summary-card">
         <span>Soumissions collecte</span>
         <strong>${formatCount(koboTable?.rowCount || 0)}</strong>
-        <small>Table kobo_submissions</small>
+        <small>Historique de collecte</small>
       </div>
     `;
 
@@ -4905,18 +4905,19 @@
     if (tableList) {
       tableList.innerHTML = tables.length
         ? tables
-            .map(
-              (table) => `
+            .map((table) => {
+              const displayName = table.name?.startsWith("kobo_") ? table.label : table.name;
+              return `
                 <button
                   class="database-table-item ${table.name === selectedTable?.name ? "active" : ""}"
                   type="button"
                   data-database-table="${escapeHtml(table.name)}"
                 >
                   <strong>${escapeHtml(table.label)}</strong>
-                  <span>${escapeHtml(table.name)} - ${formatCount(table.rowCount)} ligne(s) - ${formatCount(table.columnCount)} champ(s)</span>
+                  <span>${escapeHtml(displayName)} - ${formatCount(table.rowCount)} ligne(s) - ${formatCount(table.columnCount)} champ(s)</span>
                 </button>
-              `
-            )
+              `;
+            })
             .join("")
         : `<div class="database-empty">Aucune table trouvee.</div>`;
     }
@@ -4981,7 +4982,7 @@
     if (adminPageTitle) adminPageTitle.textContent = "Administration";
     if (adminPageDescription) {
       adminPageDescription.textContent =
-        "Gerer les droits d'acces, les sources de synchronisation, les controles de donnees et la base de la plateforme.";
+        "Gerer les droits d'acces, la collecte de donnees, les controles et la base de la plateforme.";
     }
     if (!canManageAdministration && state.currentAdminTab !== "kobo") {
       state.currentAdminTab = "kobo";
@@ -4997,7 +4998,7 @@
       panel.classList.toggle("active", isAvailable && panel.dataset.adminPanel === state.currentAdminTab);
     });
     document.querySelectorAll(".admin-kobo-source-panel").forEach((panel) => {
-      panel.hidden = !canManageAdministration;
+      panel.hidden = true;
     });
 
     const reporting = PMS_DATA.reporting;
@@ -5442,7 +5443,7 @@
           ? `Derniere synchro: ${formatSyncDate(autoSync.lastSyncAt)}`
           : autoSync.tokenConfigured
             ? "Premiere synchronisation en attente."
-            : "Ajouter PMS_KOBO_API_TOKEN dans Render pour automatiser.";
+            : "Import externe desactive par defaut.";
       autoSummary.innerHTML = `
         <span>Synchronisation automatique</span>
         <strong>${escapeHtml(statusLabel)}</strong>
@@ -5528,7 +5529,7 @@
                 ${statusPill(form.status || "A verifier", form.statusClass || "gray")}
               </div>
               <strong>${escapeHtml(form.formId || "Non configure")}</strong>
-              <small>${escapeHtml(form.serverUrl || "Serveur Kobo a renseigner")}</small>
+              <small>${escapeHtml(form.serverUrl || "Source de collecte a renseigner")}</small>
               <div class="admin-kobo-audit-metrics">
                 <span><b>${formatInteger(form.fieldCount)}</b> champs</span>
                 <span><b>${formatInteger(form.submissionCount)}</b> soumissions</span>

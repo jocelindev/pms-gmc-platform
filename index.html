@@ -147,7 +147,7 @@
         <div class="sidebar-note">
           <span class="eyebrow">Source primaire</span>
           <strong>Collecte integree</strong>
-          <p>Saisie plateforme, controle qualite et import Kobo optionnel vers le referentiel KPI.</p>
+          <p>Saisie plateforme, controle qualite et alimentation directe du referentiel KPI.</p>
         </div>
       </aside>
 
@@ -615,12 +615,12 @@
           </section>
         </section>
 
-        <section class="view" id="kobo">
+        <section class="view legacy-kobo-view" id="kobo" hidden aria-hidden="true">
           <div class="section-intro">
             <div>
-              <p class="eyebrow">KoboCollect</p>
-              <h2>Connexion au formulaire KoboCollect</h2>
-              <p>Saisir les donnees dans la plateforme ou verifier les anciennes sources Kobo connectees.</p>
+              <p class="eyebrow">Collecte historique</p>
+              <h2>Connexion a une source externe</h2>
+              <p>Saisir les donnees dans la plateforme ou verifier les anciennes sources connectees.</p>
             </div>
           </div>
 
@@ -631,25 +631,25 @@
                   <span class="step-badge">1</span>
                   <div>
                     <p class="eyebrow">Connexion formulaire</p>
-                    <h3>Connecter un formulaire KoboToolbox</h3>
+                    <h3>Connecter une source externe</h3>
                   </div>
                 </div>
               </div>
               <div class="kobo-connector-form">
                 <label class="wide-field">
-                  Adresse du serveur Kobo
-                  <input id="kobo-server-url" class="search-input" inputmode="url" autocomplete="url" placeholder="https://kf.kobotoolbox.org" />
-                  <small class="form-hint">Exemple : https://kf.kobotoolbox.org</small>
+                  Adresse du serveur externe
+                  <input id="kobo-server-url" class="search-input" inputmode="url" autocomplete="url" placeholder="https://source-externe.example" />
+                  <small class="form-hint">Import externe desactive par defaut.</small>
                 </label>
                 <label>
                   ID formulaire / Asset UID
                   <input id="kobo-form-uid" class="search-input" placeholder="ex. aBcDeFg12345" />
-                  <small class="form-hint">Identifiant visible dans KoboToolbox.</small>
+                  <small class="form-hint">Identifiant de la source externe.</small>
                 </label>
                 <label class="wide-field">
                   Jeton API
                   <div class="token-input-wrap">
-                    <input id="kobo-api-token" class="search-input" type="password" autocomplete="off" placeholder="Token KoboToolbox" />
+                    <input id="kobo-api-token" class="search-input" type="password" autocomplete="off" placeholder="Token API externe" />
                     <button class="ghost-action token-toggle" id="toggle-kobo-token" type="button">Afficher</button>
                   </div>
                   <small class="form-hint">Le jeton reste dans cette session de travail.</small>
@@ -660,7 +660,7 @@
                 </div>
               </div>
               <div class="connector-status empty" id="kobo-connection-status">
-                Aucun formulaire Kobo connecte.
+                Aucune source externe connectee.
               </div>
             </section>
 
@@ -670,7 +670,7 @@
                   <span class="step-badge">2</span>
                   <div>
                     <p class="eyebrow">Chargement local</p>
-                    <h3>Charger un formulaire KoboCollect</h3>
+                    <h3>Charger un fichier de collecte</h3>
                   </div>
                 </div>
               </div>
@@ -698,7 +698,7 @@
                   <span class="step-badge">3</span>
                   <div>
                     <p class="eyebrow">Formulaire actif</p>
-                    <h3>Source Kobo utilisee pour alimenter la plateforme</h3>
+                    <h3>Source historique utilisee pour alimenter la plateforme</h3>
                   </div>
                 </div>
                 <div class="active-meta-pills">
@@ -709,7 +709,7 @@
               <div class="active-form-card" id="kobo-active-form">
                 <div class="active-empty-state">
                   <strong>Aucune source active</strong>
-                  <span>Connecter un formulaire KoboToolbox ou charger un fichier KoboCollect pour afficher les champs detectes.</span>
+                  <span>Connecter une source externe ou charger un fichier de collecte pour afficher les champs detectes.</span>
                 </div>
               </div>
               <div class="table-wrap form-fields-wrap">
@@ -1026,14 +1026,14 @@
             <div>
               <p class="eyebrow">Administration</p>
               <h2 id="admin-page-title">Administration</h2>
-              <p id="admin-page-description">Gerer les droits d'acces, les sources de synchronisation, les controles de donnees et la base de la plateforme.</p>
+              <p id="admin-page-description">Gerer les droits d'acces, la collecte de donnees, les controles et la base de la plateforme.</p>
             </div>
           </div>
 
           <div class="admin-submenu" role="tablist" aria-label="Sous-menu administration">
             <button class="admin-tab-button active" type="button" data-admin-tab="kobo">
-              <strong>Sources de donnees</strong>
-              <span>Import Kobo optionnel et controles</span>
+              <strong>Collecte de donnees</strong>
+              <span>Saisie, suivi et controles</span>
             </button>
             <button class="admin-tab-button" type="button" data-admin-tab="objectives">
               <strong>Objectifs</strong>
@@ -1433,7 +1433,7 @@
               <section class="panel span-3 admin-kobo-source-panel">
                 <div class="panel-header">
                   <div>
-                    <p class="eyebrow">Passerelle KoboCollect</p>
+                    <p class="eyebrow">Passerelle historique</p>
                     <h3>Import optionnel depuis les anciens formulaires</h3>
                   </div>
                 </div>
@@ -1459,7 +1459,7 @@
                     <p>Rapproche les trois sources par pays / filiale, pole, KPI et periode pour alimenter les dashboards.</p>
                   </div>
                 </div>
-                <div class="kobo-template-actions" aria-label="Modeles Kobo XLSForm">
+                <div class="kobo-template-actions" aria-label="Modeles historiques XLSForm">
                   <a class="ghost-action" href="kobo_forms/PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026_corrige_pays_20260720.xlsx" download>
                     Telecharger formulaire 1
                   </a>
@@ -1474,9 +1474,9 @@
                   </a>
                 </div>
                 <p class="kobo-template-note">
-                  Telecharger les modeles corriges, les importer dans KoboToolbox, puis renseigner les UID publies dans les zones ci-dessous.
+                  Les anciens modeles restent conserves pour l'historique, mais la saisie active se fait dans Collecte de donnees.
                 </p>
-                <div class="kobo-sync-ready" aria-label="Configuration Kobo prete">
+                <div class="kobo-sync-ready" aria-label="Configuration de collecte prete">
                   <div id="admin-kobo-reference-quick">
                     <span>Formulaire 1 configure</span>
                     <strong>A connecter</strong>
@@ -1495,7 +1495,7 @@
                   <div id="admin-kobo-auto-summary">
                     <span>Synchronisation automatique</span>
                     <strong>Token Render a configurer</strong>
-                    <small>Ajouter PMS_KOBO_API_TOKEN pour activer la synchronisation toutes les 5 minutes.</small>
+                    <small>Import externe desactive par defaut.</small>
                   </div>
                 </div>
                 <div class="admin-kobo-audit" id="admin-kobo-audit" aria-label="Audit qualite des donnees collecte">
@@ -1545,15 +1545,15 @@
                 </div>
                 <div class="admin-kobo-form admin-kobo-dual-form">
                   <label>
-                    Adresse serveur Kobo
-                    <input id="admin-kobo-reference-server" class="search-input" inputmode="url" value="https://kf.kobotoolbox.org" placeholder="https://kf.kobotoolbox.org" />
+                    Adresse serveur externe
+                    <input id="admin-kobo-reference-server" class="search-input" inputmode="url" value="" placeholder="https://source-externe.example" />
                   </label>
                   <label>
                     ID formulaire KPI / formules
                     <input id="admin-kobo-reference-form-id" class="search-input" value="aJSryGjJv4Jzz9YRcP8D67" placeholder="ex. aKPIFormules2026" />
                   </label>
                   <label>
-                    Token API Kobo
+                    Token API externe
                     <input id="admin-kobo-reference-token" class="search-input" type="password" autocomplete="off" placeholder="Token API pour synchroniser" />
                   </label>
                 </div>
@@ -1679,7 +1679,7 @@
                     Enregistrer le formulaire KPI et formules
                   </button>
                   <button class="ghost-action" id="admin-kobo-reference-sync" type="button">
-                    Synchroniser depuis Kobo
+                    Import externe desactive
                   </button>
                 </div>
                 <div class="connector-status empty" id="admin-kobo-reference-status">
@@ -1696,15 +1696,15 @@
                 </div>
                 <div class="admin-kobo-form admin-kobo-dual-form">
                   <label>
-                    Adresse serveur Kobo
-                    <input id="admin-kobo-monthly-objective-server" class="search-input" inputmode="url" value="https://kf.kobotoolbox.org" placeholder="https://kf.kobotoolbox.org" />
+                    Adresse serveur externe
+                    <input id="admin-kobo-monthly-objective-server" class="search-input" inputmode="url" value="" placeholder="https://source-externe.example" />
                   </label>
                   <label>
                     ID formulaire objectifs mensuels
                     <input id="admin-kobo-monthly-objective-form-id" class="search-input" value="aNdbykKVWBW8KeprR5M2Uj" placeholder="ex. aObjectifsMensuels2026" />
                   </label>
                   <label>
-                    Token API Kobo
+                    Token API externe
                     <input id="admin-kobo-monthly-objective-token" class="search-input" type="password" autocomplete="off" placeholder="Token API pour synchroniser" />
                   </label>
                 </div>
@@ -1762,7 +1762,7 @@
                     Enregistrer le formulaire objectifs
                   </button>
                   <button class="ghost-action" id="admin-kobo-monthly-objective-sync" type="button">
-                    Synchroniser depuis Kobo
+                    Import externe desactive
                   </button>
                 </div>
                 <div class="connector-status empty" id="admin-kobo-monthly-objective-status">
@@ -1779,15 +1779,15 @@
                 </div>
                 <div class="admin-kobo-form admin-kobo-dual-form">
                   <label>
-                    Adresse serveur Kobo
-                    <input id="admin-kobo-calculation-server" class="search-input" inputmode="url" value="https://kf.kobotoolbox.org" placeholder="https://kf.kobotoolbox.org" />
+                    Adresse serveur externe
+                    <input id="admin-kobo-calculation-server" class="search-input" inputmode="url" value="" placeholder="https://source-externe.example" />
                   </label>
                   <label>
                     ID formulaire donnees de calcul
                     <input id="admin-kobo-calculation-form-id" class="search-input" value="aCdB3YF8vSppFsVBroKm9W" placeholder="ex. aDonneesCalculKPI2026" />
                   </label>
                   <label>
-                    Token API Kobo
+                    Token API externe
                     <input id="admin-kobo-calculation-token" class="search-input" type="password" autocomplete="off" placeholder="Token API pour synchroniser" />
                   </label>
                 </div>
@@ -1865,7 +1865,7 @@
                     Enregistrer le formulaire donnees de calcul
                   </button>
                   <button class="ghost-action" id="admin-kobo-calculation-sync" type="button">
-                    Synchroniser depuis Kobo
+                    Import externe desactive
                   </button>
                 </div>
                 <div class="connector-status empty" id="admin-kobo-calculation-status">

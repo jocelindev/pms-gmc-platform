@@ -7,7 +7,7 @@
       },
       {
         name: "GMC_FICHE_COLLECTE_V2.xlsx",
-        role: "Fiches KoboCollect et dictionnaire des formules",
+        role: "Fiches de collecte et dictionnaire des formules",
       },
       {
         name: "CDC_PMS_GMC_Group_2026.docx",
@@ -354,10 +354,10 @@
     koboConfiguredSources: [
       {
         role: "referentielKpi",
-        serverUrl: "https://kf.kobotoolbox.org",
+        serverUrl: "",
         formId: "aJSryGjJv4Jzz9YRcP8D67",
         title: "PMS GMC - Formulaire 1 - Referentiel KPI et formules",
-        mode: "KoboCollect Referentiel KPI",
+        mode: "Collecte referentiel KPI",
         status: "Actif",
         detail: "KPI et formules de calcul par pays / filiale et par pole.",
         mappedFields: {
@@ -393,10 +393,10 @@
       },
       {
         role: "objectifsMensuels",
-        serverUrl: "https://kf.kobotoolbox.org",
+        serverUrl: "",
         formId: "aNdbykKVWBW8KeprR5M2Uj",
         title: "PMS GMC - Formulaire Objectifs mensuels",
-        mode: "KoboCollect Objectifs mensuels",
+        mode: "Collecte objectifs mensuels",
         status: "Actif",
         detail: "Objectifs mensuels par pays / filiale, pole, KPI et mois.",
         mappedFields: {
@@ -415,10 +415,10 @@
       },
       {
         role: "donneesCalcul",
-        serverUrl: "https://kf.kobotoolbox.org",
+        serverUrl: "",
         formId: "aCdB3YF8vSppFsVBroKm9W",
         title: "PMS GMC - Formulaire 2 - Donnees de calcul journalieres",
-        mode: "KoboCollect Donnees de calcul",
+        mode: "Collecte donnees de calcul",
         status: "Actif",
         detail: "Elements bruts utilises pour calculer les KPI.",
         mappedFields: {
@@ -577,16 +577,16 @@
     },
 
     koboSubmissions: [
-      { form: "KBO-BPO-JOUR-01", branch: "Cote d'Ivoire", kpi: "Taux de service (SL)", collector: "A. Traore", status: "Valide", className: "green" },
-      { form: "KBO-WFM-JOUR-02", branch: "Congo", kpi: "Taux d'occupation", collector: "M. Nkoua", status: "En retard", className: "gray" },
-      { form: "KBO-FIN-MENS-01", branch: "Benin", kpi: "Ratio MS/CA", collector: "S. Houngue", status: "Erreur mapping", className: "red" },
-      { form: "KBO-RH-HEBD-01", branch: "Guinee Conakry", kpi: "Taux d'absenteisme", collector: "I. Diallo", status: "A valider", className: "amber" },
-      { form: "KBO-QUAL-MENS-01", branch: "Cameroun", kpi: "Quality Score", collector: "L. Mbarga", status: "Valide", className: "green" },
-      { form: "KBO-BRD-MENS-02", branch: "Niger", kpi: "Performance MRE", collector: "Equipe Hoope Niger", status: "A valider", className: "amber" },
+      { form: "COL-BPO-JOUR-01", branch: "Cote d'Ivoire", kpi: "Taux de service (SL)", collector: "A. Traore", status: "Valide", className: "green" },
+      { form: "COL-WFM-JOUR-02", branch: "Congo", kpi: "Taux d'occupation", collector: "M. Nkoua", status: "En retard", className: "gray" },
+      { form: "COL-FIN-MENS-01", branch: "Benin", kpi: "Ratio MS/CA", collector: "S. Houngue", status: "Erreur mapping", className: "red" },
+      { form: "COL-RH-HEBD-01", branch: "Guinee Conakry", kpi: "Taux d'absenteisme", collector: "I. Diallo", status: "A valider", className: "amber" },
+      { form: "COL-QUAL-MENS-01", branch: "Cameroun", kpi: "Quality Score", collector: "L. Mbarga", status: "Valide", className: "green" },
+      { form: "COL-BRD-MENS-02", branch: "Niger", kpi: "Performance MRE", collector: "Equipe Hoope Niger", status: "A valider", className: "amber" },
     ],
 
     koboPipeline: [
-      { title: "Reception Kobo", detail: "Webhook ou synchronisation planifiee depuis KoboToolbox.", count: "1 285", status: "Actif", className: "green" },
+      { title: "Reception collecte", detail: "Saisie integree et controle qualite des donnees.", count: "1 285", status: "Actif", className: "green" },
       { title: "Zone de controle", detail: "Doublons, formats, pieces jointes et champs obligatoires.", count: "17", status: "A traiter", className: "amber" },
       { title: "Mapping KPI", detail: "Rattachement formulaire, pole, filiale, periode et code KPI.", count: "44", status: "Regles", className: "green" },
       { title: "Calcul plateforme", detail: "Application des formules et seuils RAG du catalogue.", count: "74", status: "Pret", className: "green" },
@@ -594,10 +594,10 @@
     ],
 
     validationQueue: [
-      { id: "VAL-1024", form: "KBO-FIN-MENS-01", pole: "DFC", issue: "Ratio MS/CA hors seuil et piece justificative manquante", owner: "Analyste BI", status: "Critique", className: "red" },
-      { id: "VAL-1025", form: "KBO-WFM-JOUR-02", pole: "WFM", issue: "Soumission Congo en retard de 24h", owner: "Responsable WFM", status: "Relance", className: "gray" },
-      { id: "VAL-1026", form: "KBO-RH-HEBD-01", pole: "DCH", issue: "Ecart absenteisme a commenter avant rapport hebdomadaire", owner: "DRH", status: "A valider", className: "amber" },
-      { id: "VAL-1027", form: "KBO-BPO-JOUR-01", pole: "BPO", issue: "Taux abandon rouge, plan d'action requis", owner: "Directeur operations", status: "Plan requis", className: "red" },
+      { id: "VAL-1024", form: "COL-FIN-MENS-01", pole: "DFC", issue: "Ratio MS/CA hors seuil et piece justificative manquante", owner: "Analyste BI", status: "Critique", className: "red" },
+      { id: "VAL-1025", form: "COL-WFM-JOUR-02", pole: "WFM", issue: "Soumission Congo en retard de 24h", owner: "Responsable WFM", status: "Relance", className: "gray" },
+      { id: "VAL-1026", form: "COL-RH-HEBD-01", pole: "DCH", issue: "Ecart absenteisme a commenter avant rapport hebdomadaire", owner: "DRH", status: "A valider", className: "amber" },
+      { id: "VAL-1027", form: "COL-BPO-JOUR-01", pole: "BPO", issue: "Taux abandon rouge, plan d'action requis", owner: "Directeur operations", status: "Plan requis", className: "red" },
     ],
 
     formulaDictionary: [
@@ -663,7 +663,7 @@
       {
         title: "Absence de soumission J+1",
         scope: "WFM - Congo",
-        detail: "Le formulaire Kobo journalier n'a pas ete synchronise depuis 24h.",
+        detail: "La collecte journaliere n'a pas ete renseignee depuis 24h.",
         level: "gray",
       },
       {
@@ -677,13 +677,13 @@
     actionPlans: [
       { title: "Reduire le ratio MS/CA", owner: "DFC + DCH", due: "30/07/2026", progress: 45, detail: "Revue staffing indirect, gel remplacements non critiques et suivi hebdomadaire." },
       { title: "Augmenter les appels facturables", owner: "BU BPO + Qualite", due: "12/07/2026", progress: 68, detail: "Correction codification motifs, coaching short calls et controle qualite quotidien." },
-      { title: "Rattraper collecte WFM Congo", owner: "WFM Congo", due: "08/07/2026", progress: 25, detail: "Relance collecteurs, verification smartphones offline et re-synchronisation Kobo." },
+      { title: "Rattraper collecte WFM Congo", owner: "WFM Congo", due: "08/07/2026", progress: 25, detail: "Relance collecteurs, verification des donnees attendues et mise a jour dans la plateforme." },
     ],
 
     reports: [
       { title: "Rapport COMEX Word", detail: "Narratif executif, tableaux KPI, alertes et plans d'action.", format: "DOCX" },
       { title: "Slides Performance Groupe", detail: "Synthese IPG, RAG, tendances et benchmark filiales.", format: "PPTX" },
-      { title: "Base KPI Consolidee", detail: "Donnees brutes, calculs, controles qualite et mapping Kobo.", format: "XLSX" },
+      { title: "Base KPI Consolidee", detail: "Donnees brutes, calculs, controles qualite et mapping collecte.", format: "XLSX" },
       { title: "Archive mensuelle", detail: "Version figee pour diffusion et historique audit.", format: "PDF" },
       { title: "Email hebdomadaire", detail: "Resume HTML automatique des KPIs et alertes prioritaires.", format: "EMAIL" },
       { title: "Rapport pertes CA", detail: "Pertes par source, tranche horaire, filiale et responsable.", format: "PPTX" },
@@ -719,96 +719,96 @@
       ],
       kpisByPole: {
         BPO: [
-          { name: "Taux de service (SL)", value: "78%", target: ">= 80-90%", trend: "-2 pts", status: "amber", source: "KBO-BPO-JOUR-01" },
-          { name: "Taux d'abandon", value: "6.8%", target: "<= 5%", trend: "+1.1 pt", status: "red", source: "KBO-BPO-JOUR-01" },
-          { name: "Taux de facturation", value: "87%", target: ">= 85-95%", trend: "+4 pts", status: "green", source: "KBO-HORAIRE-JOUR-03" },
-          { name: "CA de l'heure", value: "1.9M FCFA", target: "Selon objectif", trend: "-8%", status: "amber", source: "KBO-HORAIRE-JOUR-03" },
+          { name: "Taux de service (SL)", value: "78%", target: ">= 80-90%", trend: "-2 pts", status: "amber", source: "COL-BPO-JOUR-01" },
+          { name: "Taux d'abandon", value: "6.8%", target: "<= 5%", trend: "+1.1 pt", status: "red", source: "COL-BPO-JOUR-01" },
+          { name: "Taux de facturation", value: "87%", target: ">= 85-95%", trend: "+4 pts", status: "green", source: "COL-HORAIRE-JOUR-03" },
+          { name: "CA de l'heure", value: "1.9M FCFA", target: "Selon objectif", trend: "-8%", status: "amber", source: "COL-HORAIRE-JOUR-03" },
         ],
         WFM: [
-          { name: "Taux d'occupation", value: "82%", target: "75-85%", trend: "+3 pts", status: "green", source: "KBO-WFM-JOUR-02" },
-          { name: "Adherence au planning", value: "88%", target: ">= 85-90%", trend: "+1 pt", status: "green", source: "KBO-WFM-JOUR-02" },
-          { name: "Shrinkage", value: "18%", target: "<= 20%", trend: "-2 pts", status: "green", source: "KBO-WFM-JOUR-02" },
+          { name: "Taux d'occupation", value: "82%", target: "75-85%", trend: "+3 pts", status: "green", source: "COL-WFM-JOUR-02" },
+          { name: "Adherence au planning", value: "88%", target: ">= 85-90%", trend: "+1 pt", status: "green", source: "COL-WFM-JOUR-02" },
+          { name: "Shrinkage", value: "18%", target: "<= 20%", trend: "-2 pts", status: "green", source: "COL-WFM-JOUR-02" },
         ],
         DFC: [
-          { name: "Ratio MS/CA", value: "65%", target: "<= 45%", trend: "+7 pts", status: "red", source: "KBO-FIN-MENS-01" },
-          { name: "Chiffre d'affaires", value: "412M FCFA", target: "Objectif mensuel", trend: "-9%", status: "amber", source: "KBO-FIN-MENS-01" },
-          { name: "Recouvrement", value: "73%", target: ">= 85%", trend: "-4 pts", status: "red", source: "KBO-FIN-MENS-01" },
+          { name: "Ratio MS/CA", value: "65%", target: "<= 45%", trend: "+7 pts", status: "red", source: "COL-FIN-MENS-01" },
+          { name: "Chiffre d'affaires", value: "412M FCFA", target: "Objectif mensuel", trend: "-9%", status: "amber", source: "COL-FIN-MENS-01" },
+          { name: "Recouvrement", value: "73%", target: ">= 85%", trend: "-4 pts", status: "red", source: "COL-FIN-MENS-01" },
         ],
         PSMQ: [
-          { name: "Taux conformite processus", value: "91%", target: ">= 90%", trend: "+3 pts", status: "green", source: "KBO-QUAL-PROC-01" },
-          { name: "Actions correctives cloturees", value: "84%", target: ">= 85%", trend: "-1 pt", status: "amber", source: "KBO-QUAL-PROC-01" },
-          { name: "Audits internes realises", value: "96%", target: ">= 95%", trend: "+4 pts", status: "green", source: "KBO-QUAL-AUDIT-01" },
+          { name: "Taux conformite processus", value: "91%", target: ">= 90%", trend: "+3 pts", status: "green", source: "COL-QUAL-PROC-01" },
+          { name: "Actions correctives cloturees", value: "84%", target: ">= 85%", trend: "-1 pt", status: "amber", source: "COL-QUAL-PROC-01" },
+          { name: "Audits internes realises", value: "96%", target: ">= 95%", trend: "+4 pts", status: "green", source: "COL-QUAL-AUDIT-01" },
         ],
         DRIVE: [
-          { name: "Jalons projet tenus", value: "78%", target: ">= 85%", trend: "-5 pts", status: "amber", source: "KBO-DRIVE-MENS-01" },
-          { name: "Livrables valides", value: "82%", target: ">= 80%", trend: "+6 pts", status: "green", source: "KBO-DRIVE-MENS-01" },
-          { name: "Risques ouverts", value: "6", target: "<= 3", trend: "+2", status: "red", source: "KBO-DRIVE-RISK-01" },
+          { name: "Jalons projet tenus", value: "78%", target: ">= 85%", trend: "-5 pts", status: "amber", source: "COL-DRIVE-MENS-01" },
+          { name: "Livrables valides", value: "82%", target: ">= 80%", trend: "+6 pts", status: "green", source: "COL-DRIVE-MENS-01" },
+          { name: "Risques ouverts", value: "6", target: "<= 3", trend: "+2", status: "red", source: "COL-DRIVE-RISK-01" },
         ],
         DCH: [
-          { name: "Taux d'absenteisme", value: "5.8%", target: "<= 5%", trend: "+0.6 pt", status: "amber", source: "KBO-RH-HEBD-01" },
-          { name: "Taux de presence", value: "94%", target: ">= 95%", trend: "-1 pt", status: "amber", source: "KBO-RH-HEBD-01" },
-          { name: "Turnover mensuel", value: "3.9%", target: "<= cible", trend: "stable", status: "green", source: "KBO-RH-HEBD-01" },
+          { name: "Taux d'absenteisme", value: "5.8%", target: "<= 5%", trend: "+0.6 pt", status: "amber", source: "COL-RH-HEBD-01" },
+          { name: "Taux de presence", value: "94%", target: ">= 95%", trend: "-1 pt", status: "amber", source: "COL-RH-HEBD-01" },
+          { name: "Turnover mensuel", value: "3.9%", target: "<= cible", trend: "stable", status: "green", source: "COL-RH-HEBD-01" },
         ],
         DSI: [
-          { name: "Disponibilite systemes", value: "99.7%", target: ">= 99.5%", trend: "+0.1 pt", status: "green", source: "KBO-DSI-JOUR-01" },
-          { name: "MTTR", value: "3h20", target: "<= 4h", trend: "-35 min", status: "green", source: "KBO-DSI-JOUR-01" },
-          { name: "Incidents securite", value: "2", target: "0 critique", trend: "-1", status: "amber", source: "KBO-DSI-JOUR-01" },
+          { name: "Disponibilite systemes", value: "99.7%", target: ">= 99.5%", trend: "+0.1 pt", status: "green", source: "COL-DSI-JOUR-01" },
+          { name: "MTTR", value: "3h20", target: "<= 4h", trend: "-35 min", status: "green", source: "COL-DSI-JOUR-01" },
+          { name: "Incidents securite", value: "2", target: "0 critique", trend: "-1", status: "amber", source: "COL-DSI-JOUR-01" },
         ],
         EPC: [
-          { name: "Quality Score", value: "86%", target: ">= 85%", trend: "+2 pts", status: "green", source: "KBO-QUAL-MENS-01" },
-          { name: "CSAT", value: "82%", target: ">= 85%", trend: "-3 pts", status: "amber", source: "KBO-QUAL-MENS-01" },
-          { name: "Reclamations J+1", value: "74%", target: ">= 70%", trend: "+5 pts", status: "green", source: "KBO-QUAL-MENS-01" },
+          { name: "Quality Score", value: "86%", target: ">= 85%", trend: "+2 pts", status: "green", source: "COL-QUAL-MENS-01" },
+          { name: "CSAT", value: "82%", target: ">= 85%", trend: "-3 pts", status: "amber", source: "COL-QUAL-MENS-01" },
+          { name: "Reclamations J+1", value: "74%", target: ">= 70%", trend: "+5 pts", status: "green", source: "COL-QUAL-MENS-01" },
         ],
         DCM: [
-          { name: "Taux de conversion", value: "17%", target: ">= 20%", trend: "-2 pts", status: "amber", source: "KBO-DCM-HEBD-01" },
-          { name: "Pipeline commercial", value: "81%", target: ">= 100%", trend: "+6 pts", status: "amber", source: "KBO-DCM-HEBD-01" },
-          { name: "Recouvrement global", value: "79%", target: ">= 85%", trend: "-1 pt", status: "amber", source: "KBO-DCM-HEBD-01" },
+          { name: "Taux de conversion", value: "17%", target: ">= 20%", trend: "-2 pts", status: "amber", source: "COL-DCM-HEBD-01" },
+          { name: "Pipeline commercial", value: "81%", target: ">= 100%", trend: "+6 pts", status: "amber", source: "COL-DCM-HEBD-01" },
+          { name: "Recouvrement global", value: "79%", target: ">= 85%", trend: "-1 pt", status: "amber", source: "COL-DCM-HEBD-01" },
         ],
         COM: [
-          { name: "Taux de conversion", value: "17%", target: ">= 20%", trend: "-2 pts", status: "amber", source: "KBO-COM-HEBD-01" },
-          { name: "Nouveaux contrats signes", value: "11", target: "15", trend: "+2", status: "amber", source: "KBO-COM-HEBD-01" },
-          { name: "Pipeline qualifie", value: "81%", target: ">= 90%", trend: "+6 pts", status: "amber", source: "KBO-COM-PIPE-01" },
+          { name: "Taux de conversion", value: "17%", target: ">= 20%", trend: "-2 pts", status: "amber", source: "COL-COM-HEBD-01" },
+          { name: "Nouveaux contrats signes", value: "11", target: "15", trend: "+2", status: "amber", source: "COL-COM-HEBD-01" },
+          { name: "Pipeline qualifie", value: "81%", target: ">= 90%", trend: "+6 pts", status: "amber", source: "COL-COM-PIPE-01" },
         ],
         GDC: [
-          { name: "Taux renouvellement comptes", value: "88%", target: ">= 85%", trend: "+3 pts", status: "green", source: "KBO-GDC-MENS-01" },
-          { name: "Satisfaction comptes cles", value: "82%", target: ">= 85%", trend: "-2 pts", status: "amber", source: "KBO-GDC-MENS-01" },
-          { name: "Plans comptes a jour", value: "76%", target: ">= 80%", trend: "+4 pts", status: "amber", source: "KBO-GDC-PLAN-01" },
+          { name: "Taux renouvellement comptes", value: "88%", target: ">= 85%", trend: "+3 pts", status: "green", source: "COL-GDC-MENS-01" },
+          { name: "Satisfaction comptes cles", value: "82%", target: ">= 85%", trend: "-2 pts", status: "amber", source: "COL-GDC-MENS-01" },
+          { name: "Plans comptes a jour", value: "76%", target: ">= 80%", trend: "+4 pts", status: "amber", source: "COL-GDC-PLAN-01" },
         ],
         REC: [
-          { name: "Taux de recouvrement", value: "73%", target: ">= 85%", trend: "-4 pts", status: "red", source: "KBO-REC-MENS-01" },
-          { name: "Creances > 90 jours", value: "18%", target: "<= 10%", trend: "+3 pts", status: "red", source: "KBO-REC-MENS-01" },
-          { name: "Dossiers relances", value: "91%", target: ">= 90%", trend: "+5 pts", status: "green", source: "KBO-REC-HEBD-01" },
+          { name: "Taux de recouvrement", value: "73%", target: ">= 85%", trend: "-4 pts", status: "red", source: "COL-REC-MENS-01" },
+          { name: "Creances > 90 jours", value: "18%", target: "<= 10%", trend: "+3 pts", status: "red", source: "COL-REC-MENS-01" },
+          { name: "Dossiers relances", value: "91%", target: ">= 90%", trend: "+5 pts", status: "green", source: "COL-REC-HEBD-01" },
         ],
         BRD: [
-          { name: "CA retail", value: "94%", target: ">= 100%", trend: "+4 pts", status: "amber", source: "KBO-BRD-MENS-01" },
-          { name: "Disponibilite points de vente", value: "97%", target: ">= 95%", trend: "+1 pt", status: "green", source: "KBO-BRD-JOUR-01" },
-          { name: "Ruptures critiques", value: "5", target: "0 critique", trend: "-2", status: "amber", source: "KBO-BRD-STOCK-01" },
+          { name: "CA retail", value: "94%", target: ">= 100%", trend: "+4 pts", status: "amber", source: "COL-BRD-MENS-01" },
+          { name: "Disponibilite points de vente", value: "97%", target: ">= 95%", trend: "+1 pt", status: "green", source: "COL-BRD-JOUR-01" },
+          { name: "Ruptures critiques", value: "5", target: "0 critique", trend: "-2", status: "amber", source: "COL-BRD-STOCK-01" },
         ],
         BID: [
-          { name: "Taux avancement projets", value: "86%", target: ">= 80%", trend: "+7 pts", status: "green", source: "KBO-BID-MENS-01" },
-          { name: "Projets en retard", value: "2", target: "<= 2", trend: "stable", status: "green", source: "KBO-BID-MENS-01" },
-          { name: "ROI initiatives", value: "71%", target: ">= 75%", trend: "+3 pts", status: "amber", source: "KBO-BID-ROI-01" },
+          { name: "Taux avancement projets", value: "86%", target: ">= 80%", trend: "+7 pts", status: "green", source: "COL-BID-MENS-01" },
+          { name: "Projets en retard", value: "2", target: "<= 2", trend: "stable", status: "green", source: "COL-BID-MENS-01" },
+          { name: "ROI initiatives", value: "71%", target: ">= 75%", trend: "+3 pts", status: "amber", source: "COL-BID-ROI-01" },
         ],
         PAC: [
-          { name: "Taux plans actions clotures", value: "89%", target: ">= 85%", trend: "+6 pts", status: "green", source: "KBO-PAC-MENS-01" },
-          { name: "Gains productivite", value: "7.5%", target: ">= 5%", trend: "+1.2 pt", status: "green", source: "KBO-PAC-MENS-01" },
-          { name: "Chantiers en retard", value: "3", target: "<= 2", trend: "+1", status: "amber", source: "KBO-PAC-HEBD-01" },
+          { name: "Taux plans actions clotures", value: "89%", target: ">= 85%", trend: "+6 pts", status: "green", source: "COL-PAC-MENS-01" },
+          { name: "Gains productivite", value: "7.5%", target: ">= 5%", trend: "+1.2 pt", status: "green", source: "COL-PAC-MENS-01" },
+          { name: "Chantiers en retard", value: "3", target: "<= 2", trend: "+1", status: "amber", source: "COL-PAC-HEBD-01" },
         ],
         PMG: [
-          { name: "Disponibilite moyens", value: "92%", target: ">= 95%", trend: "-2 pts", status: "amber", source: "KBO-PMG-JOUR-01" },
-          { name: "Delai traitement demandes", value: "3.8j", target: "<= 3j", trend: "+0.4j", status: "amber", source: "KBO-PMG-HEBD-01" },
-          { name: "Conformite inventaire", value: "96%", target: ">= 95%", trend: "+2 pts", status: "green", source: "KBO-PMG-MENS-01" },
+          { name: "Disponibilite moyens", value: "92%", target: ">= 95%", trend: "-2 pts", status: "amber", source: "COL-PMG-JOUR-01" },
+          { name: "Delai traitement demandes", value: "3.8j", target: "<= 3j", trend: "+0.4j", status: "amber", source: "COL-PMG-HEBD-01" },
+          { name: "Conformite inventaire", value: "96%", target: ">= 95%", trend: "+2 pts", status: "green", source: "COL-PMG-MENS-01" },
         ],
       },
       workflow: [
-        { step: "1. Collecte Kobo", detail: "Soumissions terrain synchronisees et controlees." },
+        { step: "1. Collecte de donnees", detail: "Donnees saisies dans la plateforme et controlees." },
         { step: "2. Consolidation KPI", detail: "Calculs, RAG, tendances et donnees manquantes." },
         { step: "3. Commentaire pole", detail: "Causes, faits marquants et plan d'action SMART." },
         { step: "4. Validation N+1", detail: "Visa direction / DGA avant diffusion." },
         { step: "5. Export & diffusion", detail: "Word, PDF, PowerPoint, Excel ou email planifie." },
       ],
       checklist: [
-        { key: "Donnees Kobo synchronisees", owner: "Responsable collecte" },
+        { key: "Donnees collectees renseignees", owner: "Responsable collecte" },
         { key: "Controle completude et validite", owner: "Analyste BI" },
         { key: "Commentaires sur KPI orange/rouge", owner: "Responsable pole" },
         { key: "Plan d'action SMART rattache", owner: "Directeur fonctionnel" },
@@ -847,7 +847,7 @@
     ],
 
     auditTrail: [
-      "08:42 - Sync Kobo KBO-BPO-JOUR-01 integree",
+      "08:42 - Donnees COL-BPO-JOUR-01 integrees",
       "08:33 - Seuil Ratio MS/CA modifie par Admin",
       "08:12 - Plan d'action BPO valide par DGA",
       "07:58 - Rejet doublon formulaire WFM Congo",

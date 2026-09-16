@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS kobo_forms (
   title TEXT NOT NULL,
   server_url TEXT,
   cadence TEXT,
-  source_type TEXT NOT NULL DEFAULT 'KoboCollect',
+  source_type TEXT NOT NULL DEFAULT 'Collecte',
   status TEXT NOT NULL DEFAULT 'Actif',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

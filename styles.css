@@ -3830,6 +3830,12 @@ button.dashboard-control-card {
 
 .admin-kobo-source-panel {
   grid-column: 1 / -1;
+  display: none !important;
+}
+
+#kobo,
+.legacy-kobo-view {
+  display: none !important;
 }
 
 .admin-kobo-form.admin-kobo-dual-form {

@@ -118,7 +118,7 @@ if PUBLIC_APP_ORIGIN:
 MIN_PASSWORD_LENGTH = 8
 KOBO_REQUEST_TIMEOUT = 15
 KOBO_SUBMISSION_LIMIT = 500
-KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT = 5 * 60
+KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT = 0
 KOBO_AUTO_SYNC_INTERVAL_SECONDS_MAX = 5 * 60
 KOBO_AUTO_SYNC_STARTUP_DELAY_SECONDS_DEFAULT = 8
 KOBO_AUTO_SYNC_ROLES = ("referentielKpi", "objectifsMensuels", "donneesCalcul")
@@ -127,8 +127,8 @@ KOBO_SERVER_ENV_KEYS = ("PMS_KOBO_SERVER_URL", "KOBO_SERVER_URL")
 REFERENCE_KOBO_CURRENT_UID = "aJSryGjJv4Jzz9YRcP8D67"
 REFERENCE_KOBO_OLD_UIDS = ("ay5PAFNfJ8mzMUEnQELEsp", "agJCJ2VqwMGNk586NHJ39W", "auGyH8vhCsK9KKtG2fu2u5")
 REFERENCE_KOBO_TITLE = "PMS GMC - Formulaire 1 - Referentiel KPI et formules"
-REFERENCE_KOBO_SOURCE_TYPE = "KoboCollect Referentiel KPI"
-REFERENCE_KOBO_DEFAULT_SERVER = "https://kf.kobotoolbox.org"
+REFERENCE_KOBO_SOURCE_TYPE = "Collecte referentiel KPI"
+REFERENCE_KOBO_DEFAULT_SERVER = ""
 OBJECTIVES_KOBO_DEFAULT_UID = "aNdbykKVWBW8KeprR5M2Uj"
 CALCULATION_KOBO_DEFAULT_UID = "aCdB3YF8vSppFsVBroKm9W"
 PLATFORM_COLLECTION_SUBMISSION_PREFIX = "platform:"
@@ -189,7 +189,7 @@ ENV_KOBO_SOURCE_DEFINITIONS = (
         "server_env_keys": ("PMS_KOBO_OBJECTIVES_SERVER_URL", "PMS_KOBO_OBJECTIVE_SERVER_URL"),
         "default_uid": OBJECTIVES_KOBO_DEFAULT_UID,
         "title": "PMS GMC - Formulaire Objectifs mensuels",
-        "source_type": "KoboCollect Objectifs mensuels",
+        "source_type": "Collecte objectifs mensuels",
         "cadence": "Mensuel",
         "field_type": "Champ objectifs mensuels",
         "fields": {
@@ -212,7 +212,7 @@ ENV_KOBO_SOURCE_DEFINITIONS = (
         "server_env_keys": ("PMS_KOBO_CALCULATION_SERVER_URL", "PMS_KOBO_DATA_SERVER_URL"),
         "default_uid": CALCULATION_KOBO_DEFAULT_UID,
         "title": "PMS GMC - Formulaire 3 - Donnees de calcul flexibles",
-        "source_type": "KoboCollect Donnees de calcul",
+        "source_type": "Collecte donnees de calcul",
         "cadence": "Journalier",
         "field_type": "Champ donnees de calcul",
         "fields": {
@@ -263,8 +263,8 @@ DATABASE_TABLE_LABELS = {
     "user_access": "Affectations utilisateurs",
     "kpis": "Referentiel KPI",
     "kpi_objectives": "Objectifs KPI",
-    "kobo_forms": "Formulaires Kobo",
-    "kobo_form_fields": "Champs formulaires Kobo",
+    "kobo_forms": "Sources de collecte historiques",
+    "kobo_form_fields": "Champs sources de collecte",
     "kobo_submissions": "Soumissions collecte",
     "kpi_daily_data": "Donnees journalieres KPI",
     "validation_queue": "File de validation",
@@ -838,7 +838,7 @@ def migrate_reference_kobo_uid(conn: sqlite3.Connection) -> bool:
         archive_cursor = conn.execute(
             f"""
             UPDATE kobo_forms
-            SET source_type = 'KoboCollect Archive',
+            SET source_type = 'Collecte archivee',
                 status = 'Archive',
                 updated_at = CURRENT_TIMESTAMP
             WHERE uid IN ({",".join("?" for _ in retired_uids)})
@@ -874,6 +874,33 @@ def migrate_reference_kobo_uid(conn: sqlite3.Connection) -> bool:
     return changed
 
 
+def migrate_collection_source_labels(conn: sqlite3.Connection) -> bool:
+    if not table_exists(conn, "kobo_forms"):
+        return False
+
+    replacements = (
+        ("KoboCollect Referentiel KPI", "Collecte referentiel KPI"),
+        ("KoboCollect Objectifs mensuels", "Collecte objectifs mensuels"),
+        ("KoboCollect Donnees de calcul", "Collecte donnees de calcul"),
+        ("Connexion KoboToolbox", "Connexion source externe"),
+        ("KoboCollect Archive", "Collecte archivee"),
+        ("KoboCollect", "Collecte"),
+    )
+    changed = False
+    for previous_label, next_label in replacements:
+        cursor = conn.execute(
+            """
+            UPDATE kobo_forms
+            SET source_type = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE source_type = ?
+            """,
+            (next_label, previous_label),
+        )
+        changed = bool(cursor.rowcount) or changed
+    return changed
+
+
 def migrate_database(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
     changed = False
@@ -881,6 +908,7 @@ def migrate_database(conn: sqlite3.Connection) -> None:
     changed = ensure_kpi_objectives_schema(conn) or changed
     ensure_kpi_daily_data_schema(conn)
     changed = migrate_reference_kobo_uid(conn) or changed
+    changed = migrate_collection_source_labels(conn) or changed
     if "password_hash" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
         changed = True
@@ -1642,7 +1670,7 @@ def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = Non
         last_submission_at = ""
         form_status = "Non configure"
         missing_fields = [field_label for _, field_label in required_fields]
-        action = "Renseigner la collecte interne; Kobo reste une source optionnelle si besoin."
+        action = "Renseigner les donnees dans la zone Collecte de donnees."
         status_class = "red"
         status_label = "A connecter"
         mapped_count = 0
@@ -1665,7 +1693,7 @@ def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = Non
             missing_fields = []
             mapped_count = len(required_fields)
             form_status = "Collecte interne"
-            action = "Donnees internes disponibles; Kobo reste une source optionnelle."
+            action = "Donnees internes disponibles."
             status_label = "Pret"
             status_class = "green"
 
@@ -1723,11 +1751,11 @@ def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = Non
                 status_class = "red"
             elif not submission_count:
                 if platform_rows:
-                    action = "Donnees internes disponibles; Kobo reste une source optionnelle."
+                    action = "Donnees internes disponibles."
                     status_label = "Pret"
                     status_class = "green"
                 else:
-                    action = "Renseigner la collecte interne ou publier une soumission Kobo optionnelle."
+                    action = "Renseigner les donnees dans la zone Collecte de donnees."
                     status_label = "A alimenter"
                     status_class = "amber"
             elif role == "donneesCalcul" and not daily_rows:
@@ -2729,7 +2757,7 @@ def save_objective(payload: dict) -> dict:
     if not target or not period or not pole_id:
         raise ValueError("Pole, periode et objectif sont obligatoires.")
     if not source_form or not source_server:
-        raise ValueError("Les objectifs doivent provenir d'un formulaire KoboCollect.")
+        raise ValueError("Les objectifs doivent provenir de la collecte de donnees.")
 
     with db_connect() as conn:
         kpi_id = ensure_kpi(conn, payload)
@@ -2880,7 +2908,20 @@ def env_int(name: str, default: int) -> int:
         return default
 
 
+def env_flag(name: str, default: bool = False) -> bool:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return str(raw_value).strip().lower() in {"1", "true", "yes", "on", "oui"}
+
+
+def legacy_kobo_sync_enabled() -> bool:
+    return env_flag("PMS_LEGACY_KOBO_SYNC_ENABLED", False)
+
+
 def get_kobo_auto_sync_interval_seconds() -> int:
+    if not legacy_kobo_sync_enabled():
+        return 0
     interval = max(0, env_int("PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS", KOBO_AUTO_SYNC_INTERVAL_SECONDS_DEFAULT))
     return min(interval, KOBO_AUTO_SYNC_INTERVAL_SECONDS_MAX) if interval else 0
 
@@ -3045,7 +3086,7 @@ def apply_env_kobo_sources(conn: sqlite3.Connection) -> bool:
     if changed:
         audit(
             conn,
-            "Configuration Kobo automatique",
+            "Configuration collecte automatique",
             "kobo_form",
             "env",
             {"sources": [source["role"] for source in sources], "forms": [source["uid"] for source in sources]},
@@ -3520,15 +3561,15 @@ def kobo_request_json(server_url: str, api_path: str, token: str) -> dict | list
     except HTTPError as exc:
         detail = exc.read(500).decode("utf-8", errors="ignore").strip()
         if exc.code in (401, 403):
-            raise ValueError("Jeton API Kobo refuse ou droits insuffisants pour ce formulaire.") from exc
+            raise ValueError("Jeton API refuse ou droits insuffisants pour ce formulaire.") from exc
         if exc.code == 404:
-            raise ValueError("Formulaire Kobo introuvable avec cet UID.") from exc
+            raise ValueError("Formulaire introuvable avec cet UID.") from exc
         suffix = f" Detail: {detail[:160]}" if detail else ""
-        raise ValueError(f"KoboToolbox a repondu avec l'erreur {exc.code}.{suffix}") from exc
+        raise ValueError(f"La source externe a repondu avec l'erreur {exc.code}.{suffix}") from exc
     except URLError as exc:
-        raise ValueError(f"Serveur Kobo injoignable: {exc.reason}") from exc
+        raise ValueError(f"Serveur externe injoignable: {exc.reason}") from exc
     except json.JSONDecodeError as exc:
-        raise ValueError("La reponse Kobo n'est pas un JSON exploitable.") from exc
+        raise ValueError("La reponse de la source externe n'est pas un JSON exploitable.") from exc
 
 
 def kobo_label_to_text(value) -> str:
@@ -3573,7 +3614,7 @@ def extract_kobo_asset_fields(asset: dict) -> list[dict]:
     for item in survey:
         if not isinstance(item, dict):
             continue
-        field_type = str(item.get("type") or "Champ Kobo").strip()
+        field_type = str(item.get("type") or "Champ de collecte").strip()
         if field_type in skipped_types:
             continue
         field_name = str(item.get("name") or item.get("$kuid") or "").strip()
@@ -4381,7 +4422,7 @@ def direct_value_from_elements(element_values: dict[str, float], *, allow_single
 
     if allow_singleton and len(element_values) == 1:
         label, value = next(iter(element_values.items()))
-        return value, f"Valeur unique Kobo: {label}"
+        return value, f"Valeur unique collecte: {label}"
     return None, "Calcul a verifier"
 
 
@@ -4398,7 +4439,7 @@ def realized_value_from_elements(element_values: dict[str, float], *, allow_sing
         preferred_key = normalize_match_key(preferred)
         for label, value in element_values.items():
             if preferred_key in label:
-                return value, "Realise Kobo direct"
+                return value, "Realise collecte direct"
     return direct_value_from_elements(element_values, allow_singleton=allow_singleton)
 
 
@@ -4440,7 +4481,7 @@ def evaluate_kpi_formula(
         return None, "Aucune valeur numerique", ["Aucune valeur numerique exploitable dans le formulaire donnees."]
 
     if "moyenne" in formula_key and raw_numbers:
-        return sum(raw_numbers) / len(raw_numbers), "Moyenne des elements Kobo", warnings
+        return sum(raw_numbers) / len(raw_numbers), "Moyenne des elements collectes", warnings
 
     if formula:
         if formula_compares_realized_to_target(formula):
@@ -4461,8 +4502,8 @@ def evaluate_kpi_formula(
             result = safe_eval_expression(expression, variables)
             if result is not None:
                 if formula_result_requires_percent_scaling(formula, expression, unit, result):
-                    return result * 100, "Formule Kobo appliquee, ratio affiche en pourcentage", warnings
-                return result, "Formule Kobo appliquee", warnings
+                    return result * 100, "Formule de collecte appliquee, ratio affiche en pourcentage", warnings
+                return result, "Formule de collecte appliquee", warnings
         direct_terms = ("valeur directe", "saisie directe", "resultat direct", "realisation directe")
         if any(term in formula_key for term in direct_terms):
             direct_value, direct_method = direct_value_from_elements(element_values)
@@ -4470,12 +4511,12 @@ def evaluate_kpi_formula(
                 return direct_value, direct_method, warnings
         realized_value, realized_method = realized_value_from_elements(element_values)
         if realized_value is not None:
-            warnings.append("Formule non appliquee; valeur realisee Kobo utilisee comme realise du jour.")
+            warnings.append("Formule non appliquee; valeur realisee collectee utilisee comme realise du jour.")
             return realized_value, f"{realized_method}; formule a completer si calcul detaille requis", warnings
         missing_tokens = missing_formula_tokens(expression)
         missing_label = ", ".join(missing_tokens[:5]) if missing_tokens else "libelles non reconnus"
-        return None, "Formule Kobo non interpretee", [
-            f"Formule Kobo non appliquee: champs manquants ou non alignes ({missing_label})."
+        return None, "Formule de collecte non interpretee", [
+            f"Formule de collecte non appliquee: champs manquants ou non alignes ({missing_label})."
         ]
 
     direct_value, direct_method = direct_value_from_elements(element_values)
@@ -4950,7 +4991,7 @@ def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
                 "dataNature": text_or_empty(row["data_nature"] or "Reel") or "Reel",
                 "sourceForm": source_form_uid,
                 "sourceSubmissionUid": source_submission_uid,
-                "sourceLabel": "Collecte interne" if source_submission_uid.startswith(PLATFORM_COLLECTION_SUBMISSION_PREFIX) else "Import Kobo / historique",
+                "sourceLabel": "Collecte interne" if source_submission_uid.startswith(PLATFORM_COLLECTION_SUBMISSION_PREFIX) else "Historique de collecte",
                 "details": "",
                 "updatedAt": text_or_empty(row["updated_at"] or row["created_at"]),
                 "elements": [],
@@ -5167,7 +5208,7 @@ def list_kobo_submissions(conn: sqlite3.Connection) -> list[dict]:
                 "poleName": row["pole_name"] or row["pole_id"] or "",
                 "branch": row["branch"] or row["pole_name"] or row["period"] or "Perimetre non renseigne",
                 "kpi": row["kpi_name"] or "KPI non renseigne",
-                "collector": row["collector"] or "KoboCollect",
+                "collector": row["collector"] or "Collecte de donnees",
                 "status": status,
                 "className": status_class_from_validation(status),
                 "period": row["period"] or "",
@@ -5266,7 +5307,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "severity": severity,
                 "statusClass": status_class,
                 "sourceRole": source_role,
-                "form": KOBO_AUDIT_ROLE_LABELS.get(source_role, source_role or "KoboCollect"),
+                "form": KOBO_AUDIT_ROLE_LABELS.get(source_role, source_role or "Collecte de donnees"),
                 "sourceForm": source_form,
                 "submissionUid": submission_uid,
                 "branch": row_branch or "Groupe",
@@ -5295,7 +5336,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "Configuration",
                 "Bloquant",
                 f"{KOBO_AUDIT_ROLE_LABELS.get(role, role)} non connecte.",
-                "Renseigner les donnees dans Collecte de donnees ou connecter un import Kobo optionnel.",
+                "Renseigner les donnees dans la zone Collecte de donnees.",
                 role=role,
             )
             continue
@@ -5433,7 +5474,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "Referentiel",
                 "Bloquant",
                 f"Reference KPI ignoree: {', '.join(missing_parts)} non reconnu.",
-                "Verifier groupe_de_rattachement, id_kpi et intitule_du_kpi dans Kobo.",
+                "Verifier groupe_de_rattachement, id_kpi et intitule_du_kpi dans la collecte.",
                 role="referentielKpi",
                 source=reference_source,
                 row=row,
@@ -6517,20 +6558,22 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
 
 
 def sync_kobo_form(payload: dict) -> dict:
+    if not legacy_kobo_sync_enabled():
+        raise ValueError("Import externe desactive. Utilisez la zone Collecte de donnees.")
     server_url = normalize_kobo_server_url(str(payload.get("serverUrl") or payload.get("origin") or ""))
     form_uid = str(payload.get("formUid") or payload.get("uid") or payload.get("name") or "").strip()
     token = str(payload.get("token") or payload.get("apiToken") or "").strip()
     if not token:
         token, _ = get_kobo_api_token_from_env()
     if not server_url or not form_uid:
-        raise ValueError("Adresse serveur Kobo et UID formulaire obligatoires.")
+        raise ValueError("Adresse serveur et UID formulaire obligatoires.")
     if not token:
-        raise ValueError("Jeton API Kobo obligatoire pour synchroniser le formulaire. Configurez PMS_KOBO_API_TOKEN sur Render ou saisissez le token dans l'interface.")
+        raise ValueError("Jeton API obligatoire pour synchroniser le formulaire.")
 
     encoded_uid = quote(form_uid, safe="")
     asset = kobo_request_json(server_url, f"/api/v2/assets/{encoded_uid}/", token)
     if not isinstance(asset, dict):
-        raise ValueError("Metadonnees Kobo inattendues pour ce formulaire.")
+        raise ValueError("Metadonnees inattendues pour ce formulaire.")
 
     form_title = extract_kobo_form_title(asset, form_uid)
     fields = extract_kobo_asset_fields(asset)
@@ -6555,7 +6598,7 @@ def sync_kobo_form(payload: dict) -> dict:
             """,
             (form_uid,),
         ).fetchone()
-        source_type = "Connexion KoboToolbox"
+        source_type = "Connexion source externe"
         existing_mappings: dict[str, str | None] = {}
         if existing_form:
             existing_role = kobo_source_role(existing_form["source_type"])
@@ -6678,7 +6721,7 @@ def sync_kobo_form(payload: dict) -> dict:
 
         audit(
             conn,
-            "Synchronisation Kobo",
+            "Synchronisation source externe",
             "kobo_form",
             form_uid,
             {"serverUrl": server_url, "fields": len(fields), "submissions": imported, "warning": data_warning},
@@ -6718,6 +6761,7 @@ def sync_kobo_form(payload: dict) -> dict:
 def get_kobo_auto_sync_status() -> dict:
     token, token_env = get_kobo_api_token_from_env()
     interval = get_kobo_auto_sync_interval_seconds()
+    legacy_sync_enabled = legacy_kobo_sync_enabled()
     with AUTO_KOBO_LOCK:
         status = dict(AUTO_KOBO_STATE)
         last_sync_ts = AUTO_KOBO_LAST_SYNC_TS
@@ -6726,7 +6770,8 @@ def get_kobo_auto_sync_status() -> dict:
         next_run_at = dt.datetime.fromtimestamp(last_sync_ts + interval, dt.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     status.update(
         {
-            "enabled": bool(token and interval > 0),
+            "enabled": bool(legacy_sync_enabled and token and interval > 0),
+            "legacySyncEnabled": legacy_sync_enabled,
             "tokenConfigured": bool(token),
             "tokenEnv": token_env,
             "intervalSeconds": interval,
@@ -6845,11 +6890,11 @@ def start_kobo_auto_sync_scheduler() -> None:
 def save_kobo_form(payload: dict) -> dict:
     name = str(payload.get("name") or "").strip()
     origin = str(payload.get("origin") or "").strip()
-    mode = str(payload.get("mode") or "KoboCollect").strip()
+    mode = str(payload.get("mode") or "Collecte").strip()
     status = str(payload.get("status") or "Actif").strip()
     fields = payload.get("fields") or []
     if not name:
-        raise ValueError("Nom du formulaire Kobo obligatoire.")
+        raise ValueError("Nom du formulaire de collecte obligatoire.")
 
     uid = slugify(name)
     mode_lower = mode.lower()
@@ -6893,7 +6938,7 @@ def save_kobo_form(payload: dict) -> dict:
                     mapped_to,
                 ),
             )
-        audit(conn, "Connexion formulaire Kobo", "kobo_form", uid, {"name": name, "mode": mode, "fields": len(fields)})
+        audit(conn, "Connexion formulaire de collecte", "kobo_form", uid, {"name": name, "mode": mode, "fields": len(fields)})
         conn.commit()
         return active_kobo_form(conn) or {}
 

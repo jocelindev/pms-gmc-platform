@@ -522,7 +522,7 @@
         metricCard(21, "KPI calcules", context.kpis.filter((kpi) => ["green", "amber", "red"].includes(kpi.status)).length, 3200000, 1750000, context.kpis.length ? "green" : "gray"),
         metricCard(22, "Rouge / Orange", `${redCount}/${amberCount}`, 5880000, 1750000, redCount ? "red" : amberCount ? "amber" : context.kpis.length ? "green" : "gray"),
         metricCard(23, "Cibles atteintes", targetRate === null ? "--" : `${targetRate}%`, 8560000, 1750000, targetRate === null ? "gray" : scoreClass(targetRate)),
-        pptxTextShape(30, `Ce qui va bien\n${bestDirection ? `${bestDirection.poleName} affiche le meilleur score (${bestDirection.score}/100). ${greenCount} KPI sont au vert.` : "Les points forts seront visibles apres calcul des donnees Kobo."}`, 520000, 3250000, 5200000, 950000, { fontSize: 1200, color: COLORS.green, fill: "E8F5EE", border: COLORS.green }),
+        pptxTextShape(30, `Ce qui va bien\n${bestDirection ? `${bestDirection.poleName} affiche le meilleur score (${bestDirection.score}/100). ${greenCount} KPI sont au vert.` : "Les points forts seront visibles apres calcul des donnees collectees."}`, 520000, 3250000, 5200000, 950000, { fontSize: 1200, color: COLORS.green, fill: "E8F5EE", border: COLORS.green }),
         pptxTextShape(31, `Ce qui bloque\n${redCount || amberCount ? `${redCount} KPI rouges et ${amberCount} KPI orange a traiter.` : "Aucun blocage critique detecte dans le perimetre."}`, 5880000, 3250000, 5200000, 950000, { fontSize: 1200, color: redCount ? COLORS.red : COLORS.amber, fill: "FFF7D6", border: redCount ? COLORS.red : COLORS.amber }),
         pptxTextShape(32, `Decision attendue\n${decision ? `${kpiAction(decision)} Priorite: ${decision.poleName || decision.poleId || ""} / ${decision.name}.` : "Maintenir le rythme de collecte et valider les rapports de la periode."}`, 520000, 4450000, 11000000, 960000, { fontSize: 1200, color: COLORS.blue, fill: COLORS.lightGray, border: COLORS.border }),
       ])
@@ -530,7 +530,7 @@
 
     slides.push(
       pptxSlideXml([
-        ...headerShape("Score par direction / pole", watchDirection ? `Pole a surveiller: ${watchDirection.poleName} (${watchDirection.score}/100)` : "Score disponible apres calcul Kobo."),
+        ...headerShape("Score par direction / pole", watchDirection ? `Pole a surveiller: ${watchDirection.poleName} (${watchDirection.score}/100)` : "Score disponible apres calcul des donnees collectees."),
         ...buildKpiTableShapes(context.directionScores || [], {
           y: 1550000,
           limit: 11,
@@ -680,7 +680,7 @@
   }
 
   function buildKpiCsv({ pole, cycle, period, kpis }) {
-    const header = ["Pole", "Cycle", "Periode", "KPI", "Valeur", "Objectif", "Tendance", "Source Kobo", "Taux realise"];
+    const header = ["Pole", "Cycle", "Periode", "KPI", "Valeur", "Objectif", "Tendance", "Source collecte", "Taux realise"];
     const rows = kpis.map((kpi) => [
       pole.name,
       cycle.value,
