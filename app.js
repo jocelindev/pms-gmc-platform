@@ -2356,7 +2356,6 @@
     const branchFilter = $("#calendar-branch-filter");
     const cycleFilter = $("#calendar-cycle-filter");
     const statusFilter = $("#calendar-status-filter");
-    const dataModeFilter = $("#data-mode-filter");
 
     function scrollActiveDateIntoView() {
       const menu = $("#calendar-date-menu");
@@ -2486,25 +2485,6 @@
           ? "Tous les statuts sont visibles."
           : `Statut ${statusFilter.value.toLowerCase()} selectionne.`
       );
-    });
-
-    dataModeFilter?.addEventListener("change", () => {
-      state.dataModeFilter = dataModeFilter.value || "all";
-      ensureCalendarDateFromAvailableData();
-      applyCalculatedKpisToReporting();
-      renderCalendarSlicer(state);
-      renderCountryDashboard(state);
-      renderAdvancedDashboard(state);
-      renderManagementDashboard(state);
-      renderInternalTool(state);
-      renderPoleSummaryTables(state);
-      renderPoleControls(state);
-      renderPoleMonitor(state);
-      renderReportControls(state);
-      renderReportWorkspace(state);
-      renderKoboTable("", filterItemsByDataMode(state.koboSubmissions, state.dataModeFilter), state.calendarBranchFilter);
-      const labels = { all: "toutes les donnees", real: "donnees reelles", test: "donnees test" };
-      showToast(`Mode donnees applique: ${labels[state.dataModeFilter] || "toutes les donnees"}.`);
     });
 
     document.addEventListener("click", (event) => {

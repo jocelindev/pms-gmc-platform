@@ -990,7 +990,6 @@
     const branchFilter = $("#calendar-branch-filter");
     const cycleFilter = $("#calendar-cycle-filter");
     const statusFilter = $("#calendar-status-filter");
-    const dataModeFilter = $("#data-mode-filter");
 
     if (monthTitle) {
       monthTitle.textContent = new Date(viewYear, viewMonth, 1).toLocaleDateString("fr-FR", {
@@ -1090,10 +1089,6 @@
 
     if (statusFilter) {
       statusFilter.value = state.calendarStatusFilter || "Tous";
-    }
-
-    if (dataModeFilter) {
-      dataModeFilter.value = state.dataModeFilter || "all";
     }
 
     if (!grid) return;
