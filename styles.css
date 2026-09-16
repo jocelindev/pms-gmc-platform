@@ -3891,6 +3891,34 @@ button.dashboard-control-card {
   background: var(--surface-soft);
 }
 
+.platform-collection-guidance {
+  background: #fff7d8;
+  border: 1px solid rgba(230, 166, 34, 0.34);
+  border-radius: 8px;
+  color: var(--palladium-blue);
+  display: grid;
+  gap: 5px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+}
+
+.platform-collection-guidance strong,
+.platform-collection-guidance span {
+  display: block;
+}
+
+.platform-collection-guidance strong {
+  font-size: 0.92rem;
+  font-weight: 950;
+}
+
+.platform-collection-guidance span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
 .platform-collection-tabs {
   display: grid;
   gap: 10px;
@@ -4014,6 +4042,33 @@ button.dashboard-control-card {
   resize: vertical;
 }
 
+.platform-advanced-fields {
+  background: #fff;
+  border: 1px solid rgba(31, 56, 100, 0.14);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.platform-advanced-fields summary {
+  color: var(--palladium-blue);
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 950;
+  list-style-position: inside;
+  padding: 11px 12px;
+}
+
+.platform-advanced-fields[open] summary {
+  border-bottom: 1px solid rgba(31, 56, 100, 0.12);
+}
+
+.platform-advanced-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 12px;
+}
+
 .platform-calculation-elements {
   display: grid;
   gap: 10px;
@@ -4131,6 +4186,26 @@ button.dashboard-control-card {
   padding: 14px;
 }
 
+.platform-record-filters {
+  background: var(--surface-soft);
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 10px 0 12px;
+  padding: 12px;
+}
+
+.platform-record-filters label {
+  color: var(--palladium-blue);
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 900;
+  gap: 6px;
+  min-width: 0;
+}
+
 .platform-collection-record-table {
   min-width: 1120px;
 }
@@ -4155,6 +4230,52 @@ button.dashboard-control-card {
   line-height: 1.35;
   margin-top: 3px;
   overflow-wrap: anywhere;
+}
+
+.platform-collection-history {
+  border-top: 1px solid rgba(31, 56, 100, 0.12);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.platform-history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.platform-history-item {
+  align-items: start;
+  background: var(--surface-soft);
+  border: 1px solid rgba(31, 56, 100, 0.12);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 10px 12px;
+}
+
+.platform-history-item strong,
+.platform-history-item small {
+  display: block;
+}
+
+.platform-history-item strong {
+  color: var(--palladium-blue);
+  font-size: 0.88rem;
+}
+
+.platform-history-item small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.platform-history-item time {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .table-action {
@@ -6487,7 +6608,9 @@ td small {
   .platform-collection-summary,
   .platform-collection-grid,
   .platform-collection-form,
+  .platform-advanced-grid,
   .platform-calculation-elements,
+  .platform-record-filters,
   .kobo-logic-grid,
   .kobo-template-actions,
   .kobo-sync-ready,
@@ -6616,7 +6739,10 @@ td small {
   .platform-collection-tabs,
   .platform-collection-grid,
   .platform-collection-form,
+  .platform-advanced-grid,
   .platform-calculation-elements,
+  .platform-record-filters,
+  .platform-history-item,
   .kobo-logic-grid,
   .kobo-template-actions,
   .kobo-sync-ready,

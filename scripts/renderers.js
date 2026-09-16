@@ -5132,9 +5132,48 @@
             ? $("#platform-objective-period")?.value
             : state.calendar?.start;
       const selectedMonth = (selectedPeriodValue || state.calendar?.start || todayIso).slice(0, 7);
+      const recordBranchFilter = state.currentCollectionRecordBranch || selectedBranch || "Tous";
+      const recordPoleFilter = state.currentCollectionRecordPole || selectedPoleId || "Tous";
+      const recordPeriodFilter = state.currentCollectionRecordPeriod || "";
+      const recordQueryFilter = state.currentCollectionRecordQuery || "";
+      const recordCountryOptionsHtml = (selectedValue) =>
+        `<option value="Tous" ${selectedValue === "Tous" ? "selected" : ""}>Tous les pays / filiales</option>${countryOptionsHtml(selectedValue, state)}`;
+      const recordPoleOptionsHtml = (selectedPoleValue) =>
+        `<option value="Tous" ${selectedPoleValue === "Tous" ? "selected" : ""}>Tous les poles</option>${collectionPoles
+          .map((pole) => `<option value="${escapeHtml(pole.id)}" ${pole.id === selectedPoleValue ? "selected" : ""}>${escapeHtml(pole.name)}</option>`)
+          .join("")}`;
+      setSelectOptions("#platform-record-branch-filter", recordCountryOptionsHtml(recordBranchFilter), recordBranchFilter);
+      setSelectOptions("#platform-record-pole-filter", recordPoleOptionsHtml(recordPoleFilter), recordPoleFilter);
+      const recordPeriodInput = $("#platform-record-period-filter");
+      if (recordPeriodInput && recordPeriodInput.value !== recordPeriodFilter) recordPeriodInput.value = recordPeriodFilter;
+      const recordQueryInput = $("#platform-record-query-filter");
+      if (recordQueryInput && recordQueryInput.value !== recordQueryFilter) recordQueryInput.value = recordQueryFilter;
       const branchMatches = (branch) => {
         const value = String(branch || "").trim();
         return !value || isGroupCountry(selectedCountry) || matchesCountryScope(value, selectedCountry);
+      };
+      const rowMatchesRecordFilters = (row = {}) => {
+        const branchFilter = $("#platform-record-branch-filter")?.value || recordBranchFilter || "Tous";
+        const poleFilter = $("#platform-record-pole-filter")?.value || recordPoleFilter || "Tous";
+        const periodFilter = ($("#platform-record-period-filter")?.value || "").trim();
+        const queryFilter = normalizeLookup($("#platform-record-query-filter")?.value || "");
+        if (poleFilter && poleFilter !== "Tous" && row.poleId && row.poleId !== poleFilter) return false;
+        if (branchFilter && branchFilter !== "Tous") {
+          const country = findCountryByValue(branchFilter);
+          const rowBranch = row.branch || "Groupe";
+          const isGlobalReference = row.collectionType === "reference" && normalizeLookup(rowBranch) === "groupe";
+          if (!isGlobalReference && !matchesCountryScope(rowBranch, country)) return false;
+        }
+        if (periodFilter && !String(row.period || "").startsWith(periodFilter)) return false;
+        if (queryFilter) {
+          const haystack = normalizeLookup(
+            [row.kpiId, row.kpiName, row.poleName, row.poleId, row.branch, row.details, row.actionLabel]
+              .filter(Boolean)
+              .join(" ")
+          );
+          if (!haystack.includes(queryFilter)) return false;
+        }
+        return true;
       };
       const keyForKpi = (kpi = {}) =>
         normalizeLookup(kpi.kpiId || kpi.catalogId || kpi.id || kpi.kpiKey || kpi.code || kpi.name || kpi.kpiName || "");
@@ -5187,6 +5226,25 @@
           card("Objectifs du mois", objectiveRows.length, `${missingObjectives.length} objectif(s) manquant(s)`, missingObjectives.length ? "amber" : "green"),
           card("Realises du mois", dailyRows.length, `${missingDailyRows.length} KPI sans donnee`, missingDailyRows.length ? "amber" : "green"),
         ].join("");
+      }
+      const guidance = $("#platform-collection-guidance");
+      if (guidance) {
+        const guidanceByTab = {
+          reference: {
+            title: "Saisie simplifiee: creez ou completez d'abord le KPI.",
+            detail: "Obligatoire: pays/filiale, pole, intitule KPI, unite, frequence et sens de performance. L'ID KPI peut etre genere automatiquement si vous le laissez vide.",
+          },
+          objective: {
+            title: "Objectif mensuel: une cible officielle par pays, pole, KPI et mois.",
+            detail: "Obligatoire: mois, pays/filiale, pole, KPI, objectif et unite. Si l'objectif depend du contrat ou du pays, indiquez clairement la valeur ou le libelle attendu.",
+          },
+          calculation: {
+            title: "Donnees realisees: saisissez soit le taux connu, soit les elements de calcul.",
+            detail: "Obligatoire: date, pays/filiale, pole et KPI. En mode elements, au moins un element avec sa valeur est requis; en mode taux ou valeur directe, la valeur directe est requise.",
+          },
+        };
+        const currentGuidance = guidanceByTab[activeTab] || guidanceByTab.reference;
+        guidance.innerHTML = `<strong>${escapeHtml(currentGuidance.title)}</strong><span>${escapeHtml(currentGuidance.detail)}</span>`;
       }
 
       const scopePill = $("#platform-collection-scope-pill");
@@ -5261,13 +5319,7 @@
         const canDelete = Boolean(!state.currentUser || state.currentPermissions?.administration || state.currentPermissions?.suppression);
         const rowMatchesScope = (row = {}) => {
           if (row.collectionType !== activeTab) return false;
-          if (selectedPole.id && row.poleId && row.poleId !== selectedPole.id) return false;
-          const rowBranch = row.branch || "Groupe";
-          const rowIsReference = row.collectionType === "reference";
-          const branchOk = rowIsReference && normalizeLookup(rowBranch) === "groupe" ? true : branchMatches(rowBranch);
-          if (!branchOk) return false;
-          if (row.collectionType === "reference") return true;
-          return String(row.period || "").slice(0, 7) === selectedMonth;
+          return rowMatchesRecordFilters(row);
         };
         const collectionRows = filterItemsByDataMode(state.collectionRows || [], state.dataModeFilter)
           .filter(rowMatchesScope)
@@ -5308,6 +5360,36 @@
                 })
                 .join("")
             : `<tr><td colspan="8">Aucune ligne renseignee pour ce perimetre. Les donnees apparaitront ici apres enregistrement.</td></tr>`;
+        }
+        const historyStatus = $("#platform-collection-history-status");
+        const historyList = $("#platform-collection-history-list");
+        const historyRows = (state.collectionHistory || [])
+          .filter((row) => row.collectionType === activeTab)
+          .filter(rowMatchesRecordFilters)
+          .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")))
+          .slice(0, 10);
+        if (historyStatus) {
+          historyStatus.className = `status-pill ${historyRows.length ? "green" : "gray"}`;
+          historyStatus.textContent = `${historyRows.length} action${historyRows.length > 1 ? "s" : ""}`;
+        }
+        if (historyList) {
+          historyList.innerHTML = historyRows.length
+            ? historyRows
+                .map((row) => {
+                  const title = `${row.action || "Action"} - ${row.kpiId || "KPI"}${row.period ? ` / ${row.period}` : ""}`;
+                  const detail = `${row.branch || "Groupe"} - ${row.poleId || "Pole a verifier"}${row.value ? ` - valeur: ${row.value}` : ""}`;
+                  return `
+                    <article class="platform-history-item">
+                      <div>
+                        <strong>${escapeHtml(title)}</strong>
+                        <small>${escapeHtml(detail)}</small>
+                      </div>
+                      <time>${escapeHtml(formatDisplayDateTime(row.createdAt))}</time>
+                    </article>
+                  `;
+                })
+                .join("")
+            : `<p class="empty-state">Aucune action recente pour ce filtre.</p>`;
         }
       }
       const authorizedCountries = getAuthorizedCountryOptions(state);

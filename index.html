@@ -1119,6 +1119,7 @@
                   <span class="status-pill green" id="platform-collection-scope-pill">Saisie directe active</span>
                 </div>
                 <div class="platform-collection-summary" id="platform-collection-summary"></div>
+                <div class="platform-collection-guidance" id="platform-collection-guidance" aria-live="polite"></div>
                 <div class="platform-collection-tabs" role="tablist" aria-label="Types de donnees a renseigner">
                   <button class="platform-collection-tab active" type="button" data-collection-tab="reference">
                     <strong>Referentiel KPI</strong>
@@ -1144,11 +1145,11 @@
                     </div>
                     <label>
                       Pays / filiale
-                      <select id="platform-reference-branch" class="search-input"></select>
+                      <select id="platform-reference-branch" class="search-input" required></select>
                     </label>
                     <label>
                       Pole / direction
-                      <select id="platform-reference-pole" class="search-input"></select>
+                      <select id="platform-reference-pole" class="search-input" required></select>
                     </label>
                     <label>
                       ID KPI
@@ -1156,11 +1157,11 @@
                     </label>
                     <label>
                       Intitule KPI
-                      <input id="platform-reference-kpi-name" class="search-input" placeholder="Nom de l'indicateur" />
+                      <input id="platform-reference-kpi-name" class="search-input" placeholder="Nom de l'indicateur" required />
                     </label>
                     <label>
                       Unite
-                      <select id="platform-reference-unit" class="search-input">
+                      <select id="platform-reference-unit" class="search-input" required>
                         <option value="% (Pourcentage)">% (Pourcentage)</option>
                         <option value="Nombre / Quantite">Nombre / Quantite</option>
                         <option value="Montant (FCFA / XOF)">Montant (FCFA / XOF)</option>
@@ -1174,7 +1175,7 @@
                     </label>
                     <label>
                       Frequence collecte
-                      <select id="platform-reference-frequency" class="search-input">
+                      <select id="platform-reference-frequency" class="search-input" required>
                         <option>Journalier</option>
                         <option>Horaire</option>
                         <option>Hebdomadaire</option>
@@ -1183,7 +1184,7 @@
                     </label>
                     <label>
                       Sens performance
-                      <select id="platform-reference-performance-direction" class="search-input">
+                      <select id="platform-reference-performance-direction" class="search-input" required>
                         <option value="higherBetter">Plus haut = mieux</option>
                         <option value="lowerBetter">Plus bas = mieux</option>
                         <option value="targetRange">Zone cible</option>
@@ -1193,21 +1194,26 @@
                       Seuil cible / reference
                       <input id="platform-reference-target" class="search-input" placeholder="ex. >= 90%" />
                     </label>
-                    <label class="platform-wide-field">
-                      Formule de calcul
-                      <textarea id="platform-reference-formula" class="search-input" rows="2" placeholder="ex. CA realise / heures produites"></textarea>
-                    </label>
-                    <label>
-                      Responsable KPI
-                      <input id="platform-reference-responsible" class="search-input" placeholder="Responsable" />
-                    </label>
-                    <label>
-                      Nature donnee
-                      <select id="platform-reference-data-nature" class="search-input">
-                        <option>Reel</option>
-                        <option>Test</option>
-                      </select>
-                    </label>
+                    <details class="platform-advanced-fields platform-wide-field">
+                      <summary>Champs complementaires</summary>
+                      <div class="platform-advanced-grid">
+                        <label class="platform-wide-field">
+                          Formule de calcul
+                          <textarea id="platform-reference-formula" class="search-input" rows="2" placeholder="ex. CA realise / heures produites"></textarea>
+                        </label>
+                        <label>
+                          Responsable KPI
+                          <input id="platform-reference-responsible" class="search-input" placeholder="Responsable" />
+                        </label>
+                        <label>
+                          Nature donnee
+                          <select id="platform-reference-data-nature" class="search-input">
+                            <option>Reel</option>
+                            <option>Test</option>
+                          </select>
+                        </label>
+                      </div>
+                    </details>
                     <button class="primary-action platform-wide-field" id="platform-reference-save" type="submit">
                       Enregistrer le KPI
                     </button>
@@ -1226,27 +1232,27 @@
                     </div>
                     <label>
                       Mois objectif
-                      <input id="platform-objective-period" class="search-input" type="month" />
+                      <input id="platform-objective-period" class="search-input" type="month" required />
                     </label>
                     <label>
                       Pays / filiale
-                      <select id="platform-objective-branch" class="search-input"></select>
+                      <select id="platform-objective-branch" class="search-input" required></select>
                     </label>
                     <label>
                       Pole / direction
-                      <select id="platform-objective-pole" class="search-input"></select>
+                      <select id="platform-objective-pole" class="search-input" required></select>
                     </label>
                     <label>
                       KPI
-                      <select id="platform-objective-kpi" class="search-input"></select>
+                      <select id="platform-objective-kpi" class="search-input" required></select>
                     </label>
                     <label>
                       Objectif mensuel
-                      <input id="platform-objective-target" class="search-input" placeholder="ex. 90%, 15 jours, objectif" />
+                      <input id="platform-objective-target" class="search-input" placeholder="ex. 90%, 15 jours, objectif" required />
                     </label>
                     <label>
                       Unite
-                      <select id="platform-objective-unit" class="search-input">
+                      <select id="platform-objective-unit" class="search-input" required>
                         <option value="% (Pourcentage)">% (Pourcentage)</option>
                         <option value="Nombre / Quantite">Nombre / Quantite</option>
                         <option value="Montant (FCFA / XOF)">Montant (FCFA / XOF)</option>
@@ -1258,42 +1264,47 @@
                         <option value="Autre">Autre</option>
                       </select>
                     </label>
-                    <label>
-                      Frequence
-                      <select id="platform-objective-frequency" class="search-input">
-                        <option>Mensuel</option>
-                        <option>Journalier</option>
-                        <option>Hebdomadaire</option>
-                        <option>Horaire</option>
-                      </select>
-                    </label>
-                    <label>
-                      Repartition
-                      <select id="platform-objective-distribution" class="search-input">
-                        <option>Automatique selon unite KPI</option>
-                        <option>Objectif fixe non prorata</option>
-                        <option>Prorata journalier</option>
-                      </select>
-                    </label>
-                    <label>
-                      Responsable
-                      <input id="platform-objective-responsible" class="search-input" placeholder="Responsable objectif" />
-                    </label>
-                    <label>
-                      Validation
-                      <select id="platform-objective-validation" class="search-input">
-                        <option>En attente</option>
-                        <option>Valide</option>
-                        <option>A corriger</option>
-                      </select>
-                    </label>
-                    <label>
-                      Nature donnee
-                      <select id="platform-objective-data-nature" class="search-input">
-                        <option>Reel</option>
-                        <option>Test</option>
-                      </select>
-                    </label>
+                    <details class="platform-advanced-fields platform-wide-field">
+                      <summary>Champs complementaires</summary>
+                      <div class="platform-advanced-grid">
+                        <label>
+                          Frequence
+                          <select id="platform-objective-frequency" class="search-input">
+                            <option>Mensuel</option>
+                            <option>Journalier</option>
+                            <option>Hebdomadaire</option>
+                            <option>Horaire</option>
+                          </select>
+                        </label>
+                        <label>
+                          Repartition
+                          <select id="platform-objective-distribution" class="search-input">
+                            <option>Automatique selon unite KPI</option>
+                            <option>Objectif fixe non prorata</option>
+                            <option>Prorata journalier</option>
+                          </select>
+                        </label>
+                        <label>
+                          Responsable
+                          <input id="platform-objective-responsible" class="search-input" placeholder="Responsable objectif" />
+                        </label>
+                        <label>
+                          Validation
+                          <select id="platform-objective-validation" class="search-input">
+                            <option>En attente</option>
+                            <option>Valide</option>
+                            <option>A corriger</option>
+                          </select>
+                        </label>
+                        <label>
+                          Nature donnee
+                          <select id="platform-objective-data-nature" class="search-input">
+                            <option>Reel</option>
+                            <option>Test</option>
+                          </select>
+                        </label>
+                      </div>
+                    </details>
                     <button class="primary-action platform-wide-field" id="platform-objective-save" type="submit">
                       Enregistrer l'objectif
                     </button>
@@ -1312,19 +1323,19 @@
                     </div>
                     <label>
                       Date collecte
-                      <input id="platform-calculation-date" class="search-input" type="date" />
+                      <input id="platform-calculation-date" class="search-input" type="date" required />
                     </label>
                     <label>
                       Pays / filiale
-                      <select id="platform-calculation-branch" class="search-input"></select>
+                      <select id="platform-calculation-branch" class="search-input" required></select>
                     </label>
                     <label>
                       Pole / direction
-                      <select id="platform-calculation-pole" class="search-input"></select>
+                      <select id="platform-calculation-pole" class="search-input" required></select>
                     </label>
                     <label>
                       KPI
-                      <select id="platform-calculation-kpi" class="search-input"></select>
+                      <select id="platform-calculation-kpi" class="search-input" required></select>
                     </label>
                     <label class="platform-wide-field">
                       Mode de saisie
@@ -1366,21 +1377,26 @@
                         <input id="platform-calculation-value-3" class="search-input" inputmode="decimal" />
                       </label>
                     </div>
-                    <label>
-                      Validation
-                      <select id="platform-calculation-validation" class="search-input">
-                        <option>En attente</option>
-                        <option>Valide</option>
-                        <option>A corriger</option>
-                      </select>
-                    </label>
-                    <label>
-                      Nature donnee
-                      <select id="platform-calculation-data-nature" class="search-input">
-                        <option>Reel</option>
-                        <option>Test</option>
-                      </select>
-                    </label>
+                    <details class="platform-advanced-fields platform-wide-field">
+                      <summary>Champs complementaires</summary>
+                      <div class="platform-advanced-grid">
+                        <label>
+                          Validation
+                          <select id="platform-calculation-validation" class="search-input">
+                            <option>En attente</option>
+                            <option>Valide</option>
+                            <option>A corriger</option>
+                          </select>
+                        </label>
+                        <label>
+                          Nature donnee
+                          <select id="platform-calculation-data-nature" class="search-input">
+                            <option>Reel</option>
+                            <option>Test</option>
+                          </select>
+                        </label>
+                      </div>
+                    </details>
                     <button class="primary-action platform-wide-field" id="platform-calculation-save" type="submit">
                       Enregistrer le realise
                     </button>
@@ -1410,6 +1426,24 @@
                     </div>
                     <span class="status-pill gray" id="platform-collection-record-status">0 ligne</span>
                   </div>
+                  <div class="platform-record-filters" aria-label="Filtres des donnees saisies">
+                    <label>
+                      Pays / filiale
+                      <select id="platform-record-branch-filter" class="search-input"></select>
+                    </label>
+                    <label>
+                      Pole / direction
+                      <select id="platform-record-pole-filter" class="search-input"></select>
+                    </label>
+                    <label>
+                      Periode
+                      <input id="platform-record-period-filter" class="search-input" placeholder="ex. 2026-08" />
+                    </label>
+                    <label>
+                      Recherche KPI
+                      <input id="platform-record-query-filter" class="search-input" placeholder="ID ou intitule KPI" />
+                    </label>
+                  </div>
                   <div class="table-wrap">
                     <table class="platform-collection-record-table">
                       <thead>
@@ -1426,6 +1460,16 @@
                       </thead>
                       <tbody id="platform-collection-records-body"></tbody>
                     </table>
+                  </div>
+                  <div class="platform-collection-history">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Historique</p>
+                        <h3>Dernieres actions de collecte</h3>
+                      </div>
+                      <span class="status-pill gray" id="platform-collection-history-status">0 action</span>
+                    </div>
+                    <div id="platform-collection-history-list" class="platform-history-list"></div>
                   </div>
                 </div>
               </section>

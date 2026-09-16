@@ -974,6 +974,7 @@
     kpiCalculationQuality: null,
     kpiObjectives: [],
     collectionRows: [],
+    collectionHistory: [],
     calendar: buildMonthToDateSelection(new Date()),
     calendarDateDropdownOpen: false,
     actorScope: "responsable",
@@ -1077,6 +1078,10 @@
     currentPlatformCalculationPole: PMS_DATA.reporting.defaultPole,
     currentPlatformCalculationKpi: "",
     platformCalculationEntryMode: "elements",
+    currentCollectionRecordBranch: "",
+    currentCollectionRecordPole: "",
+    currentCollectionRecordPeriod: "",
+    currentCollectionRecordQuery: "",
     currentAdminAccessPole: PMS_DATA.reporting.defaultPole,
     currentAccessProfile: "Administrateur",
     currentUserAccessUserId: `seed-${PMS_DATA.reporting.defaultPole}`,
@@ -1203,6 +1208,9 @@
     }
     if (Array.isArray(payload.collectionRows)) {
       state.collectionRows = payload.collectionRows;
+    }
+    if (Array.isArray(payload.collectionHistory)) {
+      state.collectionHistory = payload.collectionHistory;
     }
     if (payload.kpiCalculationQuality) {
       state.kpiCalculationQuality = payload.kpiCalculationQuality;
@@ -2819,6 +2827,10 @@
       status.className = `connector-status ${statusClass}`;
       status.innerHTML = content;
     };
+    const showPlatformValidation = (selector, message) => {
+      setPlatformStatus(selector, "warning", `<strong>Controle obligatoire</strong><span>${escapeHtml(message)}</span>`);
+      showToast(message);
+    };
     const withLoading = async (button, label, task) => {
       const previousText = button?.textContent;
       if (button) {
@@ -2874,6 +2886,9 @@
       const input = $(selector);
       if (!input) return;
       input.value = value ?? "";
+    };
+    const openPlatformAdvancedFields = (formSelector) => {
+      document.querySelector(`${formSelector} .platform-advanced-fields`)?.setAttribute("open", "");
     };
     const setSelectValue = (selector, value, label = "") => {
       const select = $(selector);
@@ -2964,6 +2979,7 @@
         setFieldValue("#platform-reference-formula", row.formula || row.details || "");
         setFieldValue("#platform-reference-responsible", row.responsible || "");
         setSelectValue("#platform-reference-data-nature", row.dataNature || "Reel");
+        openPlatformAdvancedFields("#platform-reference-form");
         setPlatformStatus(
           "#platform-reference-status",
           "warning",
@@ -2980,6 +2996,7 @@
         setFieldValue("#platform-objective-responsible", row.responsible || "");
         setSelectValue("#platform-objective-validation", row.validation || "En attente");
         setSelectValue("#platform-objective-data-nature", row.dataNature || "Reel");
+        openPlatformAdvancedFields("#platform-objective-form");
         setPlatformStatus(
           "#platform-objective-status",
           "warning",
@@ -3000,6 +3017,7 @@
         });
         setSelectValue("#platform-calculation-validation", row.validation || "En attente");
         setSelectValue("#platform-calculation-data-nature", row.dataNature || "Reel");
+        openPlatformAdvancedFields("#platform-calculation-form");
         updatePlatformCalculationMode();
         setPlatformStatus(
           "#platform-calculation-status",
@@ -3059,6 +3077,19 @@
         updatePlatformCalculationMode();
       });
     });
+    [
+      ["#platform-record-branch-filter", "currentCollectionRecordBranch", "change"],
+      ["#platform-record-pole-filter", "currentCollectionRecordPole", "change"],
+      ["#platform-record-period-filter", "currentCollectionRecordPeriod", "input"],
+      ["#platform-record-query-filter", "currentCollectionRecordQuery", "input"],
+    ].forEach(([selector, stateKey, eventName]) => {
+      const input = $(selector);
+      input?.addEventListener(eventName, () => {
+        state[stateKey] = input.value;
+        refreshPlatformCollectionPanel();
+        updatePlatformCalculationMode();
+      });
+    });
     $("#platform-calculation-entry-mode")?.addEventListener("change", updatePlatformCalculationMode);
     updatePlatformCalculationMode();
 
@@ -3071,8 +3102,12 @@
       const pole = selectedPoleById(fieldValue("#platform-reference-pole") || state.currentPlatformReferencePole);
       const catalogId = fieldValue("#platform-reference-kpi-id") || nextPlatformKpiId();
       const kpiName = fieldValue("#platform-reference-kpi-name");
-      if (!pole?.id || !kpiName) {
-        setPlatformStatus("#platform-reference-status", "warning", "Renseignez au minimum le pole et l'intitule du KPI.");
+      if (!fieldValue("#platform-reference-branch") || !pole?.id || !kpiName) {
+        showPlatformValidation("#platform-reference-status", "Renseignez le pays/la filiale, le pole et l'intitule du KPI.");
+        return;
+      }
+      if (!fieldValue("#platform-reference-unit") || !fieldValue("#platform-reference-frequency") || !fieldValue("#platform-reference-performance-direction")) {
+        showPlatformValidation("#platform-reference-status", "Renseignez l'unite, la frequence de collecte et le sens de performance.");
         return;
       }
       $("#platform-reference-kpi-id").value = catalogId;
@@ -3114,8 +3149,12 @@
       const pole = selectedPoleById(fieldValue("#platform-objective-pole") || state.currentPlatformObjectivePole);
       const kpiId = fieldValue("#platform-objective-kpi");
       const target = fieldValue("#platform-objective-target");
-      if (!pole?.id || !kpiId || !fieldValue("#platform-objective-period") || !target) {
-        setPlatformStatus("#platform-objective-status", "warning", "Renseignez le mois, le pays, le pole, le KPI et l'objectif.");
+      if (!fieldValue("#platform-objective-branch") || !pole?.id || !kpiId || !fieldValue("#platform-objective-period") || !target) {
+        showPlatformValidation("#platform-objective-status", "Renseignez le mois, le pays/la filiale, le pole, le KPI et l'objectif.");
+        return;
+      }
+      if (!fieldValue("#platform-objective-unit")) {
+        showPlatformValidation("#platform-objective-status", "Renseignez l'unite de mesure de l'objectif: %, jours, montant, nombre, ratio, etc.");
         return;
       }
       await withLoading($("#platform-objective-save"), "Enregistrement...", async () => {
@@ -3158,8 +3197,23 @@
         label: fieldValue(`#platform-calculation-element-${index}`),
         value: fieldValue(`#platform-calculation-value-${index}`),
       }));
-      if (!pole?.id || !kpiId || !fieldValue("#platform-calculation-date")) {
-        setPlatformStatus("#platform-calculation-status", "warning", "Renseignez la date, le pays, le pole et le KPI.");
+      if (!fieldValue("#platform-calculation-branch") || !pole?.id || !kpiId || !fieldValue("#platform-calculation-date")) {
+        showPlatformValidation("#platform-calculation-status", "Renseignez la date, le pays/la filiale, le pole et le KPI.");
+        return;
+      }
+      if (entryMode === "elements") {
+        const hasUsableElement = elements.some((item) => item.label && item.value);
+        const hasIncompleteElement = elements.some((item) => (item.label && !item.value) || (!item.label && item.value));
+        if (hasIncompleteElement) {
+          showPlatformValidation("#platform-calculation-status", "Chaque element de calcul renseigne doit avoir un libelle et une valeur.");
+          return;
+        }
+        if (!hasUsableElement) {
+          showPlatformValidation("#platform-calculation-status", "Ajoutez au moins un element de calcul avec sa valeur.");
+          return;
+        }
+      } else if (!fieldValue("#platform-calculation-direct-value")) {
+        showPlatformValidation("#platform-calculation-status", "Renseignez la valeur directe avant d'enregistrer.");
         return;
       }
       await withLoading($("#platform-calculation-save"), "Enregistrement...", async () => {

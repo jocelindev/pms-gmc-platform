@@ -2041,6 +2041,7 @@ def get_bootstrap_payload(session: dict) -> dict:
         kobo_submissions = list_kobo_submissions(conn)
         kpi_daily_dates = list_kpi_daily_dates(conn)
         collection_rows = list_platform_collection_rows(conn)
+        collection_history = list_platform_collection_history(conn)
 
         if has_global_scope:
             scoped_results = kpi_results
@@ -2049,6 +2050,7 @@ def get_bootstrap_payload(session: dict) -> dict:
             scoped_submissions = kobo_submissions
             scoped_daily_dates = kpi_daily_dates
             scoped_collection_rows = collection_rows
+            scoped_collection_history = collection_history
         else:
             scoped_results = filter_records_by_access_rules(kpi_results, access_rules)
             scoped_objectives = filter_records_by_access_rules(objectives, access_rules, allow_group_record=True)
@@ -2056,6 +2058,7 @@ def get_bootstrap_payload(session: dict) -> dict:
             scoped_submissions = filter_records_by_access_rules(kobo_submissions, access_rules)
             scoped_daily_dates = filter_records_by_access_rules(kpi_daily_dates, access_rules)
             scoped_collection_rows = filter_records_by_access_rules(collection_rows, access_rules, allow_group_record=True)
+            scoped_collection_history = filter_records_by_access_rules(collection_history, access_rules, allow_group_record=True)
 
         scoped_quality = scoped_kpi_quality(
             kpi_quality,
@@ -2075,6 +2078,7 @@ def get_bootstrap_payload(session: dict) -> dict:
             "koboSubmissions": scoped_submissions,
             "kpiDailyDates": scoped_daily_dates,
             "collectionRows": scoped_collection_rows,
+            "collectionHistory": scoped_collection_history,
             "kpiCalculationResults": scoped_results,
             "kpiCalculationQuality": scoped_quality,
             "koboAnomalies": scoped_quality.get("anomalies", []),
@@ -3215,8 +3219,13 @@ def save_platform_reference_kpi(payload: dict, session: dict | None = None) -> d
     branch = text_or_empty(payload.get("branch") or payload.get("countryName") or "Groupe") or "Groupe"
     kpi_code = canonical_kpi_code(payload.get("catalogId") or payload.get("kpiId") or payload.get("idKpi"))
     kpi_name = text_or_empty(payload.get("kpiName") or payload.get("name") or kpi_code)
-    if not pole_id or not (kpi_code or kpi_name):
+    unit = text_or_empty(payload.get("unit"))
+    frequency = text_or_empty(payload.get("collectionFrequency") or payload.get("frequency"))
+    performance_direction = text_or_empty(payload.get("performanceDirection") or "higherBetter")
+    if not pole_id or not branch or not (kpi_code or kpi_name):
         raise ValueError("Pays/filiale, pole et KPI sont obligatoires pour renseigner le referentiel.")
+    if not unit or not frequency or not performance_direction:
+        raise ValueError("Unite, frequence de collecte et sens de performance sont obligatoires dans le referentiel.")
 
     with db_connect() as conn:
         pole_row = conn.execute("SELECT id, name, owner FROM poles WHERE id = ?", (pole_id,)).fetchone()
@@ -3235,12 +3244,12 @@ def save_platform_reference_kpi(payload: dict, session: dict | None = None) -> d
             "intitule_du_kpi": kpi_name,
             "description_definition": text_or_empty(payload.get("definition")),
             "type_de_kpi": text_or_empty(payload.get("type") or payload.get("category") or "KPI metier"),
-            "unite_de_mesure": text_or_empty(payload.get("unit")),
+            "unite_de_mesure": unit,
             "formule_de_calcul": text_or_empty(payload.get("formula")),
             "valeur_cible": text_or_empty(payload.get("target")),
-            "sens_performance": text_or_empty(payload.get("performanceDirection") or "higherBetter"),
-            "frequence_de_collecte": text_or_empty(payload.get("collectionFrequency") or payload.get("frequency")),
-            "periodicite_du_reporting": text_or_empty(payload.get("reportingFrequency") or payload.get("frequency")),
+            "sens_performance": performance_direction,
+            "frequence_de_collecte": frequency,
+            "periodicite_du_reporting": text_or_empty(payload.get("reportingFrequency") or payload.get("frequency")) or frequency,
             "source_de_la_donnee": source_data,
             "responsable_du_kpi": text_or_empty(payload.get("owner") or payload.get("responsible") or (pole_row["owner"] if pole_row else "")),
             "repondant": text_or_empty(payload.get("respondent") or payload.get("responsible")),
@@ -3304,8 +3313,11 @@ def save_platform_monthly_objective(payload: dict, session: dict | None = None) 
     kpi_code = canonical_kpi_code(payload.get("catalogId") or payload.get("kpiId") or payload.get("idKpi"))
     period_raw = text_or_empty(payload.get("period") or payload.get("month"))
     target = text_or_empty(payload.get("target") or payload.get("objective"))
+    unit = text_or_empty(payload.get("unit"))
     if not pole_id or not kpi_code or not period_raw or not target:
         raise ValueError("Pays/filiale, pole, KPI, mois et objectif sont obligatoires.")
+    if not unit:
+        raise ValueError("L'unite de mesure est obligatoire pour enregistrer l'objectif mensuel.")
 
     parsed_month = parse_period_month(period_raw)
     period = parsed_month[0] if parsed_month else period_raw
@@ -3320,7 +3332,7 @@ def save_platform_monthly_objective(payload: dict, session: dict | None = None) 
             "id_kpi": kpi_code,
             "periode_objectif": period,
             "objectif_mensuel": target,
-            "unite": text_or_empty(payload.get("unit")),
+            "unite": unit,
             "frequence": text_or_empty(payload.get("frequency") or "Mensuelle"),
             "mode_repartition": text_or_empty(payload.get("distributionMode") or "Automatique selon unite KPI"),
             "source_objectif": text_or_empty(payload.get("sourceData") or "Saisie interne Hub central"),
@@ -3443,15 +3455,25 @@ def save_platform_calculation_data(payload: dict, session: dict | None = None) -
     entry_mode = normalize_match_key(payload.get("entryMode") or "elements")
     direct_value = payload.get("directValue")
     elements = payload.get("elements") if isinstance(payload.get("elements"), list) else []
+    has_incomplete_element = any(
+        item
+        and (
+            (text_or_empty(item.get("label")) and item.get("value") in (None, ""))
+            or (not text_or_empty(item.get("label")) and item.get("value") not in (None, ""))
+        )
+        for item in elements[:3]
+    )
     has_direct_value = direct_value not in (None, "")
     usable_elements = [
         {
-            "label": text_or_empty(item.get("label") or f"element {index + 1}"),
+            "label": text_or_empty(item.get("label")),
             "value": item.get("value"),
         }
         for index, item in enumerate(elements[:3])
-        if item and item.get("value") not in (None, "")
+        if item and text_or_empty(item.get("label")) and item.get("value") not in (None, "")
     ]
+    if "element" in entry_mode and has_incomplete_element:
+        raise ValueError("Chaque element de calcul renseigne doit avoir un libelle et une valeur.")
     if "element" in entry_mode and not usable_elements:
         raise ValueError("Renseignez au moins un element de calcul et sa valeur.")
     if "element" not in entry_mode and not has_direct_value:
@@ -5031,6 +5053,106 @@ def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
     return rows[:1500]
 
 
+def list_platform_collection_history(conn: sqlite3.Connection, limit: int = 80) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT
+          id,
+          action,
+          entity_type,
+          entity_id,
+          details,
+          created_at
+        FROM audit_logs
+        WHERE action IN (
+          'Saisie plateforme referentiel KPI',
+          'Saisie plateforme objectif mensuel',
+          'Saisie plateforme donnees de calcul',
+          'Suppression collecte referentiel KPI',
+          'Suppression collecte objectif mensuel',
+          'Suppression collecte donnees realisees'
+        )
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+
+    history: list[dict] = []
+    for row in rows:
+        try:
+            details = json.loads(row["details"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            details = {}
+        action = text_or_empty(row["action"])
+        normalized_action = normalize_match_key(action)
+        if "referentiel" in normalized_action:
+            collection_type = "reference"
+            type_label = "Referentiel KPI"
+        elif "objectif" in normalized_action:
+            collection_type = "objective"
+            type_label = "Objectif mensuel"
+        else:
+            collection_type = "calculation"
+            type_label = "Donnee realisee"
+        is_delete = "suppression" in normalized_action
+        branch = text_or_empty(
+            details.get("pays_filiale")
+            or details.get("rowBranch")
+            or details.get("branch")
+            or details.get("countryName")
+            or details.get("country")
+            or "Groupe"
+        ) or "Groupe"
+        pole_id = text_or_empty(
+            details.get("pole_id")
+            or details.get("pole")
+            or details.get("rowPoleId")
+            or details.get("groupe_de_rattachement")
+        )
+        kpi_id = text_or_empty(
+            details.get("id_kpi")
+            or details.get("id_kpi_final")
+            or details.get("rowKpi")
+            or details.get("kpi")
+            or row["entity_id"]
+        )
+        period = text_or_empty(
+            details.get("periode_objectif")
+            or details.get("periode_reporting")
+            or details.get("date_collecte")
+            or details.get("rowPeriod")
+            or details.get("period")
+            or details.get("annee")
+        )
+        value = text_or_empty(
+            details.get("objectif_mensuel")
+            or details.get("taux_realise")
+            or details.get("valeur_realisee")
+            or details.get("valeur_cible")
+            or details.get("rowValue")
+        )
+        history.append(
+            {
+                "id": f"history:{row['id']}",
+                "collectionType": collection_type,
+                "typeLabel": type_label,
+                "action": "Suppression" if is_delete else "Enregistrement",
+                "actionLabel": action,
+                "branch": branch,
+                "poleId": pole_id,
+                "kpiId": kpi_id,
+                "period": period,
+                "value": value,
+                "entityType": text_or_empty(row["entity_type"]),
+                "entityId": text_or_empty(row["entity_id"]),
+                "createdAt": text_or_empty(row["created_at"]),
+                "statusClass": "red" if is_delete else "green",
+            }
+        )
+    return history
+
+
 def collection_row_kind_and_key(row_id: str, row_type: str = "") -> tuple[str, str]:
     clean_row_id = text_or_empty(row_id)
     clean_type = text_or_empty(row_type)
@@ -5093,8 +5215,20 @@ def delete_platform_collection_row(payload: dict, session: dict) -> dict:
                 (row["pole_id"], f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}%", row["code"], row["name"]),
             )
             conn.execute("DELETE FROM kpis WHERE id = ?", (row["id"],))
-            audit(conn, "Suppression collecte referentiel KPI", "kpi", str(row["id"]), {"rowId": payload.get("rowId")})
             deleted_label = text_or_empty(row["code"] or row["name"])
+            audit(
+                conn,
+                "Suppression collecte referentiel KPI",
+                "kpi",
+                str(row["id"]),
+                {
+                    "rowId": payload.get("rowId"),
+                    "rowBranch": "Groupe",
+                    "rowPoleId": row["pole_id"],
+                    "rowKpi": deleted_label,
+                    "rowPeriod": "Referentiel",
+                },
+            )
 
         elif row_type == "objective":
             row = conn.execute(
@@ -5122,8 +5256,20 @@ def delete_platform_collection_row(payload: dict, session: dict) -> dict:
                 "DELETE FROM kobo_submissions WHERE submission_uid = ? AND COALESCE(submission_uid, '') LIKE ?",
                 (uid, f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}%"),
             )
-            audit(conn, "Suppression collecte objectif mensuel", "kpi_objective", str(row["id"]), {"rowId": payload.get("rowId")})
             deleted_label = text_or_empty(row["code"] or row["name"])
+            audit(
+                conn,
+                "Suppression collecte objectif mensuel",
+                "kpi_objective",
+                str(row["id"]),
+                {
+                    "rowId": payload.get("rowId"),
+                    "rowBranch": row["branch"],
+                    "rowPoleId": row["pole_id"],
+                    "rowKpi": deleted_label,
+                    "rowPeriod": row["period"],
+                },
+            )
 
         else:
             row = conn.execute(
@@ -5160,8 +5306,20 @@ def delete_platform_collection_row(payload: dict, session: dict) -> dict:
                     )
             else:
                 conn.execute("DELETE FROM kpi_daily_data WHERE id = ?", (row["id"],))
-            audit(conn, "Suppression collecte donnees realisees", "kpi_daily_data", str(row["id"]), {"rowId": payload.get("rowId")})
             deleted_label = text_or_empty(row["kpi_raw"] or row["kpi_key"])
+            audit(
+                conn,
+                "Suppression collecte donnees realisees",
+                "kpi_daily_data",
+                str(row["id"]),
+                {
+                    "rowId": payload.get("rowId"),
+                    "rowBranch": row["branch"],
+                    "rowPoleId": row["pole_id"],
+                    "rowKpi": deleted_label,
+                    "rowPeriod": row["data_date"],
+                },
+            )
 
         conn.commit()
         return {
