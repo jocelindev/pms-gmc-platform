@@ -9,7 +9,7 @@ services:
     name: palladiumafrica-controltower
     runtime: python
     plan: free
-    buildCommand: python -m py_compile server.py start.py database/init_database.py database/db.py
+    buildCommand: pip install -r requirements.txt && python -m py_compile server.py start.py database/init_database.py database/db.py
     startCommand: python start.py --host 0.0.0.0
     healthCheckPath: /api/health
     domains:
