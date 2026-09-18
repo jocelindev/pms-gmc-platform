@@ -3964,6 +3964,123 @@ def map_objective_import_payload(conn: sqlite3.Connection, row: dict, file_name:
     }
 
 
+def save_imported_reference_payload(conn: sqlite3.Connection, payload: dict) -> None:
+    pole_id = payload["poleId"]
+    pole_row = conn.execute("SELECT id, name, owner FROM poles WHERE id = ?", (pole_id,)).fetchone()
+    pole_name = text_or_empty(payload.get("poleName") or (pole_row["name"] if pole_row else pole_id)) or pole_id
+    frequency = text_or_empty(payload.get("collectionFrequency") or payload.get("frequency") or "Mensuel")
+    ensure_kpi(
+        conn,
+        {
+            "poleId": pole_id,
+            "poleName": pole_name,
+            "kpiName": text_or_empty(payload.get("kpiName") or payload.get("catalogId")),
+            "catalogId": payload.get("catalogId"),
+            "definition": payload.get("definition"),
+            "type": payload.get("type"),
+            "unit": payload.get("unit") or "Autre",
+            "formula": payload.get("formula"),
+            "target": payload.get("target"),
+            "collectionFrequency": frequency,
+            "reportingFrequency": payload.get("reportingFrequency") or frequency,
+            "frequency": frequency,
+            "sourceData": payload.get("sourceData") or "Import interne Hub central",
+            "sourceForm": "Import interne Hub central",
+            "responsible": payload.get("responsible") or (pole_row["owner"] if pole_row else ""),
+            "respondent": payload.get("respondent"),
+            "validator": payload.get("validator"),
+            "validation": payload.get("validation") or "En attente",
+            "documentStatus": payload.get("documentStatus") or "Importe",
+        },
+    )
+
+
+def save_imported_objective_payload(conn: sqlite3.Connection, payload: dict, session: dict | None = None) -> None:
+    pole_id = payload["poleId"]
+    kpi_code = canonical_kpi_code(payload.get("catalogId"))
+    parsed_month = parse_period_month(payload.get("period"))
+    period = parsed_month[0] if parsed_month else text_or_empty(payload.get("period"))
+    if not period:
+        raise ValueError("Mois objectif obligatoire.")
+    pole_row = conn.execute("SELECT id, name, owner FROM poles WHERE id = ?", (pole_id,)).fetchone()
+    pole_name = text_or_empty(payload.get("poleName") or (pole_row["name"] if pole_row else pole_id)) or pole_id
+    kpi_row = conn.execute("SELECT id FROM kpis WHERE code = ? LIMIT 1", (kpi_code,)).fetchone()
+    if kpi_row:
+        kpi_id = int(kpi_row["id"])
+    else:
+        kpi_id = ensure_kpi(
+            conn,
+            {
+                "poleId": pole_id,
+                "poleName": pole_name,
+                "kpiName": text_or_empty(payload.get("kpiName") or kpi_code),
+                "catalogId": kpi_code,
+                "unit": payload.get("unit") or "Autre",
+                "target": payload.get("target"),
+                "frequency": payload.get("frequency") or "Mensuel",
+                "sourceData": payload.get("sourceData") or "Import interne Hub central",
+                "sourceForm": "Import interne Hub central",
+                "responsible": payload.get("responsible") or (pole_row["owner"] if pole_row else ""),
+                "validation": payload.get("validation") or "En attente",
+                "documentStatus": "KPI cree depuis import objectif - a completer dans le referentiel",
+            },
+        )
+    created_by = int(session.get("userId") or 0) if session else None
+    conn.execute(
+        """
+        INSERT INTO kpi_objectives (
+          kpi_id,
+          pole_id,
+          branch,
+          period,
+          target,
+          unit,
+          frequency,
+          source_form_uid,
+          source_server_url,
+          source_data,
+          responsible,
+          validation_status,
+          document_status,
+          attention_points,
+          created_by_user_id,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(kpi_id, pole_id, branch, period) DO UPDATE SET
+          target = excluded.target,
+          unit = excluded.unit,
+          frequency = excluded.frequency,
+          source_form_uid = excluded.source_form_uid,
+          source_server_url = excluded.source_server_url,
+          source_data = excluded.source_data,
+          responsible = excluded.responsible,
+          validation_status = excluded.validation_status,
+          document_status = excluded.document_status,
+          attention_points = excluded.attention_points,
+          created_by_user_id = COALESCE(excluded.created_by_user_id, kpi_objectives.created_by_user_id),
+          updated_at = CURRENT_TIMESTAMP
+        """,
+        (
+            kpi_id,
+            pole_id,
+            text_or_empty(payload.get("branch") or "Groupe") or "Groupe",
+            period,
+            text_or_empty(payload.get("target")),
+            text_or_empty(payload.get("unit") or "Autre"),
+            text_or_empty(payload.get("frequency") or "Mensuel"),
+            "Import interne Hub central",
+            "Import interne Hub central",
+            text_or_empty(payload.get("sourceData") or "Import interne Hub central"),
+            text_or_empty(payload.get("responsible") or (pole_row["owner"] if pole_row else "")),
+            text_or_empty(payload.get("validation") or "En attente"),
+            "Objectif importe",
+            text_or_empty(payload.get("attention")),
+            created_by,
+        ),
+    )
+
+
 def import_platform_collection_file(payload: dict, session: dict) -> dict:
     kind = text_or_empty(payload.get("kind") or "reference")
     if kind not in {"reference", "objective"}:
@@ -3977,7 +4094,6 @@ def import_platform_collection_file(payload: dict, session: dict) -> dict:
     skipped = 0
     errors: list[dict] = []
     mapper = map_reference_import_payload if kind == "reference" else map_objective_import_payload
-    saver = save_platform_reference_kpi if kind == "reference" else save_platform_monthly_objective
     with db_connect() as conn:
         for index, row in enumerate(rows, start=1):
             row_number = text_or_empty(row.get("_row_number") or index)
@@ -3991,12 +4107,23 @@ def import_platform_collection_file(payload: dict, session: dict) -> dict:
                     allow_group_record=False,
                 ):
                     raise PermissionError("Ligne hors de votre perimetre d'acces.")
-                saver(row_payload, session)
+                if kind == "reference":
+                    save_imported_reference_payload(conn, row_payload)
+                else:
+                    save_imported_objective_payload(conn, row_payload, session)
                 imported += 1
             except Exception as exc:
                 skipped += 1
                 if len(errors) < 20:
                     errors.append({"row": row_number, "error": str(exc)})
+        audit(
+            conn,
+            "Import collecte interne",
+            "collection_import",
+            file_name,
+            {"kind": kind, "totalRows": len(rows), "importedRows": imported, "skippedRows": skipped},
+        )
+        conn.commit()
 
     return {
         "kind": kind,
@@ -7818,9 +7945,7 @@ class PMSHandler(BaseHTTPRequestHandler):
                     "Droit d'ajout requis pour importer les donnees de collecte.",
                 )
                 summary = import_platform_collection_file(payload, session)
-                refreshed = get_bootstrap_payload(session)
-                refreshed["importSummary"] = summary
-                self.send_json(refreshed)
+                self.send_json({"importSummary": summary})
                 return
             if path == "/api/collection/delete":
                 session = require_permission_session(

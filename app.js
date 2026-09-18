@@ -3213,7 +3213,6 @@
             fileName: file.name,
             contentBase64,
           });
-          applyCollectionMutationResponse(response);
           const summary = response?.importSummary || {};
           const importedRows = Number(summary.importedRows || 0);
           const skippedRows = Number(summary.skippedRows || 0);
@@ -3221,10 +3220,16 @@
           const errorDetails = errors.length
             ? `<small>${errors.map((item) => `Ligne ${escapeHtml(item.row)}: ${escapeHtml(item.error)}`).join("<br>")}</small>`
             : "";
+          const statusClass = skippedRows ? "warning" : "success";
+          const statusContent = `<strong>${escapeHtml(importedRows)} ligne(s) importee(s)</strong><span>${escapeHtml(skippedRows)} ligne(s) ignoree(s) sur ${escapeHtml(summary.totalRows || 0)}.</span>${errorDetails}`;
+          if (api?.bootstrap) {
+            const refreshed = await api.bootstrap();
+            applyCollectionMutationResponse({ ...refreshed, importSummary: summary });
+          }
           setPlatformStatus(
             "#platform-import-status",
-            skippedRows ? "warning" : "success",
-            `<strong>${escapeHtml(importedRows)} ligne(s) importee(s)</strong><span>${escapeHtml(skippedRows)} ligne(s) ignoree(s) sur ${escapeHtml(summary.totalRows || 0)}.</span>${errorDetails}`
+            statusClass,
+            statusContent
           );
           showToast(`${importedRows} ligne(s) importee(s) dans la collecte interne.`);
         } catch (error) {
