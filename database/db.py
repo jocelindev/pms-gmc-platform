@@ -175,6 +175,7 @@ def convert_sql(sql: str) -> str:
         query = re.sub(r"\bINSERT\s+OR\s+IGNORE\s+INTO\b", "INSERT INTO", query, flags=re.I)
         if "ON CONFLICT" not in query.upper():
             query = query.rstrip(";") + " ON CONFLICT DO NOTHING"
+    query = query.replace("%", "%%")
     query = query.replace("?", "%s")
     return query
 
