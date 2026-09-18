@@ -13,12 +13,14 @@ import io
 import json
 import mimetypes
 import os
+import posixpath
 import re
 import secrets
 import sqlite3
 import threading
 import time
 import unicodedata
+import xml.etree.ElementTree as ET
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -3644,40 +3646,232 @@ def row_looks_like_import_header(values: list[str], kind: str) -> bool:
     return len(header_keys & wanted_keys) >= 2
 
 
+def excel_column_index(cell_reference: str) -> int:
+    match = re.match(r"([A-Z]+)", str(cell_reference or "").upper())
+    if not match:
+        return 0
+    index = 0
+    for char in match.group(1):
+        index = index * 26 + (ord(char) - ord("A") + 1)
+    return max(0, index - 1)
+
+
+def xlsx_shared_strings(zip_file) -> list[str]:
+    if "xl/sharedStrings.xml" not in zip_file.namelist():
+        return []
+    ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    root = ET.fromstring(zip_file.read("xl/sharedStrings.xml"))
+    values = []
+    for item in root.findall("m:si", ns):
+        values.append("".join(node.text or "" for node in item.findall(".//m:t", ns)))
+    return values
+
+
+def xlsx_sheet_paths(zip_file) -> list[tuple[str, str]]:
+    ns = {
+        "m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+        "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    }
+    workbook = ET.fromstring(zip_file.read("xl/workbook.xml"))
+    rels = ET.fromstring(zip_file.read("xl/_rels/workbook.xml.rels"))
+    rel_map = {rel.attrib["Id"]: rel.attrib["Target"] for rel in rels}
+    sheets = []
+    for sheet in workbook.findall(".//m:sheet", ns):
+        relation_id = sheet.attrib.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+        target = rel_map.get(relation_id or "")
+        if not target:
+            continue
+        path = target.lstrip("/") if target.startswith("/") else posixpath.normpath(posixpath.join("xl", target))
+        sheets.append((sheet.attrib.get("name") or path, path))
+    return sheets
+
+
+def xlsx_cell_value(cell, shared_strings: list[str], ns: dict[str, str]) -> str:
+    cell_type = cell.attrib.get("t")
+    if cell_type == "inlineStr":
+        return "".join(node.text or "" for node in cell.findall(".//m:t", ns)).strip()
+    value_node = cell.find("m:v", ns)
+    value = "" if value_node is None else value_node.text or ""
+    if cell_type == "s" and value.isdigit():
+        index = int(value)
+        if 0 <= index < len(shared_strings):
+            return shared_strings[index].strip()
+    return import_cell_text(value)
+
+
+def xlsx_rows_from_sheet(zip_file, sheet_path: str, shared_strings: list[str]) -> list[list[str]]:
+    ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    root = ET.fromstring(zip_file.read(sheet_path))
+    rows = []
+    for row in root.findall(".//m:sheetData/m:row", ns):
+        values: list[str] = []
+        for cell in row.findall("m:c", ns):
+            column_index = excel_column_index(cell.attrib.get("r", ""))
+            while len(values) < column_index:
+                values.append("")
+            values.append(xlsx_cell_value(cell, shared_strings, ns))
+        if any(values):
+            rows.append(values)
+    return rows
+
+
+def xlsx_tables_from_bytes(raw_content: bytes) -> dict[str, list[list[str]]]:
+    from zipfile import BadZipFile, ZipFile
+
+    try:
+        with ZipFile(io.BytesIO(raw_content)) as zip_file:
+            shared_strings = xlsx_shared_strings(zip_file)
+            tables = {}
+            for sheet_name, sheet_path in xlsx_sheet_paths(zip_file):
+                if sheet_path in zip_file.namelist():
+                    tables[sheet_name] = xlsx_rows_from_sheet(zip_file, sheet_path, shared_strings)
+            return tables
+    except (BadZipFile, KeyError, ET.ParseError) as exc:
+        raise ValueError("Fichier Excel illisible ou corrompu.") from exc
+
+
+def parse_kpi_choice_label(label: str, fallback_id: str = "") -> dict:
+    text = text_or_empty(label)
+    kpi_id = canonical_kpi_code(fallback_id)
+    match = re.match(r"^(KPI[\s_-]*\d+)\s*[-–]\s*(.+)$", text, flags=re.IGNORECASE)
+    if match:
+        kpi_id = canonical_kpi_code(match.group(1))
+        text = match.group(2).strip()
+    parts = [part.strip() for part in re.split(r"\s*\|\s*", text) if part.strip()]
+    name = parts[0] if parts else text_or_empty(label) or kpi_id
+    frequency = ""
+    target = ""
+    for part in parts[1:]:
+        if normalize_match_key(part).startswith("cible"):
+            target = re.sub(r"^cible\s*:\s*", "", part, flags=re.IGNORECASE).strip()
+        elif not frequency:
+            frequency = part
+    return {"catalogId": kpi_id, "kpiName": name, "frequency": frequency, "target": target}
+
+
+def infer_unit_from_import_label(name: str = "", target: str = "") -> str:
+    lookup = normalize_match_key(f"{name} {target}")
+    if "%" in f"{name} {target}" or "taux" in lookup or "tx" in lookup or "ratio" in lookup:
+        return "% (Pourcentage)"
+    if "fcfa" in lookup or "xaf" in lookup or "montant" in lookup or "ca " in lookup:
+        return "Montant (FCFA / XOF)"
+    if "jour" in lookup or "days" in lookup:
+        return "Jours"
+    if "heure" in lookup or "/h" in str(name).lower():
+        return "Heures"
+    if "minute" in lookup or "dmt" in lookup or "sec" in lookup:
+        return "Minutes"
+    if "score" in lookup:
+        return "Score"
+    return "Nombre / Quantite"
+
+
+def xlsform_reference_rows_from_tables(tables: dict[str, list[list[str]]], kind: str) -> list[dict]:
+    if kind != "reference":
+        return []
+    choices_rows = next((rows for name, rows in tables.items() if normalize_match_key(name) == "choices"), [])
+    if not choices_rows:
+        return []
+    header = [import_header_key(value) for value in choices_rows[0]]
+    rows = []
+    for index, raw_row in enumerate(choices_rows[1:], start=2):
+        row = {header[column_index]: import_cell_text(value) for column_index, value in enumerate(raw_row) if column_index < len(header)}
+        if import_header_key(row.get("list_name")) != "kpi_ids":
+            continue
+        parsed = parse_kpi_choice_label(row.get("label") or row.get("label_francais") or row.get("name"), row.get("name"))
+        if not parsed["catalogId"]:
+            continue
+        unit = infer_unit_from_import_label(parsed["kpiName"], parsed["target"])
+        rows.append(
+            {
+                "id_kpi_final": parsed["catalogId"],
+                "pays_filiale": "Groupe",
+                "groupe_de_rattachement": row.get("pole_filter") or row.get("pole") or "",
+                "intitule_du_kpi": parsed["kpiName"],
+                "unite_de_mesure": unit,
+                "frequence_de_collecte": parsed["frequency"] or "Mensuel",
+                "periodicite_du_reporting": parsed["frequency"] or "Mensuel",
+                "valeur_cible": parsed["target"],
+                "sens_performance": infer_performance_direction("", parsed["kpiName"], "", parsed["target"]),
+                "source_de_la_donnee": "XLSForm choices / kpi_ids",
+                "statut_documentaire": "Importe depuis XLSForm",
+                "_row_number": str(index),
+            }
+        )
+    return rows
+
+
+def rows_from_xlsx_tables(raw_content: bytes, kind: str) -> list[dict]:
+    tables = xlsx_tables_from_bytes(raw_content)
+    xlsform_rows = xlsform_reference_rows_from_tables(tables, kind)
+    if xlsform_rows:
+        return xlsform_rows
+
+    alias_map = IMPORT_REFERENCE_ALIASES if kind == "reference" else IMPORT_OBJECTIVE_ALIASES
+    for _sheet_name, sheet_rows in tables.items():
+        for index, values in enumerate(sheet_rows[:20], start=1):
+            if not row_looks_like_import_header(values, kind):
+                continue
+            headers = [import_header_key(header) for header in values]
+            rows = []
+            for row_number, raw_row in enumerate(sheet_rows[index:], start=index + 1):
+                normalized = {
+                    headers[column_index]: import_cell_text(value)
+                    for column_index, value in enumerate(raw_row)
+                    if column_index < len(headers) and headers[column_index]
+                }
+                if any(normalized.values()):
+                    normalized["_row_number"] = str(row_number)
+                    rows.append(normalized)
+            return rows
+    if "survey" in {normalize_match_key(name) for name in tables} and "choices" in {normalize_match_key(name) for name in tables}:
+        expected = "les reponses exportees" if kind == "objective" else "la liste kpi_ids dans choices"
+        raise ValueError(f"Ce fichier est un XLSForm. Importez {expected}, pas uniquement la structure du formulaire.")
+    raise ValueError("Aucune ligne d'en-tete reconnue dans le fichier Excel.")
+
+
 def rows_from_xlsx_bytes(raw_content: bytes, kind: str) -> list[dict]:
     try:
         from openpyxl import load_workbook
     except ImportError as exc:
-        raise ValueError("Lecture Excel indisponible. Installez openpyxl ou importez un CSV.") from exc
+        return rows_from_xlsx_tables(raw_content, kind)
+
+    tables = xlsx_tables_from_bytes(raw_content)
+    xlsform_rows = xlsform_reference_rows_from_tables(tables, kind)
+    if xlsform_rows:
+        return xlsform_rows
 
     workbook = load_workbook(io.BytesIO(raw_content), read_only=True, data_only=True)
-    worksheet = workbook.active
-    header_row_index = None
-    headers: list[str] = []
-    for index, row in enumerate(worksheet.iter_rows(values_only=True), start=1):
-        values = [import_cell_text(cell) for cell in row]
-        if row_looks_like_import_header(values, kind):
-            header_row_index = index
-            headers = values
-            break
-        if index >= 20:
-            break
-    if header_row_index is None:
-        raise ValueError("Aucune ligne d'en-tete reconnue dans le fichier Excel.")
+    worksheets = list(workbook.worksheets)
+    for worksheet in worksheets:
+        header_row_index = None
+        headers: list[str] = []
+        for index, row in enumerate(worksheet.iter_rows(values_only=True), start=1):
+            values = [import_cell_text(cell) for cell in row]
+            if row_looks_like_import_header(values, kind):
+                header_row_index = index
+                headers = values
+                break
+            if index >= 20:
+                break
+        if header_row_index is None:
+            continue
 
-    rows = []
-    normalized_headers = [import_header_key(header) for header in headers]
-    for index, row in enumerate(worksheet.iter_rows(min_row=header_row_index + 1, values_only=True), start=header_row_index + 1):
-        normalized = {}
-        for header, value in zip(normalized_headers, row):
-            if header:
-                normalized[header] = import_cell_text(value)
-        if any(normalized.values()):
-            normalized["_row_number"] = str(index)
-            rows.append(normalized)
-        if len(rows) >= 2000:
-            break
-    return rows
+        rows = []
+        normalized_headers = [import_header_key(header) for header in headers]
+        for index, row in enumerate(worksheet.iter_rows(min_row=header_row_index + 1, values_only=True), start=header_row_index + 1):
+            normalized = {}
+            for header, value in zip(normalized_headers, row):
+                if header:
+                    normalized[header] = import_cell_text(value)
+            if any(normalized.values()):
+                normalized["_row_number"] = str(index)
+                rows.append(normalized)
+            if len(rows) >= 2000:
+                break
+        return rows
+
+    return rows_from_xlsx_tables(raw_content, kind)
 
 
 def parse_collection_import_rows(payload: dict) -> list[dict]:
