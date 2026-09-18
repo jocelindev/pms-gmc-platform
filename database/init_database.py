@@ -105,6 +105,45 @@ DEFAULT_KOBO_SOURCES = [
 ]
 
 
+def env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on", "oui"}
+
+
+def should_seed_demo_catalog() -> bool:
+    return env_flag("PMS_SEED_DEMO_DATA", default=not is_postgres_enabled())
+
+
+def demo_catalog_codes(kpis_by_pole: dict) -> list[str]:
+    codes = []
+    for pole_id, kpis in kpis_by_pole.items():
+        for index, _kpi in enumerate(kpis, start=1):
+            codes.append(f"{pole_id}-{index:03d}")
+    return codes
+
+
+def cleanup_demo_catalog_kpis(cur: sqlite3.Cursor, kpis_by_pole: dict) -> None:
+    codes = demo_catalog_codes(kpis_by_pole)
+    if not codes:
+        return
+    for start in range(0, len(codes), 50):
+        chunk = codes[start : start + 50]
+        placeholders = ", ".join("?" for _ in chunk)
+        cur.execute(
+            f"""
+            DELETE FROM kpis
+            WHERE code IN ({placeholders})
+              AND (
+                COALESCE(source_form_uid, '') LIKE 'COL-%'
+                OR COALESCE(data_source, '') LIKE 'COL-%'
+              )
+            """,
+            tuple(chunk),
+        )
+
+
 PERMISSIONS = [
     ("consultation", "Consultation", "Voir les tableaux de bord, KPI, rapports et donnees."),
     ("ajout", "Ajout", "Creer des objectifs, rapports, donnees ou affectations."),
@@ -454,42 +493,45 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
             )
 
     kpi_records = []
-    for pole_id, kpis in kpis_by_pole.items():
-        for index, kpi in enumerate(kpis, start=1):
-            code = f"{pole_id}-{index:03d}"
-            cur.execute(
-                """
-                INSERT INTO kpis (
-                  code, pole_id, name, target, current_value, trend, rag_status,
-                  source_form_uid, data_source, responsible, updated_at
+    if should_seed_demo_catalog():
+        for pole_id, kpis in kpis_by_pole.items():
+            for index, kpi in enumerate(kpis, start=1):
+                code = f"{pole_id}-{index:03d}"
+                cur.execute(
+                    """
+                    INSERT INTO kpis (
+                      code, pole_id, name, target, current_value, trend, rag_status,
+                      source_form_uid, data_source, responsible, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(code) DO UPDATE SET
+                      pole_id = excluded.pole_id,
+                      name = excluded.name,
+                      target = excluded.target,
+                      current_value = excluded.current_value,
+                      trend = excluded.trend,
+                      rag_status = excluded.rag_status,
+                      source_form_uid = excluded.source_form_uid,
+                      data_source = excluded.data_source,
+                      responsible = excluded.responsible,
+                      updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (
+                        code,
+                        pole_id,
+                        kpi.get("name"),
+                        kpi.get("target"),
+                        kpi.get("value"),
+                        kpi.get("trend"),
+                        kpi.get("status", "gray"),
+                        kpi.get("source"),
+                        kpi.get("source"),
+                        next((pole.get("owner") for pole in poles if pole.get("id") == pole_id), None),
+                    ),
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(code) DO UPDATE SET
-                  pole_id = excluded.pole_id,
-                  name = excluded.name,
-                  target = excluded.target,
-                  current_value = excluded.current_value,
-                  trend = excluded.trend,
-                  rag_status = excluded.rag_status,
-                  source_form_uid = excluded.source_form_uid,
-                  data_source = excluded.data_source,
-                  responsible = excluded.responsible,
-                  updated_at = CURRENT_TIMESTAMP
-                """,
-                (
-                    code,
-                    pole_id,
-                    kpi.get("name"),
-                    kpi.get("target"),
-                    kpi.get("value"),
-                    kpi.get("trend"),
-                    kpi.get("status", "gray"),
-                    kpi.get("source"),
-                    kpi.get("source"),
-                    next((pole.get("owner") for pole in poles if pole.get("id") == pole_id), None),
-                ),
-            )
-            kpi_records.append((pole_id, kpi.get("source")))
+                kpi_records.append((pole_id, kpi.get("source")))
+    else:
+        cleanup_demo_catalog_kpis(cur, kpis_by_pole)
 
     for form in data.get("collectionForms", []):
         uid = form.get("code")

@@ -6583,10 +6583,14 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
 
     def reference_identity_keys(record: dict) -> set[tuple[str, str, str]]:
         keys = set()
-        for value in (record.get("kpiId"), record.get("kpiName")):
-            normalized = normalize_match_key(value)
-            if normalized:
-                keys.add((record.get("branchKey") or "groupe", record.get("poleId", ""), normalized))
+        kpi_id = text_or_empty(record.get("kpiId"))
+        normalized_id = normalize_match_key(kpi_id)
+        if normalized_id and kpi_id != "A definir" and not kpi_id.startswith("KPI-DB-"):
+            keys.add((record.get("branchKey") or "groupe", record.get("poleId", ""), normalized_id))
+            return keys
+        normalized_name = normalize_match_key(record.get("kpiName"))
+        if normalized_name:
+            keys.add((record.get("branchKey") or "groupe", record.get("poleId", ""), normalized_name))
         return keys
 
     def register_reference_lookup(record: dict) -> None:
