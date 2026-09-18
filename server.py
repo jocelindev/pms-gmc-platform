@@ -1029,11 +1029,12 @@ def migrate_database(conn: sqlite3.Connection) -> None:
 
     admin_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
     default_hash = hash_password(DEFAULT_USER_PASSWORD)
+    password_timestamp = utc_timestamp()
     conn.execute(
         """
         UPDATE users
         SET password_hash = ?,
-            password_updated_at = COALESCE(password_updated_at, CURRENT_TIMESTAMP),
+            password_updated_at = COALESCE(password_updated_at, ?),
             must_change_password = COALESCE(must_change_password, 0)
         WHERE (password_hash IS NULL OR password_hash = '')
           AND (
@@ -1041,17 +1042,17 @@ def migrate_database(conn: sqlite3.Connection) -> None:
             OR lower(full_name) IN ('administrateur pms', 'admin')
           )
         """,
-        (admin_hash,),
+        (admin_hash, password_timestamp),
     )
     conn.execute(
         """
         UPDATE users
         SET password_hash = ?,
-            password_updated_at = COALESCE(password_updated_at, CURRENT_TIMESTAMP),
+            password_updated_at = COALESCE(password_updated_at, ?),
             must_change_password = COALESCE(must_change_password, 0)
         WHERE password_hash IS NULL OR password_hash = ''
         """,
-        (default_hash,),
+        (default_hash, password_timestamp),
     )
     sync_default_profile_permissions(conn)
     if changed or conn.total_changes:
@@ -1153,13 +1154,14 @@ def upsert_user_details(
 ) -> int:
     normalized_email = (email or f"{slugify(full_name)}@palladium.local").strip().lower()
     password_hash = hash_password(password) if password else None
+    password_timestamp = utc_timestamp()
     conn.execute(
         """
         INSERT INTO users (
           full_name, email, phone, default_profile_id, status, password_hash,
           password_updated_at, must_change_password, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, COALESCE(?, ?), CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, COALESCE(?, ?), ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(email) DO UPDATE SET
           full_name = excluded.full_name,
           phone = excluded.phone,
@@ -1167,7 +1169,7 @@ def upsert_user_details(
           status = excluded.status,
           password_hash = COALESCE(excluded.password_hash, users.password_hash),
           password_updated_at = CASE
-            WHEN excluded.password_hash IS NOT NULL THEN CURRENT_TIMESTAMP
+            WHEN excluded.password_hash IS NOT NULL THEN ?
             ELSE users.password_updated_at
           END,
           must_change_password = CASE
@@ -1184,7 +1186,9 @@ def upsert_user_details(
             status or "Actif",
             password_hash,
             hash_password(DEFAULT_USER_PASSWORD),
+            password_timestamp,
             1 if password_hash else 0,
+            password_timestamp,
         ),
     )
     row = conn.execute("SELECT id FROM users WHERE email = ?", (normalized_email,)).fetchone()
