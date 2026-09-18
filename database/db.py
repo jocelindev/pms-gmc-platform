@@ -243,7 +243,7 @@ def execute_special_postgres(cursor, sql: str, params: tuple | list | None = Non
             )
             return True
         match = re.search(r"name\s*=\s*'([^']+)'", query, re.I)
-        table_name = match.group(1) if match else ""
+        table_name = match.group(1) if match else str((params or [""])[0])
         cursor.execute(
             """
             SELECT table_name AS name
