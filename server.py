@@ -7,6 +7,7 @@ import binascii
 import calendar
 import csv
 import datetime as dt
+import difflib
 import hashlib
 import hmac
 import io
@@ -385,6 +386,10 @@ CATALOG_POLE_ALIASES = {
     "direction capital humain": "DCH",
     "direction du capital humain": "DCH",
     "dch": "DCH",
+    "achats moyens generaux": "PMG",
+    "achats et moyens generaux": "PMG",
+    "achats moyen generaux": "PMG",
+    "achats logistique": "PMG",
     "pole moyens generaux": "PMG",
     "pmg": "PMG",
     "consolide": "PAC",
@@ -2799,12 +2804,14 @@ def ensure_kpi(conn: sqlite3.Connection, payload: dict) -> int:
         raise ValueError("Le pole et le KPI sont obligatoires.")
 
     ensure_pole(conn, pole_id, pole_name, str(payload.get("responsible") or "").strip() or None)
-    row = conn.execute(
-        "SELECT id FROM kpis WHERE pole_id = ? AND lower(name) = lower(?)",
-        (pole_id, kpi_name),
-    ).fetchone()
-    if not row and catalog_id and catalog_id != "A definir":
+    row = None
+    if catalog_id and catalog_id != "A definir":
         row = conn.execute("SELECT id FROM kpis WHERE code = ?", (catalog_id,)).fetchone()
+    if not row:
+        row = conn.execute(
+            "SELECT id FROM kpis WHERE pole_id = ? AND lower(name) = lower(?)",
+            (pole_id, kpi_name),
+        ).fetchone()
     if row:
         kpi_id = int(row["id"])
         conn.execute(
@@ -3766,6 +3773,46 @@ def infer_unit_from_import_label(name: str = "", target: str = "") -> str:
     return "Nombre / Quantite"
 
 
+def is_direct_kpi_element_label(label: str) -> bool:
+    lookup = normalize_match_key(label)
+    return "valeur realisee" in lookup or "resultat kpi" in lookup
+
+
+def formula_needs_percent_scaling(name: str = "", target: str = "", unit: str = "") -> bool:
+    lookup = normalize_match_key(f"{name} {target} {unit}")
+    return "%" in f"{name} {target} {unit}" or any(term in lookup for term in ("taux", "tx", "ratio", "pourcentage"))
+
+
+def infer_formula_from_kpi_elements(name: str, target: str, unit: str, elements: list[str]) -> str:
+    labels = [text_or_empty(label) for label in elements if text_or_empty(label)]
+    calculation_labels = [label for label in labels if not is_direct_kpi_element_label(label)]
+    if not calculation_labels:
+        return "Valeur realisee / resultat KPI" if labels else ""
+
+    name_key = normalize_match_key(name)
+    percent_formula = formula_needs_percent_scaling(name, target, unit)
+    if len(calculation_labels) == 1:
+        return calculation_labels[0]
+
+    if len(calculation_labels) == 2:
+        first, second = calculation_labels
+        labels_key = normalize_match_key(f"{first} {second}")
+        if any(term in name_key for term in ("net apres malus", "apres malus")) or "malus" in normalize_match_key(second):
+            return f"{first} - {second}"
+        if not percent_formula and all(term in labels_key for term in ("somme", "bon")):
+            return f"{first} + {second}"
+        formula = f"{first} / {second}"
+        if percent_formula:
+            formula += " × 100"
+        return formula
+
+    first, second, third = calculation_labels[:3]
+    formula = f"({first} + {second}) / {third}"
+    if percent_formula:
+        formula += " × 100"
+    return formula
+
+
 def xlsform_reference_rows_from_tables(tables: dict[str, list[list[str]]], kind: str) -> list[dict]:
     if kind != "reference":
         return []
@@ -3773,6 +3820,16 @@ def xlsform_reference_rows_from_tables(tables: dict[str, list[list[str]]], kind:
     if not choices_rows:
         return []
     header = [import_header_key(value) for value in choices_rows[0]]
+    kpi_elements: dict[str, list[str]] = {}
+    for raw_row in choices_rows[1:]:
+        row = {header[column_index]: import_cell_text(value) for column_index, value in enumerate(raw_row) if column_index < len(header)}
+        if import_header_key(row.get("list_name")) != "kpi_elements":
+            continue
+        kpi_id = canonical_kpi_code(row.get("kpi_filter"))
+        label = text_or_empty(row.get("label") or row.get("label_francais") or row.get("name"))
+        if kpi_id and label:
+            kpi_elements.setdefault(kpi_id, []).append(label)
+
     rows = []
     for index, raw_row in enumerate(choices_rows[1:], start=2):
         row = {header[column_index]: import_cell_text(value) for column_index, value in enumerate(raw_row) if column_index < len(header)}
@@ -3782,6 +3839,7 @@ def xlsform_reference_rows_from_tables(tables: dict[str, list[list[str]]], kind:
         if not parsed["catalogId"]:
             continue
         unit = infer_unit_from_import_label(parsed["kpiName"], parsed["target"])
+        formula = infer_formula_from_kpi_elements(parsed["kpiName"], parsed["target"], unit, kpi_elements.get(parsed["catalogId"], []))
         rows.append(
             {
                 "id_kpi_final": parsed["catalogId"],
@@ -3789,11 +3847,12 @@ def xlsform_reference_rows_from_tables(tables: dict[str, list[list[str]]], kind:
                 "groupe_de_rattachement": row.get("pole_filter") or row.get("pole") or "",
                 "intitule_du_kpi": parsed["kpiName"],
                 "unite_de_mesure": unit,
+                "formule_de_calcul": formula,
                 "frequence_de_collecte": parsed["frequency"] or "Mensuel",
                 "periodicite_du_reporting": parsed["frequency"] or "Mensuel",
                 "valeur_cible": parsed["target"],
                 "sens_performance": infer_performance_direction("", parsed["kpiName"], "", parsed["target"]),
-                "source_de_la_donnee": "XLSForm choices / kpi_ids",
+                "source_de_la_donnee": "XLSForm choices / kpi_ids + kpi_elements",
                 "statut_documentaire": "Importe depuis XLSForm",
                 "_row_number": str(index),
             }
@@ -3801,8 +3860,63 @@ def xlsform_reference_rows_from_tables(tables: dict[str, list[list[str]]], kind:
     return rows
 
 
+def formula_dictionary_rows_from_tables(tables: dict[str, list[list[str]]], kind: str) -> list[dict]:
+    if kind != "reference":
+        return []
+
+    def parse_sheet(sheet_rows: list[list[str]]) -> list[dict]:
+        header_index = None
+        headers: list[str] = []
+        for index, values in enumerate(sheet_rows[:30], start=1):
+            header_keys = {import_header_key(value) for value in values if value}
+            has_pole = bool(header_keys & import_alias_keys(IMPORT_REFERENCE_ALIASES["pole"]))
+            has_kpi = bool(header_keys & import_alias_keys(IMPORT_REFERENCE_ALIASES["kpiName"]))
+            has_formula = bool(header_keys & import_alias_keys(IMPORT_REFERENCE_ALIASES["formula"]))
+            if has_pole and has_kpi and has_formula:
+                header_index = index
+                headers = [import_header_key(header) for header in values]
+                break
+        if header_index is None:
+            return []
+
+        rows = []
+        for row_number, raw_row in enumerate(sheet_rows[header_index:], start=header_index + 1):
+            normalized = {
+                headers[column_index]: import_cell_text(value)
+                for column_index, value in enumerate(raw_row)
+                if column_index < len(headers) and headers[column_index]
+            }
+            formula = import_row_value(normalized, IMPORT_REFERENCE_ALIASES["formula"])
+            kpi_name = import_row_value(normalized, IMPORT_REFERENCE_ALIASES["kpiName"])
+            pole = import_row_value(normalized, IMPORT_REFERENCE_ALIASES["pole"])
+            if formula and kpi_name and pole:
+                normalized["_row_number"] = str(row_number)
+                normalized["_source_format"] = "formula_dictionary"
+                rows.append(normalized)
+        return rows
+
+    prioritized = sorted(
+        tables.items(),
+        key=lambda item: 0 if "formule" in normalize_match_key(item[0]) or "formula" in normalize_match_key(item[0]) else 1,
+    )
+    for sheet_name, sheet_rows in prioritized:
+        if "formule" not in normalize_match_key(sheet_name) and "formula" not in normalize_match_key(sheet_name):
+            continue
+        rows = parse_sheet(sheet_rows)
+        if rows:
+            return rows
+    for _sheet_name, sheet_rows in prioritized:
+        rows = parse_sheet(sheet_rows)
+        if rows:
+            return rows
+    return []
+
+
 def rows_from_xlsx_tables(raw_content: bytes, kind: str) -> list[dict]:
     tables = xlsx_tables_from_bytes(raw_content)
+    formula_dictionary_rows = formula_dictionary_rows_from_tables(tables, kind)
+    if formula_dictionary_rows:
+        return formula_dictionary_rows
     xlsform_rows = xlsform_reference_rows_from_tables(tables, kind)
     if xlsform_rows:
         return xlsform_rows
@@ -3837,6 +3951,9 @@ def rows_from_xlsx_bytes(raw_content: bytes, kind: str) -> list[dict]:
         return rows_from_xlsx_tables(raw_content, kind)
 
     tables = xlsx_tables_from_bytes(raw_content)
+    formula_dictionary_rows = formula_dictionary_rows_from_tables(tables, kind)
+    if formula_dictionary_rows:
+        return formula_dictionary_rows
     xlsform_rows = xlsform_reference_rows_from_tables(tables, kind)
     if xlsform_rows:
         return xlsform_rows
@@ -3892,6 +4009,7 @@ def map_reference_import_payload(conn: sqlite3.Connection, row: dict, file_name:
     pole_id = resolve_catalog_pole_id(conn, pole_raw)
     catalog_id = canonical_kpi_code(import_row_value(row, IMPORT_REFERENCE_ALIASES["catalogId"]))
     kpi_name = import_row_value(row, IMPORT_REFERENCE_ALIASES["kpiName"]) or catalog_id
+    source_format = text_or_empty(row.get("_source_format"))
     formula = import_row_value(row, IMPORT_REFERENCE_ALIASES["formula"])
     target = import_row_value(row, IMPORT_REFERENCE_ALIASES["target"])
     unit = import_row_value(row, IMPORT_REFERENCE_ALIASES["unit"]) or "Autre"
@@ -3905,6 +4023,10 @@ def map_reference_import_payload(conn: sqlite3.Connection, row: dict, file_name:
         raise ValueError(f"Pole introuvable: {pole_raw or 'non renseigne'}")
     if not (catalog_id or kpi_name):
         raise ValueError("ID KPI ou intitule KPI obligatoire.")
+    if not catalog_id and kpi_name:
+        catalog_id = resolve_existing_kpi_code_by_name(conn, pole_id, kpi_name)
+        if source_format == "formula_dictionary" and not catalog_id:
+            raise ValueError(f"KPI existant introuvable pour la formule: {kpi_name}")
     return {
         "branch": branch,
         "poleId": pole_id,
@@ -4432,6 +4554,36 @@ def canonical_kpi_code(value) -> str:
     if match:
         return f"KPI-{int(match.group(1)):03d}"
     return text
+
+
+def resolve_existing_kpi_code_by_name(conn: sqlite3.Connection, pole_id: str, kpi_name: str) -> str:
+    target = normalize_match_key(kpi_name)
+    if not pole_id or not target:
+        return ""
+    rows = conn.execute(
+        """
+        SELECT code, name
+        FROM kpis
+        WHERE pole_id = ?
+          AND COALESCE(code, '') <> ''
+        """,
+        (pole_id,),
+    ).fetchall()
+    best_code = ""
+    best_score = 0.0
+    for row in rows:
+        candidate = normalize_match_key(row["name"])
+        if not candidate:
+            continue
+        if candidate == target:
+            return text_or_empty(row["code"])
+        score = difflib.SequenceMatcher(None, target, candidate).ratio()
+        if (target in candidate or candidate in target) and score >= 0.78:
+            return text_or_empty(row["code"])
+        if score > best_score:
+            best_score = score
+            best_code = text_or_empty(row["code"])
+    return best_code if best_score >= 0.88 else ""
 
 
 def semantic_kobo_element_label(value) -> str:
