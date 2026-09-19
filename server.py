@@ -4560,7 +4560,7 @@ def normalize_match_key(value) -> str:
 
 def canonical_kpi_code(value) -> str:
     text = text_or_empty(value)
-    match = re.fullmatch(r"kpi[\s_-]*(\d+)", text, flags=re.IGNORECASE)
+    match = re.search(r"\bkpi[\s_-]*(\d+)\b", text, flags=re.IGNORECASE)
     if match:
         return f"KPI-{int(match.group(1)):03d}"
     return text
