@@ -1590,7 +1590,7 @@
     if (permissions.administration) return true;
     if (view === "collection") return Boolean(permissions.ajout);
     if (view === "admin") return false;
-    if (view === "internal") return Boolean(permissions.consultation || permissions.ajout || permissions.validation || permissions.management);
+    if (view === "internal") return Boolean(permissions.management);
     if (view === "management") return Boolean(permissions.management);
     if (view === "reports") return Boolean(permissions.consultation || permissions.ajout || permissions.validation);
     if (view === "alerts") return Boolean(permissions.consultation || permissions.validation);
