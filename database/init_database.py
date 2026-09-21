@@ -187,7 +187,7 @@ PROFILE_PERMISSIONS = {
         "consultation": True,
         "ajout": True,
         "modification": True,
-        "suppression": False,
+        "suppression": True,
         "validation": True,
         "management": False,
         "administration": False,
