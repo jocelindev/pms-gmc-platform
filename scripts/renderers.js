@@ -5543,18 +5543,30 @@
             : $("#platform-reference-kpi-id")?.value;
       const selectedKpiKey = normalizeLookup(selectedKpiId || "");
       const selectedKpi = referenceRows.find((kpi) => keyForKpi(kpi) === selectedKpiKey) || null;
+      const selectedObjective = selectedKpiKey ? objectiveRows.find((objective) => keyForKpi(objective) === selectedKpiKey) || null : null;
       const selectedKpiProfile = selectedKpi
         ? getObjectiveCatalogProfile({ ...selectedKpi, name: selectedKpi.kpiName || selectedKpi.name || selectedKpi.kpiId }, selectedPole)
         : null;
       const formulaPreview = $("#platform-collection-formula-preview");
       if (formulaPreview) {
         const formula = selectedKpi?.formula || selectedKpiProfile?.formula || $("#platform-reference-formula")?.value || "A completer dans le referentiel KPI.";
-        const referenceTarget = selectedKpi?.target || selectedKpiProfile?.target || $("#platform-reference-target")?.value || "A renseigner";
+        const referenceTarget =
+          selectedKpi?.referenceTarget ||
+          selectedKpiProfile?.target ||
+          selectedKpi?.target ||
+          $("#platform-reference-target")?.value ||
+          "A renseigner";
         const monthlyObjective = $("#platform-objective-target")?.value?.trim() || "";
+        const savedMonthlyObjective = selectedObjective?.target || selectedObjective?.rawValue || selectedObjective?.value || "";
         const frequency = selectedKpi?.collectionFrequency || selectedKpi?.frequency || selectedKpiProfile?.collectionFrequency || "A preciser";
         const targetLine =
           activeTab === "objective"
-            ? `Objectif mensuel saisi: ${monthlyObjective || "A saisir"} | Cible referentiel: ${referenceTarget} | Frequence: ${frequency}`
+            ? [
+                savedMonthlyObjective ? `Objectif du mois enregistre: ${savedMonthlyObjective}` : "Objectif du mois manquant",
+                monthlyObjective && monthlyObjective !== savedMonthlyObjective ? `Saisie en cours: ${monthlyObjective}` : "",
+                `Cible referentiel: ${referenceTarget}`,
+                `Frequence: ${frequency}`,
+              ].filter(Boolean).join(" | ")
             : `Cible referentiel: ${referenceTarget} | Frequence: ${frequency}`;
         formulaPreview.innerHTML = `
           <span>${escapeHtml(activeTab === "objective" ? "KPI et objectif mensuel" : "Formule attendue")}</span>
@@ -5952,6 +5964,22 @@
       state.dataModeFilter
     );
     const calculationResults = stateKpiResults(state).filter((item) => item.periodType !== "monthToDate");
+    const monthKeyFromText = (value) => {
+      const text = String(value || "");
+      const match = text.match(/\b(20\d{2})[-/]?(\d{2})/);
+      return match ? `${match[1]}-${match[2]}` : "";
+    };
+    const activeObjectiveMonth =
+      monthKeyFromText(state.calendar?.end || state.calendar?.selectedDate || state.calendar?.start || "") ||
+      "Mois a renseigner";
+    const activeCountry = findCountryByValue(state.calendarBranchFilter || "Groupe");
+    const activeCountryCandidates = [
+      activeCountry?.name,
+      activeCountry?.id,
+      activeCountry?.code,
+      state.calendarBranchFilter,
+      "Groupe",
+    ].filter(Boolean);
     const referenceByKpi = new Map();
     referenceKpis.forEach((kpi) => {
       const kpiId = kpi.kpiId || kpi.catalogId || kpi.id || kpi.name;
@@ -5959,28 +5987,41 @@
       if (!key || key === "|") return;
       if (!referenceByKpi.has(key)) referenceByKpi.set(key, kpi);
     });
-    const objectivesByKpi = new Map();
-    const objectivesByCountryKpi = new Map();
+    const objectivesByKpiMonth = new Map();
+    const objectivesByCountryKpiMonth = new Map();
     monthlyObjectives.forEach((objective) => {
-      const kpiId = objective.catalogId || objective.kpiId || objective.idKpi || objective.kpiName;
-      const kpiKey = correctionKey(objective.poleId, kpiId);
-      const countryKey = correctionKey(objective.branch || "Groupe", objective.poleId, kpiId);
-      if (kpiKey && kpiKey !== "|") objectivesByKpi.set(kpiKey, true);
-      if (countryKey && countryKey !== "||") objectivesByCountryKpi.set(countryKey, true);
+      const periodMonth = monthKeyFromText(objective.periodMonth || objective.period);
+      const kpiIds = [objective.catalogId, objective.kpiId, objective.idKpi, objective.kpiName].filter(Boolean);
+      kpiIds.forEach((kpiId) => {
+        const kpiKey = correctionKey(objective.poleId, kpiId, periodMonth);
+        const countryKey = correctionKey(objective.branch || "Groupe", objective.poleId, kpiId, periodMonth);
+        if (periodMonth && kpiKey && kpiKey !== "||") objectivesByKpiMonth.set(kpiKey, true);
+        if (periodMonth && countryKey && countryKey !== "|||") objectivesByCountryKpiMonth.set(countryKey, true);
+      });
     });
-    const resultsByCountryKpi = new Map();
+    const objectiveExistsForReference = (kpi = {}) => {
+      const periodMonth = activeObjectiveMonth;
+      const kpiIds = [kpi.kpiId, kpi.catalogId, kpi.id, kpi.name, kpi.kpiName].filter(Boolean);
+      const branchCandidates = isGroupCountry(activeCountry)
+        ? [kpi.branch || "Groupe", "Groupe"]
+        : activeCountryCandidates;
+      return kpiIds.some((kpiId) => {
+        const monthlyKey = correctionKey(kpi.poleId, kpiId, periodMonth);
+        if (isGroupCountry(activeCountry) && objectivesByKpiMonth.has(monthlyKey)) return true;
+        return branchCandidates.some((branch) =>
+          objectivesByCountryKpiMonth.has(correctionKey(branch || "Groupe", kpi.poleId, kpiId, periodMonth))
+        );
+      });
+    };
+    const resultsByCountryKpiMonth = new Map();
     calculationResults.forEach((result) => {
-      const countryKey = correctionKey(result.branch || "Groupe", result.poleId, result.kpiId);
-      if (countryKey && countryKey !== "||") resultsByCountryKpi.set(countryKey, true);
+      const periodMonth = monthKeyFromText(result.periodEnd || result.periodStart || result.period || result.date);
+      const countryKey = correctionKey(result.branch || "Groupe", result.poleId, result.kpiId, periodMonth);
+      if (periodMonth && countryKey && countryKey !== "|||") resultsByCountryKpiMonth.set(countryKey, true);
     });
-    const activeObjectiveMonth = (() => {
-      const dateValue = state.calendar?.end || state.calendar?.selectedDate || state.calendar?.start || "";
-      const match = String(dateValue || "").match(/^(20\d{2}-\d{2})/);
-      return match ? match[1] : "Mois a renseigner";
-    })();
     const kpiCorrectionItems = [];
     referenceByKpi.forEach((kpi, key) => {
-      if (objectivesByKpi.has(key)) return;
+      if (objectiveExistsForReference(kpi)) return;
       kpiCorrectionItems.push({
         severity: "A corriger",
         statusClass: "amber",
@@ -5999,8 +6040,9 @@
     });
     monthlyObjectives.forEach((objective) => {
       const kpiId = objective.catalogId || objective.kpiId || objective.idKpi || objective.kpiName;
-      const countryKey = correctionKey(objective.branch || "Groupe", objective.poleId, kpiId);
-      if (resultsByCountryKpi.has(countryKey)) return;
+      const periodMonth = monthKeyFromText(objective.periodMonth || objective.period);
+      const countryKey = correctionKey(objective.branch || "Groupe", objective.poleId, kpiId, periodMonth);
+      if (resultsByCountryKpiMonth.has(countryKey)) return;
       const reference = referenceByKpi.get(correctionKey(objective.poleId, kpiId)) || {};
       kpiCorrectionItems.push({
         severity: "A corriger",
