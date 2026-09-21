@@ -4921,9 +4921,20 @@ def should_prorate_monthly_target(reference: dict, objective: dict | None = None
 
 
 def normalized_operator_text(value: str) -> str:
-    raw_text = str(value or "").replace("÷", "/").replace(":", " / ")
+    raw_text = (
+        str(value or "")
+        .replace("×", " * ")
+        .replace("÷", " / ")
+        .replace("−", " - ")
+        .replace("–", " - ")
+        .replace("—", " - ")
+        .replace(":", " / ")
+    )
     text = unicodedata.normalize("NFD", raw_text)
     text = text.encode("ascii", "ignore").decode("ascii").lower()
+    text = re.sub(r"(?<=\d|\))\s*x\s*(?=\d|\(|[a-z])", " * ", text)
+    text = re.sub(r"\bx\s*100\b", " * 100", text)
+    text = re.sub(r"\bfois\s+100\b", " * 100", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
@@ -5260,7 +5271,14 @@ def rag_status(value: float | None, target: str, kpi_name: str = "", formula: st
 
 
 def normalize_formula_expression(formula: str) -> str:
-    raw_formula = str(formula or "").replace("×", " * ").replace("÷", " / ")
+    raw_formula = (
+        str(formula or "")
+        .replace("×", " * ")
+        .replace("÷", " / ")
+        .replace("−", " - ")
+        .replace("–", " - ")
+        .replace("—", " - ")
+    )
     normalized = unicodedata.normalize("NFD", raw_formula)
     text = normalized.encode("ascii", "ignore").decode("ascii").lower()
     if "=" in text:
@@ -5278,6 +5296,16 @@ def normalize_formula_expression(formula: str) -> str:
     text = re.sub(r"\(\s*\)", "", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def formula_label_variants(label: str) -> list[str]:
+    key = normalize_match_key(label)
+    variants = {key}
+    variants.add(re.sub(r"\b(?:x|fois)\s*100\b", "", key).strip())
+    variants.add(re.sub(r"\b100\b", "", key).strip())
+    variants.add(re.sub(r"\bd\s+", "d", key).strip())
+    variants.add(re.sub(r"\bl\s+", "l", key).strip())
+    return sorted({variant for variant in variants if variant}, key=len, reverse=True)
 
 
 def ratio_formula_with_parentheses(expression: str) -> str:
@@ -5418,6 +5446,74 @@ def formula_result_requires_percent_scaling(formula: str, expression: str, unit:
     return "/" in compact_expression and "*100" not in compact_expression and "100*" not in compact_expression
 
 
+def formula_mentions_percent_output(formula: str, unit: str) -> bool:
+    raw = f"{formula or ''} {unit or ''}"
+    normalized = normalize_match_key(raw)
+    return "%" in raw or any(term in normalized for term in ("pourcentage", "taux", "tx", "ratio"))
+
+
+def formula_contains_percent_multiplier(formula: str) -> bool:
+    text = normalized_operator_text(formula)
+    compact = re.sub(r"\s+", "", text)
+    return "*100" in compact or "100*" in compact
+
+
+def structural_formula_result(formula: str, raw_numbers: list[float], unit: str) -> tuple[float | None, str] | None:
+    if not raw_numbers:
+        return None
+
+    text = normalized_operator_text(formula)
+    key = normalize_match_key(formula)
+    percent_output = formula_mentions_percent_output(formula, unit)
+    multiply_by_100 = percent_output or formula_contains_percent_multiplier(formula)
+
+    if len(raw_numbers) == 1:
+        return raw_numbers[0], "Valeur unique collectee utilisee comme realise"
+
+    first, second = raw_numbers[0], raw_numbers[1]
+
+    if "/" in text or " sur " in f" {key} " or " divise " in f" {key} ":
+        if "-" in text and len(raw_numbers) >= 2:
+            denominator = first if first != 0 else None
+            if denominator:
+                result = (first - second) / denominator
+                if multiply_by_100:
+                    result *= 100
+                return result, "Formule structurelle appliquee: (element 1 - element 2) / element 1"
+
+        if "+" in text and len(raw_numbers) >= 3:
+            denominator = raw_numbers[2]
+            if denominator != 0:
+                result = (first + second) / denominator
+                if multiply_by_100:
+                    result *= 100
+                return result, "Formule structurelle appliquee: (element 1 + element 2) / element 3"
+
+        if second != 0:
+            result = first / second
+            if multiply_by_100:
+                result *= 100
+            return result, "Formule structurelle appliquee: element 1 / element 2"
+        return None
+
+    if "-" in text:
+        return first - second, "Formule structurelle appliquee: element 1 - element 2"
+
+    if "+" in text or " somme " in f" {key} ":
+        return sum(raw_numbers), "Formule structurelle appliquee: somme des elements"
+
+    if "*" in text or " produit " in f" {key} " or " prix unitaire " in f" {key} ":
+        result = 1.0
+        for number in raw_numbers:
+            result *= number
+        return result, "Formule structurelle appliquee: produit des elements"
+
+    if "moyenne" in key:
+        return sum(raw_numbers) / len(raw_numbers), "Moyenne des elements collectes"
+
+    return None
+
+
 def evaluate_kpi_formula(
     formula: str,
     elements: list[dict],
@@ -5444,9 +5540,12 @@ def evaluate_kpi_formula(
         variables: dict[str, float] = {}
         for index, label in enumerate(sorted(element_values, key=len, reverse=True)):
             variable = f"v{index}"
-            pattern = rf"(?<![a-z0-9]){re.escape(label)}(?![a-z0-9])"
-            expression, count = re.subn(pattern, variable, expression)
-            if count:
+            replacement_count = 0
+            for variant in formula_label_variants(label):
+                pattern = rf"(?<![a-z0-9]){re.escape(variant)}(?![a-z0-9])"
+                expression, count = re.subn(pattern, variable, expression)
+                replacement_count += count
+            if replacement_count:
                 variables[variable] = element_values[label]
         expression = ratio_formula_with_parentheses(expression)
         if variables and not re.search(r"\b(?!v\d+\b)[a-z_]+\b", expression):
@@ -5455,6 +5554,14 @@ def evaluate_kpi_formula(
                 if formula_result_requires_percent_scaling(formula, expression, unit, result):
                     return result * 100, "Formule de collecte appliquee, ratio affiche en pourcentage", warnings
                 return result, "Formule de collecte appliquee", warnings
+
+        structural_result = structural_formula_result(formula, raw_numbers, unit)
+        if structural_result:
+            result, structural_method = structural_result
+            if result is not None:
+                warnings.append("Formule appliquee par rapprochement structurel des elements collectes.")
+                return result, structural_method, warnings
+
         direct_terms = ("valeur directe", "saisie directe", "resultat direct", "realisation directe")
         if any(term in formula_key for term in direct_terms):
             direct_value, direct_method = direct_value_from_elements(element_values)
