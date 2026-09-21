@@ -4905,7 +4905,16 @@ def target_comparator(target: str) -> str:
     return ""
 
 
+def is_adu_kpi(reference: dict) -> bool:
+    raw_text = f"{reference.get('kpiId', '')} {reference.get('kpiName', '')} {reference.get('formula', '')}"
+    normalized = normalize_match_key(raw_text)
+    return "adu" in normalized or "active data users" in normalized or "active data user" in normalized
+
+
 def should_prorate_monthly_target(reference: dict, objective: dict | None = None) -> bool:
+    if is_adu_kpi(reference):
+        return False
+
     mode = normalize_match_key((objective or {}).get("distributionMode") or "")
     if mode:
         if any(term in mode for term in ("fixe", "non prorata", "non prorate", "taux")):
@@ -5078,6 +5087,9 @@ def effective_target_for_group(reference: dict, objective: dict | None, group: d
 
 
 def actual_aggregation_mode(reference: dict, objective: dict | None = None) -> str:
+    if is_adu_kpi(reference):
+        return "average"
+
     explicit = normalize_match_key(
         reference.get("aggregationMode")
         or reference.get("aggregation")
