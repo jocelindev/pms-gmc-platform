@@ -5535,7 +5535,12 @@
         const activeLabel = activeTab === "reference" ? "Referentiel KPI" : activeTab === "objective" ? "Objectifs mensuels" : "Donnees realisees";
         sideDetail.textContent = `${activeLabel} - ${selectedCountry.name || selectedBranch || "Groupe"} - ${selectedMonth || "periode a choisir"}`;
       }
-      const selectedKpiId = activeTab === "calculation" ? $("#platform-calculation-kpi")?.value : $("#platform-objective-kpi")?.value;
+      const selectedKpiId =
+        activeTab === "calculation"
+          ? $("#platform-calculation-kpi")?.value
+          : activeTab === "objective"
+            ? $("#platform-objective-kpi")?.value
+            : $("#platform-reference-kpi-id")?.value;
       const selectedKpiKey = normalizeLookup(selectedKpiId || "");
       const selectedKpi = referenceRows.find((kpi) => keyForKpi(kpi) === selectedKpiKey) || null;
       const selectedKpiProfile = selectedKpi
@@ -5544,13 +5549,18 @@
       const formulaPreview = $("#platform-collection-formula-preview");
       if (formulaPreview) {
         const formula = selectedKpi?.formula || selectedKpiProfile?.formula || $("#platform-reference-formula")?.value || "A completer dans le referentiel KPI.";
-        const target = selectedKpi?.target || selectedKpiProfile?.target || $("#platform-reference-target")?.value || "Objectif a renseigner";
+        const referenceTarget = selectedKpi?.target || selectedKpiProfile?.target || $("#platform-reference-target")?.value || "A renseigner";
+        const monthlyObjective = $("#platform-objective-target")?.value?.trim() || "";
         const frequency = selectedKpi?.collectionFrequency || selectedKpi?.frequency || selectedKpiProfile?.collectionFrequency || "A preciser";
+        const targetLine =
+          activeTab === "objective"
+            ? `Objectif mensuel saisi: ${monthlyObjective || "A saisir"} | Cible referentiel: ${referenceTarget} | Frequence: ${frequency}`
+            : `Cible referentiel: ${referenceTarget} | Frequence: ${frequency}`;
         formulaPreview.innerHTML = `
-          <span>Formule attendue</span>
+          <span>${escapeHtml(activeTab === "objective" ? "KPI et objectif mensuel" : "Formule attendue")}</span>
           <strong>${escapeHtml(selectedKpi?.kpiName || selectedKpi?.name || selectedKpiId || "KPI a selectionner")}</strong>
           <small>${escapeHtml(formula)}</small>
-          <small>Objectif: ${escapeHtml(target)} | Frequence: ${escapeHtml(frequency)}</small>
+          <small>${escapeHtml(targetLine)}</small>
         `;
       }
       const tracker = $("#platform-collection-tracker");

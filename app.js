@@ -3170,6 +3170,10 @@
         updatePlatformCalculationMode();
       });
     });
+    $("#platform-objective-target")?.addEventListener("input", () => {
+      refreshPlatformCollectionPanel();
+      updatePlatformCalculationMode();
+    });
     [
       ["#platform-record-branch-filter", "currentCollectionRecordBranch", "change"],
       ["#platform-record-pole-filter", "currentCollectionRecordPole", "change"],
