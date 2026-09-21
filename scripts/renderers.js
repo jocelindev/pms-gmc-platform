@@ -3978,6 +3978,20 @@
   function renderCalculationEnginePanel(state) {
     const panel = $("#kpi-engine-panel");
     if (!panel) return;
+    const isAdmin = Boolean(!state.currentUser || state.currentPermissions?.administration);
+    panel.hidden = !isAdmin;
+    if (!isAdmin) {
+      const status = $("#kpi-engine-status");
+      const summary = $("#kpi-engine-summary");
+      const proposals = $("#kpi-engine-proposals");
+      if (status) {
+        status.className = "status-pill gray";
+        status.textContent = "";
+      }
+      if (summary) summary.innerHTML = "";
+      if (proposals) proposals.innerHTML = "";
+      return;
+    }
     const quality = state.kpiCalculationQuality || {};
     const results = stateKpiResults(state);
     const activeCountry = getActiveCountry(state);
