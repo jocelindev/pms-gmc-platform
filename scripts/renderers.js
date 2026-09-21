@@ -312,7 +312,84 @@
       .filter((item) => Number.isFinite(item));
   }
 
+  function normalizeOperatorText(value) {
+    return String(value ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replaceAll("÷", "/")
+      .replaceAll(":", " / ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function formulaHasObjectiveOverRealized(formula) {
+    const text = normalizeOperatorText(formula);
+    return /\b(?:objectif|cible|target)\b[^/]{0,100}\/[^/]{0,100}\b(?:realise|realisee|realisation|actual)\b/.test(text);
+  }
+
+  function formulaHasRealizedOverObjective(formula) {
+    const text = normalizeOperatorText(formula);
+    return /\b(?:realise|realisee|realisation|actual)\b[^/]{0,100}\/[^/]{0,100}\b(?:objectif|cible|target)\b/.test(text);
+  }
+
+  function hasStrongLowerPerformanceSignal(kpi = {}) {
+    const context = normalizeLookup(`${kpi.name || kpi.kpiName || ""} ${kpi.category || ""} ${kpi.formula || ""}`);
+    const strongTerms = [
+      "oos",
+      "out of stock",
+      "rupture",
+      "taux de defaut",
+      "tx defaut",
+      "non conformite",
+      "malus",
+      "dmt",
+      "mttr",
+      "delai moyen",
+      "duree moyenne",
+      "temps moyen",
+      "indisponibilite",
+      "incident",
+      "retard",
+      "absenteisme",
+      "abandon",
+      "perte",
+    ];
+    return formulaHasObjectiveOverRealized(kpi.formula) || strongTerms.some((term) => context.includes(term));
+  }
+
+  function hasStrongHigherPerformanceSignal(kpi = {}) {
+    const context = normalizeLookup(`${kpi.name || kpi.kpiName || ""} ${kpi.category || ""} ${kpi.formula || ""}`);
+    const strongTerms = [
+      "taux de traitement dans les delais",
+      "sla respecte",
+      "disponibilite",
+      "accessibilite",
+      "satisfaction",
+      "csat",
+      "nps",
+      "conformite",
+      "productivite",
+      "efficacite",
+    ];
+    return formulaHasRealizedOverObjective(kpi.formula) || strongTerms.some((term) => context.includes(term));
+  }
+
   function isLowerBetterKpi(kpi = {}) {
+    const target = String(kpi.target || "");
+    const normalizedTarget = normalizeLookup(target);
+    if (target.includes("<") || target.includes("≤") || normalizedTarget.includes("maximum") || normalizedTarget.includes("max")) {
+      return true;
+    }
+    if (target.includes(">") || target.includes("≥") || normalizedTarget.includes("minimum") || normalizedTarget.includes("min")) {
+      return false;
+    }
+    if (hasStrongLowerPerformanceSignal(kpi)) {
+      return true;
+    }
+    if (hasStrongHigherPerformanceSignal(kpi)) {
+      return false;
+    }
     const direction = normalizeLookup(kpi.performanceDirection || kpi.sensPerformance || kpi.orientationPerformance || "");
     if (direction.includes("lowerbetter") || direction.includes("baisse") || direction.includes("plus bas") || direction.includes("moins mieux")) {
       return true;
@@ -320,9 +397,8 @@
     if (direction.includes("higherbetter") || direction.includes("hausse") || direction.includes("plus haut")) {
       return false;
     }
-    const target = String(kpi.target || "");
     const normalized = normalizeLookup(`${kpi.name || ""} ${kpi.category || ""} ${kpi.formula || ""} ${target}`);
-    return target.includes("<") || target.includes("≤") || LOWER_BETTER_TERMS.some((term) => normalized.includes(term));
+    return LOWER_BETTER_TERMS.some((term) => normalized.includes(term));
   }
 
   function targetValueForKpi(kpi = {}) {
@@ -452,7 +528,7 @@
       return {
         label: "Taux realise",
         display: kpi.vsTargetLabel,
-        className: kpi.vsTargetClass || (Number.isFinite(ratio) ? (ratio >= 100 ? "positive" : "negative") : "empty"),
+        className: kpi.vsTargetClass || (Number.isFinite(ratio) ? (ratio >= 100 ? "positive" : ratio >= 90 ? "neutral" : "negative") : "empty"),
       };
     }
     const current = Number.isFinite(Number(kpi.monthToDateValue))
@@ -478,7 +554,7 @@
     return {
       label: "Taux realise",
       display: formatRatioPercent(ratio),
-      className: ratio >= 100 ? "positive" : "negative",
+      className: ratio >= 100 ? "positive" : ratio >= 90 ? "neutral" : "negative",
     };
   }
 
@@ -1480,7 +1556,7 @@
 
   function targetReached(row) {
     const metric = metricFromTarget(row.kpi);
-    return metric.className === "positive" || metric.className === "neutral";
+    return metric.className === "positive";
   }
 
   function averageTargetAchievement(rows = []) {
@@ -1535,7 +1611,8 @@
 
   function managementResultStatus(result = {}) {
     if (["green", "amber", "red"].includes(result.status)) return result.status;
-    if (result.vsTargetClass === "positive" || result.vsTargetClass === "neutral") return "green";
+    if (result.vsTargetClass === "positive") return "green";
+    if (result.vsTargetClass === "neutral") return "amber";
     if (result.vsTargetClass === "negative") return "red";
     return "gray";
   }

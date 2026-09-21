@@ -4920,7 +4920,91 @@ def should_prorate_monthly_target(reference: dict, objective: dict | None = None
     return any(term in normalized for term in ("montant", "fcfa", "xof", "chiffre affaires", " ca ", "vente", "sales", "nombre", "nb", "quantite", "volume", "production", "appel", "ticket", "contrat", "livrable", "dossier"))
 
 
+def normalized_operator_text(value: str) -> str:
+    raw_text = str(value or "").replace("÷", "/").replace(":", " / ")
+    text = unicodedata.normalize("NFD", raw_text)
+    text = text.encode("ascii", "ignore").decode("ascii").lower()
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def formula_has_objective_over_realized(formula: str) -> bool:
+    text = normalized_operator_text(formula)
+    return bool(
+        re.search(
+            r"\b(?:objectif|cible|target)\b[^/]{0,100}/[^/]{0,100}\b(?:realise|realisee|realisation|actual)\b",
+            text,
+        )
+    )
+
+
+def formula_has_realized_over_objective(formula: str) -> bool:
+    text = normalized_operator_text(formula)
+    return bool(
+        re.search(
+            r"\b(?:realise|realisee|realisation|actual)\b[^/]{0,100}/[^/]{0,100}\b(?:objectif|cible|target)\b",
+            text,
+        )
+    )
+
+
+def has_strong_lower_performance_signal(kpi_name: str = "", formula: str = "") -> bool:
+    context = normalize_match_key(f"{kpi_name} {formula}")
+    strong_terms = (
+        "oos",
+        "out of stock",
+        "rupture",
+        "taux de defaut",
+        "tx defaut",
+        "non conformite",
+        "malus",
+        "dmt",
+        "mttr",
+        "delai moyen",
+        "duree moyenne",
+        "temps moyen",
+        "indisponibilite",
+        "incident",
+        "retard",
+        "absenteisme",
+        "abandon",
+        "perte",
+    )
+    return formula_has_objective_over_realized(formula) or any(term in context for term in strong_terms)
+
+
+def has_strong_higher_performance_signal(kpi_name: str = "", formula: str = "") -> bool:
+    context = normalize_match_key(f"{kpi_name} {formula}")
+    strong_terms = (
+        "taux de traitement dans les delais",
+        "sla respecte",
+        "disponibilite",
+        "accessibilite",
+        "satisfaction",
+        "csat",
+        "nps",
+        "conformite",
+        "productivite",
+        "efficacite",
+    )
+    return formula_has_realized_over_objective(formula) or any(term in context for term in strong_terms)
+
+
 def infer_performance_direction(raw_direction: str = "", kpi_name: str = "", formula: str = "", target: str = "") -> str:
+    target_text = str(target or "")
+    normalized_target = normalize_match_key(target_text)
+    if re.search(r"\d\s*[-–]\s*\d", target_text):
+        return "targetRange"
+    if any(operator in target_text for operator in ("<", "≤")) or any(term in normalized_target for term in ("maximum", "max", "inferieur")):
+        return "lowerBetter"
+    if any(operator in target_text for operator in (">", "≥")) or any(term in normalized_target for term in ("minimum", "min", "superieur")):
+        return "higherBetter"
+
+    if has_strong_lower_performance_signal(kpi_name, formula):
+        return "lowerBetter"
+    if has_strong_higher_performance_signal(kpi_name, formula):
+        return "higherBetter"
+
     normalized_direction = normalize_match_key(raw_direction)
     if any(term in normalized_direction for term in ("baisse favorable", "baisse", "plus bas mieux", "moins mieux", "lowerbetter", "lower better", "lower is better")):
         return "lowerBetter"
@@ -4928,15 +5012,6 @@ def infer_performance_direction(raw_direction: str = "", kpi_name: str = "", for
         return "targetRange"
     if any(term in normalized_direction for term in ("hausse favorable", "hausse", "plus haut mieux", "higherbetter", "higher better", "higher is better")):
         return "higherBetter"
-
-    target_text = str(target or "")
-    normalized_target = normalize_match_key(target_text)
-    if any(operator in target_text for operator in ("<", "≤")) or any(term in normalized_target for term in ("maximum", "max", "inferieur")):
-        return "lowerBetter"
-    if any(operator in target_text for operator in (">", "≥")) or any(term in normalized_target for term in ("minimum", "min", "superieur")):
-        return "higherBetter"
-    if re.search(r"\d\s*[-–]\s*\d", target_text):
-        return "targetRange"
 
     context = normalize_match_key(f"{kpi_name} {formula}")
     if any(term in context for term in LOWER_IS_BETTER_TERMS):

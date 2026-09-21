@@ -1366,6 +1366,10 @@ textarea {
   color: var(--red-text);
 }
 
+.neutral {
+  color: var(--amber-text);
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1578,7 +1582,7 @@ button.dashboard-control-card {
 }
 
 .dashboard-performance-table strong.neutral {
-  color: var(--palladium-blue);
+  color: var(--amber-text);
 }
 
 .dashboard-performance-table strong.empty {
@@ -3592,7 +3596,7 @@ button.dashboard-control-card {
 }
 
 .kpi-trend-cell.neutral strong {
-  color: var(--palladium-blue);
+  color: var(--amber-text);
 }
 
 .kpi-trend-cell.empty strong {
