@@ -5562,9 +5562,11 @@
         const targetLine =
           activeTab === "objective"
             ? [
-                savedMonthlyObjective ? `Objectif du mois enregistre: ${savedMonthlyObjective}` : "Objectif du mois manquant",
-                monthlyObjective && monthlyObjective !== savedMonthlyObjective ? `Saisie en cours: ${monthlyObjective}` : "",
-                `Cible referentiel: ${referenceTarget}`,
+                savedMonthlyObjective
+                  ? `Objectif mensuel utilise pour le calcul: ${savedMonthlyObjective}`
+                  : monthlyObjective
+                    ? `Saisie en cours: ${monthlyObjective} - enregistrez pour l'utiliser dans le calcul`
+                    : "Objectif du mois manquant",
                 `Frequence: ${frequency}`,
               ].filter(Boolean).join(" | ")
             : `Cible referentiel: ${referenceTarget} | Frequence: ${frequency}`;
