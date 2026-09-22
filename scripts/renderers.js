@@ -5687,13 +5687,20 @@
                 .join("")
             : `<tr><td colspan="8">Aucune ligne renseignee pour ce perimetre. Les donnees apparaitront ici apres enregistrement.</td></tr>`;
         }
+        const canViewCollectionHistory = Boolean(!state.currentUser || state.currentPermissions?.administration);
+        const historyPanel = document.querySelector(".platform-collection-history");
         const historyStatus = $("#platform-collection-history-status");
         const historyList = $("#platform-collection-history-list");
-        const historyRows = (state.collectionHistory || [])
-          .filter((row) => row.collectionType === activeTab)
-          .filter(rowMatchesRecordFilters)
-          .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")))
-          .slice(0, 10);
+        if (historyPanel) {
+          historyPanel.hidden = !canViewCollectionHistory;
+        }
+        const historyRows = canViewCollectionHistory
+          ? (state.collectionHistory || [])
+              .filter((row) => row.collectionType === activeTab)
+              .filter(rowMatchesRecordFilters)
+              .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")))
+              .slice(0, 10)
+          : [];
         if (historyStatus) {
           historyStatus.className = `status-pill ${historyRows.length ? "green" : "gray"}`;
           historyStatus.textContent = `${historyRows.length} action${historyRows.length > 1 ? "s" : ""}`;

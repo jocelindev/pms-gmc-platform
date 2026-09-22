@@ -2163,7 +2163,7 @@ def get_bootstrap_payload(session: dict) -> dict:
         kobo_submissions = list_kobo_submissions(conn)
         kpi_daily_dates = list_kpi_daily_dates(conn)
         collection_rows = list_platform_collection_rows(conn)
-        collection_history = list_platform_collection_history(conn)
+        collection_history = list_platform_collection_history(conn) if is_admin else []
 
         if has_global_scope:
             scoped_results = kpi_results
@@ -2180,7 +2180,7 @@ def get_bootstrap_payload(session: dict) -> dict:
             scoped_submissions = filter_records_by_access_rules(kobo_submissions, access_rules)
             scoped_daily_dates = filter_records_by_access_rules(kpi_daily_dates, access_rules)
             scoped_collection_rows = filter_records_by_access_rules(collection_rows, access_rules, allow_group_record=True)
-            scoped_collection_history = filter_records_by_access_rules(collection_history, access_rules, allow_group_record=True)
+            scoped_collection_history = []
 
         scoped_quality = scoped_kpi_quality(
             kpi_quality,
