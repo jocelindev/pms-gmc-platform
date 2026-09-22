@@ -976,6 +976,7 @@
     kpiObjectives: [],
     collectionRows: [],
     collectionHistory: [],
+    currentCollectionEditRow: null,
     calendar: buildMonthToDateSelection(new Date()),
     calendarDateDropdownOpen: false,
     actorScope: "responsable",
@@ -2852,6 +2853,7 @@
     document.querySelectorAll("[data-collection-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         state.currentCollectionTab = button.dataset.collectionTab || "reference";
+        state.currentCollectionEditRow = null;
         renderAdmin(state);
       });
     });
@@ -3040,6 +3042,11 @@
 
       const collectionType = row.collectionType || "reference";
       const branch = findCountryName(row.branch || "Groupe");
+      state.currentCollectionEditRow = {
+        id: row.id,
+        dbId: row.dbId,
+        collectionType,
+      };
       state.currentCollectionTab = collectionType;
       state.calendarBranchFilter = branch;
       state.currentAdminPole = row.poleId || state.currentAdminPole;
@@ -3064,6 +3071,7 @@
         setSelectValue("#platform-reference-branch", branch);
         setSelectValue("#platform-reference-pole", row.poleId, row.poleName);
         setFieldValue("#platform-reference-kpi-id", row.kpiId || "");
+        setFieldValue("#platform-reference-display-order", row.displayOrder || "");
         setFieldValue("#platform-reference-kpi-name", row.kpiName || row.kpiId || "");
         setSelectValue("#platform-reference-unit", row.unit || "Autre");
         setSelectValue("#platform-reference-frequency", row.frequency || row.reportingFrequency || "Journalier");
@@ -3265,11 +3273,14 @@
       await withLoading($("#platform-reference-save"), "Enregistrement...", async () => {
         try {
           const response = await api.savePlatformReferenceKpi({
+            rowId: state.currentCollectionEditRow?.collectionType === "reference" ? state.currentCollectionEditRow.id : "",
+            dbId: state.currentCollectionEditRow?.collectionType === "reference" ? state.currentCollectionEditRow.dbId : "",
             branch: fieldValue("#platform-reference-branch") || state.calendarBranchFilter || "Groupe",
             poleId: pole.id,
             poleName: pole.name,
             catalogId,
             kpiName,
+            displayOrder: fieldValue("#platform-reference-display-order"),
             unit: fieldValue("#platform-reference-unit"),
             frequency: fieldValue("#platform-reference-frequency"),
             collectionFrequency: fieldValue("#platform-reference-frequency"),
@@ -3282,6 +3293,7 @@
             validation: "En attente",
             sourceData: "Saisie interne Hub central",
           });
+          state.currentCollectionEditRow = null;
           applyCollectionResponse(response, "#platform-reference-status", `KPI ${catalogId} enregistre dans le referentiel.`);
         } catch (error) {
           console.warn("Saisie referentiel indisponible.", error);

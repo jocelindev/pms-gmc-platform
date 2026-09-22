@@ -501,9 +501,9 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
                     """
                     INSERT INTO kpis (
                       code, pole_id, name, target, current_value, trend, rag_status,
-                      source_form_uid, data_source, responsible, updated_at
+                      display_order, source_form_uid, data_source, responsible, updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(code) DO UPDATE SET
                       pole_id = excluded.pole_id,
                       name = excluded.name,
@@ -511,6 +511,7 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
                       current_value = excluded.current_value,
                       trend = excluded.trend,
                       rag_status = excluded.rag_status,
+                      display_order = excluded.display_order,
                       source_form_uid = excluded.source_form_uid,
                       data_source = excluded.data_source,
                       responsible = excluded.responsible,
@@ -524,6 +525,7 @@ def seed_database(conn: sqlite3.Connection, data: dict) -> None:
                         kpi.get("value"),
                         kpi.get("trend"),
                         kpi.get("status", "gray"),
+                        index,
                         kpi.get("source"),
                         kpi.get("source"),
                         next((pole.get("owner") for pole in poles if pole.get("id") == pole_id), None),

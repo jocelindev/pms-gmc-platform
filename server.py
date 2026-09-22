@@ -473,6 +473,7 @@ IMPORT_REFERENCE_ALIASES = {
     "performanceDirection": ("sens_performance", "sens performance", "sens de performance", "orientation", "direction"),
     "collectionFrequency": ("frequence_de_collecte", "frequence collecte", "frequence de collecte", "frequence", "fréquence"),
     "reportingFrequency": ("periodicite_du_reporting", "periodicite reporting", "periodicite du reporting", "reporting frequency"),
+    "displayOrder": ("ordre_affichage", "ordre affichage", "ordre", "position", "rang"),
     "sourceData": ("source_de_la_donnee", "source donnee", "source de la donnee", "source"),
     "responsible": ("responsable_du_kpi", "responsable kpi", "responsable", "owner"),
     "respondent": ("repondant", "repondant kpi", "repondant donnees"),
@@ -891,6 +892,19 @@ def ensure_kpi_objectives_schema(conn: sqlite3.Connection) -> bool:
     return changed
 
 
+def ensure_kpis_schema(conn: sqlite3.Connection) -> bool:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(kpis)").fetchall()}
+    if not columns:
+        return False
+
+    changed = False
+    if "display_order" not in columns:
+        conn.execute("ALTER TABLE kpis ADD COLUMN display_order INTEGER")
+        changed = True
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_kpis_pole_display_order ON kpis(pole_id, display_order, name)")
+    return changed
+
+
 def ensure_kpi_daily_data_schema(conn: sqlite3.Connection) -> bool:
     conn.execute(
         """
@@ -1005,6 +1019,7 @@ def migrate_database(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
     changed = False
     changed = ensure_user_access_schema(conn) or changed
+    changed = ensure_kpis_schema(conn) or changed
     changed = ensure_kpi_objectives_schema(conn) or changed
     ensure_kpi_daily_data_schema(conn)
     changed = migrate_reference_kobo_uid(conn) or changed
@@ -1446,6 +1461,7 @@ def database_reference_kpi_records(conn: sqlite3.Connection) -> list[dict]:
           k.target,
           k.collection_frequency,
           k.reporting_frequency,
+          k.display_order,
           k.data_source,
           k.source_form_uid,
           k.responsible,
@@ -1455,7 +1471,7 @@ def database_reference_kpi_records(conn: sqlite3.Connection) -> list[dict]:
         FROM kpis k
         JOIN poles p ON p.id = k.pole_id
         WHERE COALESCE(k.name, '') <> ''
-        ORDER BY p.name, k.name
+        ORDER BY p.name, COALESCE(k.display_order, 999999), k.name
         """
     ).fetchall()
     records = []
@@ -1479,6 +1495,7 @@ def database_reference_kpi_records(conn: sqlite3.Connection) -> list[dict]:
                 "owner": text_or_empty(row["responsible"]),
                 "collectionFrequency": text_or_empty(row["collection_frequency"]),
                 "reportingFrequency": text_or_empty(row["reporting_frequency"]),
+                "displayOrder": row["display_order"],
                 "validation": text_or_empty(row["validator"] or "A valider"),
                 "documentStatus": text_or_empty(row["document_status"] or "Reference base plateforme"),
                 "dataNature": "Reel",
@@ -2810,12 +2827,16 @@ def ensure_kpi(conn: sqlite3.Connection, payload: dict) -> int:
     pole_name = str(payload.get("poleName") or pole_id).strip()
     kpi_name = str(payload.get("kpiName") or "").strip()
     catalog_id = str(payload.get("catalogId") or "").strip()
+    kpi_db_id = optional_int(payload.get("kpiDbId") or payload.get("dbId"))
+    display_order = optional_int(payload.get("displayOrder") or payload.get("display_order"))
     if not pole_id or not kpi_name:
         raise ValueError("Le pole et le KPI sont obligatoires.")
 
     ensure_pole(conn, pole_id, pole_name, str(payload.get("responsible") or "").strip() or None)
     row = None
-    if catalog_id and catalog_id != "A definir":
+    if kpi_db_id:
+        row = conn.execute("SELECT id FROM kpis WHERE id = ? AND pole_id = ?", (kpi_db_id, pole_id)).fetchone()
+    if not row and catalog_id and catalog_id != "A definir":
         row = conn.execute("SELECT id FROM kpis WHERE code = ?", (catalog_id,)).fetchone()
     if not row:
         row = conn.execute(
@@ -2842,6 +2863,7 @@ def ensure_kpi(conn: sqlite3.Connection, payload: dict) -> int:
                 respondent = COALESCE(NULLIF(?, ''), respondent),
                 validator = COALESCE(NULLIF(?, ''), validator),
                 document_status = COALESCE(NULLIF(?, ''), document_status),
+                display_order = COALESCE(?, display_order),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -2861,6 +2883,7 @@ def ensure_kpi(conn: sqlite3.Connection, payload: dict) -> int:
                 payload.get("respondent"),
                 payload.get("validation"),
                 payload.get("documentStatus"),
+                display_order,
                 kpi_id,
             ),
         )
@@ -2871,10 +2894,10 @@ def ensure_kpi(conn: sqlite3.Connection, payload: dict) -> int:
         """
         INSERT INTO kpis (
           code, pole_id, name, definition, type, unit, formula, target,
-          collection_frequency, reporting_frequency, data_source, source_form_uid,
+          collection_frequency, reporting_frequency, display_order, data_source, source_form_uid,
           responsible, respondent, validator, document_status
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             code,
@@ -2887,6 +2910,7 @@ def ensure_kpi(conn: sqlite3.Connection, payload: dict) -> int:
             payload.get("target"),
             payload.get("collectionFrequency") or payload.get("frequency"),
             payload.get("reportingFrequency") or payload.get("frequency"),
+            display_order,
             payload.get("sourceData"),
             payload.get("sourceForm"),
             payload.get("responsible"),
@@ -3370,6 +3394,13 @@ def save_platform_reference_kpi(payload: dict, session: dict | None = None) -> d
     unit = text_or_empty(payload.get("unit"))
     frequency = text_or_empty(payload.get("collectionFrequency") or payload.get("frequency"))
     performance_direction = text_or_empty(payload.get("performanceDirection") or "higherBetter")
+    display_order = optional_int(payload.get("displayOrder") or payload.get("display_order"))
+    kpi_db_id = optional_int(payload.get("kpiDbId") or payload.get("dbId"))
+    row_id = text_or_empty(payload.get("rowId") or payload.get("collectionRowId"))
+    if row_id:
+        row_type, row_key = collection_row_kind_and_key(row_id, "reference")
+        if row_type == "reference":
+            kpi_db_id = collection_numeric_key(row_key)
     if not pole_id or not branch or not (kpi_code or kpi_name):
         raise ValueError("Pays/filiale, pole et KPI sont obligatoires pour renseigner le referentiel.")
     if not unit or not frequency or not performance_direction:
@@ -3400,6 +3431,7 @@ def save_platform_reference_kpi(payload: dict, session: dict | None = None) -> d
             "periodicite_du_reporting": text_or_empty(payload.get("reportingFrequency") or payload.get("frequency")) or frequency,
             "source_de_la_donnee": source_data,
             "responsable_du_kpi": text_or_empty(payload.get("owner") or payload.get("responsible") or (pole_row["owner"] if pole_row else "")),
+            "ordre_affichage": "" if display_order is None else display_order,
             "repondant": text_or_empty(payload.get("respondent") or payload.get("responsible")),
             "fonction_du_repondant": text_or_empty(payload.get("respondentFunction")),
             "annee": text_or_empty(payload.get("year") or dt.date.today().year),
@@ -3444,6 +3476,8 @@ def save_platform_reference_kpi(payload: dict, session: dict | None = None) -> d
                 "sourceData": source_data,
                 "sourceForm": source_form_uid,
                 "responsible": reference_payload["responsable_du_kpi"],
+                "displayOrder": display_order,
+                "kpiDbId": kpi_db_id,
                 "respondent": reference_payload["repondant"],
                 "validator": reference_payload["validateur"],
                 "validation": validation_status,
@@ -4048,6 +4082,7 @@ def map_reference_import_payload(conn: sqlite3.Connection, row: dict, file_name:
         "frequency": frequency,
         "collectionFrequency": frequency,
         "reportingFrequency": import_row_value(row, IMPORT_REFERENCE_ALIASES["reportingFrequency"]) or frequency,
+        "displayOrder": import_row_value(row, IMPORT_REFERENCE_ALIASES["displayOrder"]),
         "performanceDirection": performance_direction,
         "target": target,
         "formula": formula,
@@ -4680,6 +4715,16 @@ def text_or_empty(value) -> str:
     if value in (None, ""):
         return ""
     return str(value).strip()
+
+
+def optional_int(value) -> int | None:
+    text = text_or_empty(value)
+    if not text:
+        return None
+    try:
+        return int(float(text.replace(",", ".")))
+    except ValueError:
+        return None
 
 
 def kobo_payload_values(value) -> list[str]:
@@ -5847,6 +5892,7 @@ def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
           k.target,
           k.collection_frequency,
           k.reporting_frequency,
+          k.display_order,
           k.data_source,
           k.source_form_uid,
           k.responsible,
@@ -5891,7 +5937,7 @@ def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
           ) AS reference_submission_uid
         FROM kpis k
         LEFT JOIN poles p ON p.id = k.pole_id
-        ORDER BY k.updated_at DESC, k.id DESC
+        ORDER BY k.pole_id, COALESCE(k.display_order, 999999), k.name, k.updated_at DESC, k.id DESC
         LIMIT 1000
         """
     ).fetchall()
@@ -5914,6 +5960,7 @@ def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
                 "rawValue": text_or_empty(row["target"]),
                 "unit": text_or_empty(row["unit"]),
                 "frequency": text_or_empty(row["collection_frequency"]),
+                "displayOrder": row["display_order"],
                 "reportingFrequency": text_or_empty(row["reporting_frequency"]),
                 "formula": text_or_empty(row["formula"]),
                 "performanceDirection": infer_performance_direction("", kpi_name, row["formula"], row["target"]),
@@ -6712,6 +6759,14 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "documentStatus",
             ["statut_documentaire", "statut_kpi", "statut", "document_status"],
         )
+        display_order = optional_int(
+            mapped_submission_value(
+                reference_source,
+                payload,
+                "displayOrder",
+                ["ordre_affichage", "ordre", "position", "rang"],
+            )
+        )
         record = {
             "branch": branch,
             "branchKey": branch_key,
@@ -6735,6 +6790,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             ),
             "validation": text_or_empty(validation_raw or row["validation_status"] or "A valider"),
             "documentStatus": text_or_empty(document_status_raw or "A preciser"),
+            "displayOrder": display_order,
             "dataNature": kobo_data_nature_from_payload(payload, row["collector"], row["kpi_name"], row["period"]),
         }
         references.append(record)
@@ -7439,6 +7495,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     "reportingFrequency": record["reportingFrequency"],
                     "validation": record.get("validation", ""),
                     "documentStatus": record.get("documentStatus", ""),
+                    "displayOrder": record.get("displayOrder"),
                     "validationClass": status_class_from_validation(record.get("validation", "")),
                     "dataNature": record.get("dataNature") or "Reel",
                     "status": "gray",
@@ -7448,7 +7505,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             )(latest_objective_for_reference(record))
             for record in references
         ],
-        key=lambda item: (item["branch"], item["poleName"], item["kpiName"]),
+        key=lambda item: (item["branch"], item["poleName"], item.get("displayOrder") or 999999, item["kpiName"]),
     )
     quality["referenceCount"] = len(references)
 

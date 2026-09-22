@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS kpis (
   rag_status TEXT DEFAULT 'gray',
   collection_frequency TEXT,
   reporting_frequency TEXT,
+  display_order INTEGER,
   data_source TEXT,
   source_form_uid TEXT,
   responsible TEXT,

@@ -5467,6 +5467,13 @@
       };
       const keyForKpi = (kpi = {}) =>
         normalizeLookup(kpi.kpiId || kpi.catalogId || kpi.id || kpi.kpiKey || kpi.code || kpi.name || kpi.kpiName || "");
+      const displayOrderValue = (item = {}) => {
+        const value = Number(item.displayOrder ?? item.display_order);
+        return Number.isFinite(value) && value > 0 ? value : 999999;
+      };
+      const compareKpiDisplayOrder = (left = {}, right = {}) =>
+        displayOrderValue(left) - displayOrderValue(right) ||
+        String(left.kpiName || left.name || left.kpiId || "").localeCompare(String(right.kpiName || right.name || right.kpiId || ""));
       const referenceByKey = new Map();
       const addReference = (kpi = {}) => {
         if (selectedPole.id && kpi.poleId && kpi.poleId !== selectedPole.id) return;
@@ -5481,7 +5488,7 @@
       };
       (state.kpiCalculationQuality?.referenceKpis || []).forEach(addReference);
       (reporting.kpisByPole[selectedPole.id] || []).forEach((kpi) => addReference({ ...kpi, poleId: selectedPole.id }));
-      const referenceRows = [...referenceByKey.values()];
+      const referenceRows = [...referenceByKey.values()].sort(compareKpiDisplayOrder);
       const objectiveRows = (state.kpiObjectives || []).filter(
         (objective) =>
           (!selectedPole.id || objective.poleId === selectedPole.id) &&
@@ -5637,7 +5644,11 @@
         };
         const collectionRows = filterItemsByDataMode(state.collectionRows || [], state.dataModeFilter)
           .filter(rowMatchesScope)
-          .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")));
+          .sort((left, right) =>
+            activeTab === "reference"
+              ? compareKpiDisplayOrder(left, right)
+              : String(right.updatedAt || "").localeCompare(String(left.updatedAt || ""))
+          );
         if (recordTitle) recordTitle.textContent = titleByTab[activeTab] || "Donnees renseignees";
         if (recordStatus) {
           recordStatus.className = `status-pill ${collectionRows.length ? "green" : "gray"}`;
@@ -5651,6 +5662,7 @@
                   const kpiLabel = row.kpiId && row.kpiName && normalizeLookup(row.kpiId) !== normalizeLookup(row.kpiName)
                     ? `${row.kpiId} - ${row.kpiName}`
                     : row.kpiId || row.kpiName || "KPI";
+                  const orderLabel = activeTab === "reference" && displayOrderValue(row) < 999999 ? `Ordre ${row.displayOrder}` : "";
                   const actionButtons = [
                     canModify
                       ? `<button class="table-action" type="button" data-edit-collection-row="${escapeHtml(row.id)}">Modifier</button>`
@@ -5663,7 +5675,7 @@
                     <tr>
                       <td>${escapeHtml(row.branch || "Groupe")}</td>
                       <td><strong>${escapeHtml(row.poleName || row.poleId || "")}</strong><br><small>${escapeHtml(row.poleId || "")}</small></td>
-                      <td><strong>${escapeHtml(kpiLabel)}</strong><br><small>${escapeHtml(row.sourceLabel || typeLabelByTab[activeTab] || "")}</small></td>
+                      <td><strong>${escapeHtml(kpiLabel)}</strong><br><small>${escapeHtml([orderLabel, row.sourceLabel || typeLabelByTab[activeTab] || ""].filter(Boolean).join(" - "))}</small></td>
                       <td>${escapeHtml(row.period || (activeTab === "reference" ? "Referentiel" : ""))}</td>
                       <td><strong>${escapeHtml(row.value || row.rawValue || "--")}</strong><br><small>${escapeHtml(row.unit || row.frequency || "")}</small></td>
                       <td>${escapeHtml(row.details || row.formula || "--")}</td>
