@@ -5393,6 +5393,20 @@
       state.currentPlatformReferencePole = resolvedReferencePole;
       state.currentPlatformObjectivePole = resolvedObjectivePole;
       state.currentPlatformCalculationPole = resolvedCalculationPole;
+      const clientAccountAllowedForPole = (poleId) => {
+        const pole = collectionPoles.find((item) => item.id === poleId);
+        return normalizeLookup(`${poleId || ""} ${pole?.name || ""}`).includes("wfm");
+      };
+      const toggleClientAccountField = (selector, poleId) => {
+        const input = $(selector);
+        const field = input?.closest("[data-wfm-client-field]");
+        if (!field) return;
+        const enabled = clientAccountAllowedForPole(poleId);
+        field.hidden = !enabled;
+        if (!enabled && input) input.value = "";
+      };
+      toggleClientAccountField("#platform-objective-client", resolvedObjectivePole);
+      toggleClientAccountField("#platform-calculation-client", resolvedCalculationPole);
       setSelectOptions("#platform-objective-kpi", kpiOptionsForPole(resolvedObjectivePole, state.currentPlatformObjectiveKpi || ""), state.currentPlatformObjectiveKpi || "");
       setSelectOptions("#platform-calculation-kpi", kpiOptionsForPole(resolvedCalculationPole, state.currentPlatformCalculationKpi || ""), state.currentPlatformCalculationKpi || "");
       state.currentPlatformObjectiveKpi = $("#platform-objective-kpi")?.value || "";
@@ -5544,8 +5558,8 @@
             detail: "Obligatoire: pays/filiale, pole, intitule KPI, unite, frequence et sens de performance. L'ID KPI peut etre genere automatiquement si vous le laissez vide.",
           },
           objective: {
-            title: "Objectif mensuel: une cible officielle par pays, pole, KPI, mois et donneur d'ordre si besoin.",
-            detail: "Obligatoire: mois, pays/filiale, pole, KPI, objectif et unite. Renseignez le donneur d'ordre si le pays contient plusieurs clients ou contrats.",
+            title: "Objectif mensuel: une cible officielle par pays, pole, KPI et mois.",
+            detail: "Obligatoire: mois, pays/filiale, pole, KPI, objectif et unite. Le donneur d'ordre est active uniquement pour WFM.",
           },
           calculation: {
             title: "Donnees realisees: saisissez soit le taux connu, soit les elements de calcul.",

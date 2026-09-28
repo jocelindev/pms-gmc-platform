@@ -3026,6 +3026,7 @@
       select.appendChild(option);
       select.value = option.value;
     };
+    const clientAccountAllowedForPole = (pole = {}) => normalizeLookup(`${pole.id || ""} ${pole.name || ""}`).includes("wfm");
     const findCollectionRow = (rowId) => (state.collectionRows || []).find((row) => row.id === rowId);
     const applyCollectionMutationResponse = (payload) => {
       mergeDatabasePayload(payload);
@@ -3112,7 +3113,7 @@
       } else if (collectionType === "objective") {
         setFieldValue("#platform-objective-period", String(row.period || "").slice(0, 7));
         setSelectValue("#platform-objective-branch", branch);
-        setFieldValue("#platform-objective-client", row.clientAccount || "");
+        setFieldValue("#platform-objective-client", normalizeLookup(`${row.poleId || ""} ${row.poleName || ""}`).includes("wfm") ? row.clientAccount || "" : "");
         setSelectValue("#platform-objective-pole", row.poleId, row.poleName);
         setSelectValue("#platform-objective-kpi", row.kpiId || row.kpiName, row.kpiName || row.kpiId);
         setFieldValue("#platform-objective-target", row.rawValue || row.value || "");
@@ -3131,7 +3132,7 @@
         const editMode = chooseCalculationEditMode(row);
         setFieldValue("#platform-calculation-date", String(row.period || "").slice(0, 10));
         setSelectValue("#platform-calculation-branch", branch);
-        setFieldValue("#platform-calculation-client", row.clientAccount || "");
+        setFieldValue("#platform-calculation-client", normalizeLookup(`${row.poleId || ""} ${row.poleName || ""}`).includes("wfm") ? row.clientAccount || "" : "");
         setSelectValue("#platform-calculation-pole", row.poleId, row.poleName);
         setSelectValue("#platform-calculation-kpi", row.kpiId || row.kpiName, row.kpiName || row.kpiId);
         setSelectValue("#platform-calculation-entry-mode", editMode.mode);
@@ -3337,6 +3338,7 @@
       const pole = selectedPoleById(fieldValue("#platform-objective-pole") || state.currentPlatformObjectivePole);
       const kpiId = fieldValue("#platform-objective-kpi");
       const target = fieldValue("#platform-objective-target");
+      const clientAccount = clientAccountAllowedForPole(pole) ? fieldValue("#platform-objective-client") : "";
       if (!fieldValue("#platform-objective-branch") || !pole?.id || !kpiId || !fieldValue("#platform-objective-period") || !target) {
         showPlatformValidation("#platform-objective-status", "Renseignez le mois, le pays/la filiale, le pole, le KPI et l'objectif.");
         return;
@@ -3351,7 +3353,7 @@
             rowId: state.currentCollectionEditRow?.collectionType === "objective" ? state.currentCollectionEditRow.id : "",
             dbId: state.currentCollectionEditRow?.collectionType === "objective" ? state.currentCollectionEditRow.dbId : "",
             branch: fieldValue("#platform-objective-branch") || state.calendarBranchFilter || "Groupe",
-            clientAccount: fieldValue("#platform-objective-client"),
+            clientAccount,
             poleId: pole.id,
             poleName: pole.name,
             catalogId: kpiId,
@@ -3383,6 +3385,7 @@
       }
       const pole = selectedPoleById(fieldValue("#platform-calculation-pole") || state.currentPlatformCalculationPole);
       const kpiId = fieldValue("#platform-calculation-kpi");
+      const clientAccount = clientAccountAllowedForPole(pole) ? fieldValue("#platform-calculation-client") : "";
       const entryMode = fieldValue("#platform-calculation-entry-mode") || "elements";
       const entryModeLabel = $("#platform-calculation-entry-mode")?.selectedOptions?.[0]?.textContent?.trim() || entryMode;
       const elements = [1, 2, 3].map((index) => ({
@@ -3414,7 +3417,7 @@
             rowId: state.currentCollectionEditRow?.collectionType === "calculation" ? state.currentCollectionEditRow.id : "",
             dbId: state.currentCollectionEditRow?.collectionType === "calculation" ? state.currentCollectionEditRow.dbId : "",
             branch: fieldValue("#platform-calculation-branch") || state.calendarBranchFilter || "Groupe",
-            clientAccount: fieldValue("#platform-calculation-client"),
+            clientAccount,
             poleId: pole.id,
             poleName: pole.name,
             catalogId: kpiId,
