@@ -621,6 +621,27 @@ def count_tables(conn: sqlite3.Connection) -> dict[str, int]:
     return counts
 
 
+def existing_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    return {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+
+
+def migrate_existing_collecte_tables(conn: sqlite3.Connection) -> None:
+    """Prepare legacy databases before schema indexes are recreated."""
+    objective_columns = existing_columns(conn, "kpi_objectives")
+    if objective_columns:
+        if "branch" not in objective_columns:
+            conn.execute("ALTER TABLE kpi_objectives ADD COLUMN branch TEXT NOT NULL DEFAULT 'Groupe'")
+        if "client_account" not in objective_columns:
+            conn.execute("ALTER TABLE kpi_objectives ADD COLUMN client_account TEXT NOT NULL DEFAULT ''")
+
+    data_columns = existing_columns(conn, "kpi_daily_data")
+    if data_columns:
+        if "client_account" not in data_columns:
+            conn.execute("ALTER TABLE kpi_daily_data ADD COLUMN client_account TEXT NOT NULL DEFAULT ''")
+        if "data_nature" not in data_columns:
+            conn.execute("ALTER TABLE kpi_daily_data ADD COLUMN data_nature TEXT NOT NULL DEFAULT 'Reel'")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Initialise la base Palladium Africa Hub central.")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH, help="Chemin du fichier SQLite.")
@@ -639,6 +660,7 @@ def main() -> None:
     conn = open_database_connection(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
+        migrate_existing_collecte_tables(conn)
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         seed_database(conn, data)
         counts = count_tables(conn)
