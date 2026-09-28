@@ -155,6 +155,72 @@
       .trim();
   }
 
+  function cycleValuesFromFrequency(value) {
+    const normalized = normalizeLookup(value);
+    if (!normalized) return [];
+    const cycles = [];
+    if (normalized.includes("jour") || normalized.includes("quotid") || normalized.includes("horaire")) cycles.push("Journalier");
+    if (normalized.includes("hebdo") || normalized.includes("semaine")) cycles.push("Hebdomadaire");
+    if (normalized.includes("mens")) cycles.push("Mensuel");
+    if (normalized.includes("trimes")) cycles.push("Trimestriel");
+    if (normalized.includes("semes")) cycles.push("Semestriel");
+    if (normalized.includes("ann")) cycles.push("Annuel");
+    return [...new Set(cycles)];
+  }
+
+  function kpiReportCycleValues(kpi = {}) {
+    const sourceFields = [
+      kpi.reportingFrequency,
+      kpi.collectionFrequency,
+      kpi.frequency,
+      kpi.periodType,
+    ];
+    for (const source of sourceFields) {
+      const cycles = cycleValuesFromFrequency(source);
+      if (cycles.length) return cycles;
+    }
+    return [];
+  }
+
+  function reportCycleStats(kpis = []) {
+    const counts = new Map();
+    kpis.forEach((kpi) => {
+      kpiReportCycleValues(kpi).forEach((cycleValue) => {
+        counts.set(cycleValue, (counts.get(cycleValue) || 0) + 1);
+      });
+    });
+    const cycleOrder = PMS_DATA.reporting.cycles.map((cycle) => cycle.value);
+    const dominant = [...counts.entries()].sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return cycleOrder.indexOf(left[0]) - cycleOrder.indexOf(right[0]);
+    })[0];
+    return {
+      counts,
+      dominantValue: dominant?.[0] || "",
+      dominantCount: dominant?.[1] || 0,
+    };
+  }
+
+  function resolveReportCycleForKpis(kpis = [], requestedCycleValue = state.currentReportCycle) {
+    const reporting = PMS_DATA.reporting;
+    const requestedCycle = reporting.cycles.find((cycle) => cycle.value === requestedCycleValue) || reporting.cycles[0];
+    const { counts, dominantValue, dominantCount } = reportCycleStats(kpis);
+    if (!dominantValue) return requestedCycle;
+    const requestedCount = counts.get(requestedCycle.value) || 0;
+    const shouldKeepRequested =
+      requestedCount > 0 &&
+      (requestedCycle.value !== "Journalier" || requestedCount >= dominantCount);
+    if (shouldKeepRequested) return requestedCycle;
+    return reporting.cycles.find((cycle) => cycle.value === dominantValue) || requestedCycle;
+  }
+
+  function resolveReportCycleForPole(poleId, requestedCycleValue = state.currentReportCycle) {
+    if (poleId === REPORT_GROUP_ID) {
+      return PMS_DATA.reporting.cycles.find((cycle) => cycle.value === requestedCycleValue) || PMS_DATA.reporting.cycles[0];
+    }
+    return resolveReportCycleForKpis(PMS_DATA.reporting.kpisByPole[poleId] || [], requestedCycleValue);
+  }
+
   function dataNatureKey(item = {}) {
     const normalized = normalizeLookup(item.dataNature || item.data_nature || item.nature || "Reel");
     if (["test", "donnee test", "donnees test"].includes(normalized)) return "test";
@@ -1916,16 +1982,21 @@
 
   function getCurrentReportContext() {
     const reporting = PMS_DATA.reporting;
-    const cycle = reporting.cycles.find((item) => item.value === state.currentReportCycle) || reporting.cycles[0];
     const period = state.calendar?.label || $("#period-filter")?.value || "";
-    const typedComment = $("#report-comment")?.value?.trim() || "";
-    const savedComment = latestReportComment(state.currentReportPole, cycle.value, period);
-    const comment = typedComment || savedComment || "";
+    const requestedCycle = reporting.cycles.find((item) => item.value === state.currentReportCycle) || reporting.cycles[0];
     if (state.currentReportPole === REPORT_GROUP_ID) {
+      const typedComment = $("#report-comment")?.value?.trim() || "";
+      const savedComment = latestReportComment(state.currentReportPole, requestedCycle.value, period);
+      const comment = typedComment || savedComment || "";
+      const cycle = requestedCycle;
       return buildGroupReportContext({ cycle, period, comment });
     }
     const pole = reporting.poles.find((item) => item.id === state.currentReportPole) || reporting.poles[0];
     const kpis = reporting.kpisByPole[pole.id] || [];
+    const cycle = resolveReportCycleForKpis(kpis, requestedCycle.value);
+    const typedComment = $("#report-comment")?.value?.trim() || "";
+    const savedComment = latestReportComment(state.currentReportPole, cycle.value, period);
+    const comment = typedComment || savedComment || "";
     return {
       pole,
       cycle,
@@ -2638,7 +2709,7 @@
     if (reportButton) {
       reportButton.addEventListener("click", () => {
         state.currentReportPole = state.currentPoleMonitor;
-        state.currentReportCycle = state.currentPoleCycle;
+        state.currentReportCycle = resolveReportCycleForPole(state.currentReportPole, state.currentPoleCycle).value;
         $("#report-pole-select").value = state.currentReportPole;
         $("#report-cycle-select").value = state.currentReportCycle;
         renderReportWorkspace(state);
@@ -2653,7 +2724,9 @@
       const requestedPole = event.target.value;
       const allowedPole = getAllowedPoleFromScope(requestedPole);
       state.currentReportPole = allowedPole;
+      state.currentReportCycle = resolveReportCycleForPole(allowedPole, state.currentReportCycle).value;
       event.target.value = allowedPole;
+      $("#report-cycle-select").value = state.currentReportCycle;
       renderReportWorkspace(state);
       showToast(
         allowedPole === REPORT_GROUP_ID
@@ -2665,9 +2738,16 @@
     });
 
     $("#report-cycle-select").addEventListener("change", (event) => {
-      state.currentReportCycle = event.target.value;
+      const requestedCycle = event.target.value;
+      const resolvedCycle = resolveReportCycleForPole(state.currentReportPole, requestedCycle);
+      state.currentReportCycle = resolvedCycle.value;
+      event.target.value = state.currentReportCycle;
       renderReportWorkspace(state);
-      showToast(`Periodicite ${event.target.value.toLowerCase()} appliquee au rapport.`);
+      showToast(
+        resolvedCycle.value === requestedCycle
+          ? `Periodicite ${event.target.value.toLowerCase()} appliquee au rapport.`
+          : `Periodicite ajustee sur ${resolvedCycle.value.toLowerCase()} selon les KPI du pole.`
+      );
     });
 
     $("#generate-report").addEventListener("click", async () => {
@@ -2679,11 +2759,13 @@
       state.currentReportPole = getAllowedPoleFromScope(state.currentReportPole);
       renderReportControls(state);
       renderReportWorkspace(state);
-      const format = $("#report-format-select").value;
-      const poleOption = $("#report-pole-select").selectedOptions[0];
-      const isGroupReport = state.currentReportPole === REPORT_GROUP_ID;
-      const pole = isGroupReport ? "Rapport groupe" : poleOption.textContent.trim();
-      const reportPeriod = state.calendar?.label || $("#period-filter").value;
+      const context = getCurrentReportContext();
+      state.currentReportCycle = context.cycle.value;
+      $("#report-cycle-select").value = state.currentReportCycle;
+      const format = context.format;
+      const isGroupReport = context.isGroup || state.currentReportPole === REPORT_GROUP_ID;
+      const pole = isGroupReport ? "Rapport groupe" : context.pole.name;
+      const reportPeriod = context.period;
       const generatedAt = new Date().toLocaleString("fr-FR", {
         day: "2-digit",
         month: "2-digit",
@@ -2696,12 +2778,12 @@
         pole: state.currentReportPole,
         poleName: pole,
         branch: state.calendarBranchFilter || "Groupe",
-        cycle: state.currentReportCycle,
+        cycle: context.cycle.value,
         period: reportPeriod,
         format,
         status: "Brouillon",
         generatedAt,
-        comment: $("#report-comment").value.trim(),
+        comment: context.comment || $("#report-comment").value.trim(),
       };
       let savedReport = report;
       let savedInDatabase = false;
@@ -2742,11 +2824,13 @@
         showToast("Ajoutez un commentaire avant enregistrement.");
         return;
       }
-      const poleOption = $("#report-pole-select").selectedOptions[0];
-      const isGroupReport = state.currentReportPole === REPORT_GROUP_ID;
-      const poleName = isGroupReport ? "Rapport groupe" : poleOption?.textContent?.trim() || state.currentReportPole;
-      const period = state.calendar?.label || $("#period-filter").value;
-      const reportId = `COMMENT-${isGroupReport ? "GROUPE" : state.currentReportPole}-${state.currentReportCycle}-${period}`
+      const context = getCurrentReportContext();
+      state.currentReportCycle = context.cycle.value;
+      $("#report-cycle-select").value = state.currentReportCycle;
+      const isGroupReport = context.isGroup || state.currentReportPole === REPORT_GROUP_ID;
+      const poleName = isGroupReport ? "Rapport groupe" : context.pole.name;
+      const period = context.period;
+      const reportId = `COMMENT-${isGroupReport ? "GROUPE" : state.currentReportPole}-${context.cycle.value}-${period}`
         .replace(/[^A-Za-z0-9-]+/g, "-")
         .replace(/-+/g, "-")
         .slice(0, 80);
@@ -2756,7 +2840,7 @@
         poleId: state.currentReportPole,
         poleName,
         branch: state.calendarBranchFilter || "Groupe",
-        cycle: state.currentReportCycle,
+        cycle: context.cycle.value,
         period,
         format: "Commentaire",
         status: "Commentaire responsable",

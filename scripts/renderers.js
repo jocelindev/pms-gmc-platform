@@ -220,6 +220,55 @@
     return value || "A preciser";
   }
 
+  function cycleValuesFromFrequency(value) {
+    const normalized = normalizeLookup(value);
+    if (!normalized) return [];
+    const cycles = [];
+    if (normalized.includes("jour") || normalized.includes("quotid") || normalized.includes("horaire")) cycles.push("Journalier");
+    if (normalized.includes("hebdo") || normalized.includes("semaine")) cycles.push("Hebdomadaire");
+    if (normalized.includes("mens")) cycles.push("Mensuel");
+    if (normalized.includes("trimes")) cycles.push("Trimestriel");
+    if (normalized.includes("semes")) cycles.push("Semestriel");
+    if (normalized.includes("ann")) cycles.push("Annuel");
+    return [...new Set(cycles)];
+  }
+
+  function kpiReportCycleValues(kpi = {}) {
+    const sourceFields = [
+      kpi.reportingFrequency,
+      kpi.collectionFrequency,
+      kpi.frequency,
+      kpi.periodType,
+    ];
+    for (const source of sourceFields) {
+      const cycles = cycleValuesFromFrequency(source);
+      if (cycles.length) return cycles;
+    }
+    return [];
+  }
+
+  function effectiveReportCycleForKpis(reporting, kpis = [], requestedCycleValue) {
+    const requestedCycle = reporting.cycles.find((cycle) => cycle.value === requestedCycleValue) || reporting.cycles[0];
+    const counts = new Map();
+    kpis.forEach((kpi) => {
+      kpiReportCycleValues(kpi).forEach((cycleValue) => {
+        counts.set(cycleValue, (counts.get(cycleValue) || 0) + 1);
+      });
+    });
+    if (!counts.size) return requestedCycle;
+    const cycleOrder = reporting.cycles.map((cycle) => cycle.value);
+    const [dominantValue, dominantCount] = [...counts.entries()].sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return cycleOrder.indexOf(left[0]) - cycleOrder.indexOf(right[0]);
+    })[0];
+    const requestedCount = counts.get(requestedCycle.value) || 0;
+    const shouldKeepRequested =
+      requestedCount > 0 &&
+      (requestedCycle.value !== "Journalier" || requestedCount >= dominantCount);
+    if (shouldKeepRequested) return requestedCycle;
+    return reporting.cycles.find((cycle) => cycle.value === dominantValue) || requestedCycle;
+  }
+
   function cadenceClass(value) {
     const cadence = normalizeCadence(value);
     if (cadence === "Horaire" || cadence === "Journalier") return "green";
@@ -4727,6 +4776,9 @@
     if (state.currentReportPole !== REPORT_GROUP_ID && !authorizedPoles.some((pole) => pole.id === state.currentReportPole)) {
       state.currentReportPole = authorizedPoles[0]?.id || reporting.defaultPole;
     }
+    const selectedReportCycle = state.currentReportPole === REPORT_GROUP_ID
+      ? state.currentReportCycle
+      : effectiveReportCycleForKpis(reporting, reporting.kpisByPole[state.currentReportPole] || [], state.currentReportCycle).value;
 
     const groupOption = canGroupReport
       ? `<option value="${REPORT_GROUP_ID}" ${state.currentReportPole === REPORT_GROUP_ID ? "selected" : ""}>Groupe - rapport mensuel</option>`
@@ -4745,7 +4797,7 @@
     $("#report-cycle-select").innerHTML = reporting.cycles
       .map(
         (cycle) => `
-          <option value="${escapeHtml(cycle.value)}" ${cycle.value === state.currentReportCycle ? "selected" : ""}>
+          <option value="${escapeHtml(cycle.value)}" ${cycle.value === selectedReportCycle ? "selected" : ""}>
             ${escapeHtml(cycle.value)}
           </option>
         `
@@ -4941,8 +4993,8 @@
       state.currentReportPole = authorizedPoles[0]?.id || reporting.defaultPole;
     }
     const pole = authorizedPoles.find((item) => item.id === state.currentReportPole) || authorizedPoles[0] || reporting.poles[0];
-    const cycle = reporting.cycles.find((item) => item.value === state.currentReportCycle) || reporting.cycles[0];
     const kpis = reporting.kpisByPole[pole.id] || [];
+    const cycle = effectiveReportCycleForKpis(reporting, kpis, state.currentReportCycle);
     const dataKpis = kpis.filter(hasKpiData);
     const hasData = hasPoleData(pole);
     const statusClass = hasData ? reportStatusClass(pole.status) : "gray";
