@@ -751,6 +751,82 @@ def create_kpi_objectives_table(conn: sqlite3.Connection) -> None:
     )
 
 
+def create_kpis_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE kpis (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT,
+          pole_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          definition TEXT,
+          type TEXT,
+          unit TEXT,
+          formula TEXT,
+          target TEXT,
+          current_value TEXT,
+          trend TEXT,
+          rag_status TEXT DEFAULT 'gray',
+          collection_frequency TEXT,
+          reporting_frequency TEXT,
+          display_order INTEGER,
+          data_source TEXT,
+          source_form_uid TEXT,
+          responsible TEXT,
+          respondent TEXT,
+          validator TEXT,
+          document_status TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (pole_id) REFERENCES poles(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+
+def deduplicate_kpis_by_scope_code(conn: sqlite3.Connection) -> bool:
+    if not table_exists(conn, "kpis"):
+        return False
+
+    rows = conn.execute(
+        """
+        SELECT id, pole_id, code, name, formula, updated_at
+        FROM kpis
+        WHERE COALESCE(code, '') <> ''
+        ORDER BY pole_id, code, id
+        """
+    ).fetchall()
+    grouped: dict[tuple[str, str], list[sqlite3.Row]] = {}
+    for row in rows:
+        grouped.setdefault((text_or_empty(row["pole_id"]), text_or_empty(row["code"])), []).append(row)
+
+    changed = False
+    for (_pole_id, _code), duplicates in grouped.items():
+        if len(duplicates) <= 1:
+            continue
+
+        def keep_score(row: sqlite3.Row) -> tuple[int, int, int]:
+            return (
+                1 if text_or_empty(row["formula"]) else 0,
+                1 if text_or_empty(row["name"]) else 0,
+                int(row["id"] or 0),
+            )
+
+        keep = sorted(duplicates, key=keep_score, reverse=True)[0]
+        keep_id = int(keep["id"])
+        duplicate_ids = [int(row["id"]) for row in duplicates if int(row["id"]) != keep_id]
+        has_objectives_table = table_exists(conn, "kpi_objectives")
+        for duplicate_id in duplicate_ids:
+            if has_objectives_table:
+                conn.execute(
+                    "UPDATE kpi_objectives SET kpi_id = ? WHERE kpi_id = ?",
+                    (keep_id, duplicate_id),
+                )
+            conn.execute("DELETE FROM kpis WHERE id = ?", (duplicate_id,))
+        changed = True
+    return changed
+
+
 def recreate_user_access_view(conn: sqlite3.Connection) -> None:
     conn.execute("DROP VIEW IF EXISTS v_user_access_details")
     conn.execute(
@@ -928,6 +1004,91 @@ def ensure_kpis_schema(conn: sqlite3.Connection) -> bool:
     if "display_order" not in columns:
         conn.execute("ALTER TABLE kpis ADD COLUMN display_order INTEGER")
         changed = True
+
+    changed = deduplicate_kpis_by_scope_code(conn) or changed
+    unique_columns = unique_index_columns(conn, "kpis")
+    scoped_unique_exists = ["pole_id", "code"] in unique_columns
+    legacy_code_unique_exists = ["code"] in unique_columns
+    if database_backend() == "postgresql":
+        conn.execute("ALTER TABLE kpis DROP CONSTRAINT IF EXISTS kpis_code_key")
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_kpis_pole_code
+            ON kpis(pole_id, code)
+            WHERE code IS NOT NULL AND code <> ''
+            """
+        )
+        changed = changed or legacy_code_unique_exists or not scoped_unique_exists
+    else:
+        if legacy_code_unique_exists and not scoped_unique_exists:
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("ALTER TABLE kpis RENAME TO kpis_old")
+            create_kpis_table(conn)
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO kpis (
+                  id,
+                  code,
+                  pole_id,
+                  name,
+                  definition,
+                  type,
+                  unit,
+                  formula,
+                  target,
+                  current_value,
+                  trend,
+                  rag_status,
+                  collection_frequency,
+                  reporting_frequency,
+                  display_order,
+                  data_source,
+                  source_form_uid,
+                  responsible,
+                  respondent,
+                  validator,
+                  document_status,
+                  created_at,
+                  updated_at
+                )
+                SELECT
+                  id,
+                  code,
+                  pole_id,
+                  name,
+                  definition,
+                  type,
+                  unit,
+                  formula,
+                  target,
+                  current_value,
+                  trend,
+                  rag_status,
+                  collection_frequency,
+                  reporting_frequency,
+                  display_order,
+                  data_source,
+                  source_form_uid,
+                  responsible,
+                  respondent,
+                  validator,
+                  document_status,
+                  created_at,
+                  updated_at
+                FROM kpis_old
+                """
+            )
+            conn.execute("DROP TABLE kpis_old")
+            conn.execute("PRAGMA foreign_keys = ON")
+            changed = True
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_kpis_pole_code
+            ON kpis(pole_id, code)
+            WHERE code IS NOT NULL AND code <> ''
+            """
+        )
+
     conn.execute("CREATE INDEX IF NOT EXISTS idx_kpis_pole_display_order ON kpis(pole_id, display_order, name)")
     return changed
 
@@ -1045,6 +1206,131 @@ def migrate_collection_source_labels(conn: sqlite3.Connection) -> bool:
     return changed
 
 
+KNOWN_KPI_CATALOG_REPAIRS = (
+    {
+        "pole_id": "DSI",
+        "code": "KPI-002",
+        "name": "Taux de maintenance preventive realises",
+        "type": "Productivite",
+        "unit": "% (Pourcentage)",
+        "formula": "Nbre de maintenance preventive realise / Nbr de maintenance preventive planifie x 100",
+        "target": "90",
+        "collection_frequency": "Mensuel",
+        "reporting_frequency": "Mensuel",
+        "data_source": "Referentiel officiel DSI",
+        "document_status": "Reference corrigee automatiquement",
+    },
+    {
+        "pole_id": "DSI",
+        "code": "KPI-003",
+        "name": "Disponibilite / Accessibilite (systeme)",
+        "type": "Productivite",
+        "unit": "% (Pourcentage)",
+        "formula": "Nombre de minutes de disponibilite des systemes d'information / Total des minutes pendant lesquelles le service est ouvert x 100",
+        "target": "98",
+        "collection_frequency": "Hebdomadaire",
+        "reporting_frequency": "Hebdomadaire",
+        "data_source": "Referentiel officiel DSI",
+        "document_status": "Reference corrigee automatiquement",
+    },
+    {
+        "pole_id": "DSI",
+        "code": "KPI-004",
+        "name": "Transactions bloquees (telecommunication)",
+        "type": "Productivite",
+        "unit": "% (Pourcentage)",
+        "formula": "Nombre d'appels aboutissant a une tonalite d'occupation / nombre total d'appels recus x 100",
+        "target": "98",
+        "collection_frequency": "Hebdomadaire",
+        "reporting_frequency": "Hebdomadaire",
+        "data_source": "Referentiel officiel DSI",
+        "document_status": "Reference corrigee automatiquement",
+    },
+    {
+        "pole_id": "DSI",
+        "code": "KPI-113",
+        "name": "Taux de disponibilite systeme (%)",
+        "type": "IT",
+        "unit": "% (Pourcentage)",
+        "formula": "(Duree totale - Duree d'indisponibilite) / Duree totale x 100",
+        "target": ">= 99,5%",
+        "collection_frequency": "Journalier",
+        "reporting_frequency": "Journalier",
+        "data_source": "Referentiel officiel DSI",
+        "document_status": "Reference corrigee automatiquement",
+    },
+    {
+        "pole_id": "DSI",
+        "code": "KPI-115",
+        "name": "Taux postes operationnels (%)",
+        "type": "IT",
+        "unit": "% (Pourcentage)",
+        "formula": "(Nb postes total - Nb postes HS) / Nb postes total x 100",
+        "target": ">= 99%",
+        "collection_frequency": "Journalier",
+        "reporting_frequency": "Journalier",
+        "data_source": "Referentiel officiel DSI",
+        "document_status": "Reference corrigee automatiquement",
+    },
+)
+
+
+def repair_known_kpi_catalog(conn: sqlite3.Connection) -> bool:
+    if not table_exists(conn, "kpis"):
+        return False
+
+    changed = False
+    for item in KNOWN_KPI_CATALOG_REPAIRS:
+        cursor = conn.execute(
+            """
+            UPDATE kpis
+            SET name = ?,
+                type = ?,
+                unit = ?,
+                formula = ?,
+                target = ?,
+                collection_frequency = ?,
+                reporting_frequency = ?,
+                data_source = ?,
+                document_status = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE pole_id = ?
+              AND code = ?
+              AND (
+                COALESCE(name, '') <> ?
+                OR COALESCE(type, '') <> ?
+                OR COALESCE(unit, '') <> ?
+                OR COALESCE(formula, '') <> ?
+                OR COALESCE(target, '') <> ?
+                OR COALESCE(collection_frequency, '') <> ?
+                OR COALESCE(reporting_frequency, '') <> ?
+              )
+            """,
+            (
+                item["name"],
+                item["type"],
+                item["unit"],
+                item["formula"],
+                item["target"],
+                item["collection_frequency"],
+                item["reporting_frequency"],
+                item["data_source"],
+                item["document_status"],
+                item["pole_id"],
+                item["code"],
+                item["name"],
+                item["type"],
+                item["unit"],
+                item["formula"],
+                item["target"],
+                item["collection_frequency"],
+                item["reporting_frequency"],
+            ),
+        )
+        changed = bool(cursor.rowcount) or changed
+    return changed
+
+
 def migrate_database(conn: sqlite3.Connection) -> None:
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
     changed = False
@@ -1054,6 +1340,7 @@ def migrate_database(conn: sqlite3.Connection) -> None:
     ensure_kpi_daily_data_schema(conn)
     changed = migrate_reference_kobo_uid(conn) or changed
     changed = migrate_collection_source_labels(conn) or changed
+    changed = repair_known_kpi_catalog(conn) or changed
     if "password_hash" not in columns:
         conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
         changed = True
@@ -2892,7 +3179,7 @@ def ensure_kpi(conn: sqlite3.Connection, payload: dict) -> int:
     if kpi_db_id:
         row = conn.execute("SELECT id FROM kpis WHERE id = ? AND pole_id = ?", (kpi_db_id, pole_id)).fetchone()
     if not row and catalog_id and catalog_id != "A definir":
-        row = conn.execute("SELECT id FROM kpis WHERE code = ?", (catalog_id,)).fetchone()
+        row = conn.execute("SELECT id FROM kpis WHERE pole_id = ? AND code = ?", (pole_id, catalog_id)).fetchone()
     if not row:
         row = conn.execute(
             "SELECT id FROM kpis WHERE pole_id = ? AND lower(name) = lower(?)",
@@ -3684,10 +3971,11 @@ def save_platform_monthly_objective(payload: dict, session: dict | None = None) 
             """
             SELECT id, name
             FROM kpis
-            WHERE code = ?
+            WHERE pole_id = ?
+              AND code = ?
             LIMIT 1
             """,
-            (kpi_code,),
+            (pole_id, kpi_code),
         ).fetchone()
         if existing_kpi:
             kpi_id = int(existing_kpi["id"])
@@ -4319,7 +4607,10 @@ def save_imported_objective_payload(conn: sqlite3.Connection, payload: dict, ses
     pole_row = conn.execute("SELECT id, name, owner FROM poles WHERE id = ?", (pole_id,)).fetchone()
     pole_name = text_or_empty(payload.get("poleName") or (pole_row["name"] if pole_row else pole_id)) or pole_id
     client_account = scoped_client_account(pole_id, payload.get("clientAccount"), pole_name)
-    kpi_row = conn.execute("SELECT id FROM kpis WHERE code = ? LIMIT 1", (kpi_code,)).fetchone()
+    kpi_row = conn.execute(
+        "SELECT id FROM kpis WHERE pole_id = ? AND code = ? LIMIT 1",
+        (pole_id, kpi_code),
+    ).fetchone()
     if kpi_row:
         kpi_id = int(kpi_row["id"])
     else:
@@ -5246,6 +5537,13 @@ def has_strong_higher_performance_signal(kpi_name: str = "", formula: str = "") 
     return formula_has_realized_over_objective(formula) or any(term in context for term in strong_terms)
 
 
+def is_availability_positive_kpi(kpi_name: str = "") -> bool:
+    key = normalize_match_key(kpi_name)
+    if not key or "indisponibilite" in key:
+        return False
+    return any(term in key for term in ("disponibilite", "accessibilite", "fonctionnalite"))
+
+
 def infer_performance_direction(raw_direction: str = "", kpi_name: str = "", formula: str = "", target: str = "") -> str:
     target_text = str(target or "")
     normalized_target = normalize_match_key(target_text)
@@ -5256,6 +5554,8 @@ def infer_performance_direction(raw_direction: str = "", kpi_name: str = "", for
     if any(operator in target_text for operator in (">", "≥")) or any(term in normalized_target for term in ("minimum", "min", "superieur")):
         return "higherBetter"
 
+    if is_availability_positive_kpi(kpi_name):
+        return "higherBetter"
     if has_strong_lower_performance_signal(kpi_name, formula):
         return "lowerBetter"
     if has_strong_higher_performance_signal(kpi_name, formula):
@@ -5421,6 +5721,27 @@ def format_target_achievement(value: float | None) -> str:
     return f"{format_number(float(value), 2)}%"
 
 
+def should_cap_achievement_display(reference: dict) -> bool:
+    context = normalize_match_key(
+        f"{reference.get('kpiName', '')} {reference.get('formula', '')} {reference.get('unit', '')}"
+    )
+    return any(term in context for term in ("mttr", "dmt", "temps moyen", "duree moyenne", "delai moyen"))
+
+
+def display_achievement_percent(achievement: float | None, reference: dict) -> float | None:
+    if achievement is None:
+        return None
+    direction = infer_performance_direction(
+        reference.get("performanceDirection", ""),
+        reference.get("kpiName", ""),
+        reference.get("formula", ""),
+        reference.get("target", ""),
+    )
+    if direction == "lowerBetter" and should_cap_achievement_display(reference):
+        return min(float(achievement), 100.0)
+    return float(achievement)
+
+
 def format_number(value: float, decimals: int = 1) -> str:
     if value is None:
         return "N/A"
@@ -5501,7 +5822,7 @@ def rag_status(value: float | None, target: str, kpi_name: str = "", formula: st
         return "red"
 
     target_value = rule.get("value")
-    if target_value in (None, 0):
+    if target_value is None:
         return "gray"
     target_value = float(target_value)
     if mode == "max":
@@ -5712,6 +6033,11 @@ def formula_contains_percent_multiplier(formula: str) -> bool:
     return "*100" in compact or "100*" in compact
 
 
+def formula_implies_availability_from_downtime(formula: str) -> bool:
+    key = normalize_match_key(formula)
+    return "duree totale" in key and "indisponibilite" in key
+
+
 def structural_formula_result(formula: str, raw_numbers: list[float], unit: str) -> tuple[float | None, str] | None:
     if not raw_numbers:
         return None
@@ -5727,6 +6053,14 @@ def structural_formula_result(formula: str, raw_numbers: list[float], unit: str)
     first, second = raw_numbers[0], raw_numbers[1]
 
     if "/" in text or " sur " in f" {key} " or " divise " in f" {key} ":
+        if formula_implies_availability_from_downtime(formula) and len(raw_numbers) >= 2:
+            denominator = first if first != 0 else None
+            if denominator:
+                result = (first - second) / denominator
+                if multiply_by_100:
+                    result *= 100
+                return result, "Formule disponibilite appliquee: (element 1 - element 2) / element 1"
+
         if "-" in text and len(raw_numbers) >= 2:
             denominator = first if first != 0 else None
             if denominator:
@@ -7966,14 +8300,15 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             if direct_achievement is not None
             else target_achievement_percent(value, target_info["numeric"], reference.get("performanceDirection", ""))
         )
-        achievement_label = format_target_achievement(achievement)
+        displayed_achievement = display_achievement_percent(achievement, reference)
+        achievement_label = format_target_achievement(displayed_achievement)
         achievement_class = (
             "positive"
-            if achievement is not None and achievement >= 100
+            if displayed_achievement is not None and displayed_achievement >= 100
             else "neutral"
-            if achievement is not None and achievement >= 90
+            if displayed_achievement is not None and displayed_achievement >= 90
             else "negative"
-            if achievement is not None
+            if displayed_achievement is not None
             else "empty"
         )
         value_label = achievement_label if direct_achievement is not None else format_calculated_value(value, result_unit)
@@ -8008,7 +8343,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "monthlyTarget": target_info["monthlyLabel"],
             "targetValue": round(target_info["numeric"], 4) if target_info["numeric"] is not None else None,
             "targetMode": target_info["mode"],
-            "vsTargetValue": round(achievement, 4) if achievement is not None else None,
+            "vsTargetValue": round(displayed_achievement, 4) if displayed_achievement is not None else None,
+            "rawVsTargetValue": round(achievement, 4) if achievement is not None else None,
             "vsTargetLabel": achievement_label,
             "vsTargetClass": achievement_class,
             "aggregationMode": aggregation_mode,

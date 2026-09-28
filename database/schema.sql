@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS user_access (
 
 CREATE TABLE IF NOT EXISTS kpis (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  code TEXT UNIQUE,
+  code TEXT,
   pole_id TEXT NOT NULL,
   name TEXT NOT NULL,
   definition TEXT,
@@ -250,6 +250,7 @@ CREATE INDEX IF NOT EXISTS idx_user_access_user ON user_access(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_access_pole ON user_access(pole_id);
 CREATE INDEX IF NOT EXISTS idx_user_access_branch ON user_access(branch);
 CREATE INDEX IF NOT EXISTS idx_kpis_pole ON kpis(pole_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kpis_pole_code ON kpis(pole_id, code) WHERE code IS NOT NULL AND code <> '';
 CREATE INDEX IF NOT EXISTS idx_objectives_period ON kpi_objectives(period);
 CREATE INDEX IF NOT EXISTS idx_objectives_scope_client ON kpi_objectives(pole_id, branch, client_account, period);
 CREATE INDEX IF NOT EXISTS idx_kobo_submissions_form ON kobo_submissions(form_uid);
