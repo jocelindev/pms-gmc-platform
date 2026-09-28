@@ -1685,6 +1685,10 @@ def infer_kobo_field_mapping(source_type: str, field_name: str) -> str:
             "date_reporting": "date",
             "mode_saisie_donnee": "entryMode",
             "mode_saisie": "entryMode",
+            "tro": "directValue",
+            "taux_atteinte": "directValue",
+            "atteinte_objectif": "directValue",
+            "vs_target": "directValue",
             "valeur_realisee": "directValue",
             "taux_realisation": "directValue",
             "taux_realise": "directValue",
@@ -4469,7 +4473,7 @@ def save_platform_calculation_data(payload: dict, session: dict | None = None) -
     if "element" in entry_mode and not usable_elements:
         raise ValueError("Renseignez au moins un element de calcul et sa valeur.")
     if "element" not in entry_mode and not has_direct_value:
-        raise ValueError("Renseignez le taux realise ou la valeur directe.")
+        raise ValueError("Renseignez le TRO, le taux realise ou la valeur directe.")
 
     with db_connect() as conn:
         pole_row = conn.execute("SELECT id, name FROM poles WHERE id = ?", (pole_id,)).fetchone()
@@ -4520,7 +4524,7 @@ def save_platform_calculation_data(payload: dict, session: dict | None = None) -
             "nature_donnee": "donnee test" if data_nature == "Test" else "donnee reelle",
         }
         if "atteinte" in entry_mode or "taux" in entry_mode or "achievement" in entry_mode:
-            calculation_payload["taux_realisation"] = direct_value
+            calculation_payload["tro"] = direct_value
             value_for_summary = direct_value
         elif has_direct_value:
             calculation_payload["valeur_realisee"] = direct_value
@@ -4551,7 +4555,7 @@ def save_platform_calculation_data(payload: dict, session: dict | None = None) -
             (source_form_uid, submission_uid_value),
         )
         if "atteinte" in entry_mode or "taux" in entry_mode or "achievement" in entry_mode:
-            daily_elements = [{"label": "taux realisation", "value": direct_value}]
+            daily_elements = [{"label": "tro", "value": direct_value}]
         elif has_direct_value:
             daily_elements = [{"label": "valeur realisee", "value": direct_value}]
         else:
@@ -5364,7 +5368,7 @@ def target_achievement_percent(value: float | None, target_value: float | None, 
 
 def direct_achievement_percent_from_elements(elements: list[dict]) -> float | None:
     direct_terms = (
-        "taux realisation",
+        "taux atteinte",
         "taux d atteinte",
         "atteinte objectif",
         "vs target",
@@ -5373,7 +5377,7 @@ def direct_achievement_percent_from_elements(elements: list[dict]) -> float | No
         label_key = normalize_match_key(semantic_kobo_element_label(element.get("label") or ""))
         if not label_key:
             continue
-        if any(term in label_key for term in direct_terms):
+        if label_key == "tro" or any(term in label_key for term in direct_terms):
             number = parse_number(element.get("value"))
             if number is not None:
                 return float(number)
@@ -5644,6 +5648,13 @@ def realized_value_from_elements(element_values: dict[str, float], *, allow_sing
     return direct_value_from_elements(element_values, allow_singleton=allow_singleton)
 
 
+def realized_rate_value_from_elements(element_values: dict[str, float]) -> tuple[float | None, str]:
+    for label, value in element_values.items():
+        if "taux" in label and ("realise" in label or "realisation" in label):
+            return value, "Taux realise collecte direct"
+    return None, ""
+
+
 def formula_compares_realized_to_target(formula: str) -> bool:
     normalized = normalize_match_key(formula)
     target_terms = ("objectif", "cible", "target")
@@ -5776,6 +5787,11 @@ def evaluate_kpi_formula(
                 if formula_result_requires_percent_scaling(formula, expression, unit, result):
                     return result * 100, "Formule de collecte appliquee, ratio affiche en pourcentage", warnings
                 return result, "Formule de collecte appliquee", warnings
+
+        realized_rate, realized_rate_method = realized_rate_value_from_elements(element_values)
+        if realized_rate is not None:
+            warnings.append("Formule non appliquee; taux realise collecte utilise comme realise du jour.")
+            return realized_rate, f"{realized_rate_method}; formule a completer si calcul detaille requis", warnings
 
         structural_result = structural_formula_result(formula, raw_numbers, unit)
         if structural_result:
@@ -7188,6 +7204,10 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             payload,
             "directValue",
             [
+                "tro",
+                "taux_atteinte",
+                "atteinte_objectif",
+                "vs_target",
                 "valeur_realisee",
                 "taux_realisation",
                 "taux_realise",
@@ -7201,11 +7221,12 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             direct_label = "valeur realisee"
             entry_mode_key = normalize_match_key(entry_mode_raw)
             if (
-                "taux" in entry_mode_key
+                "tro" in entry_mode_key
                 or "atteinte" in entry_mode_key
-                or submission_value(payload, ["taux_realisation", "atteinte_objectif", "vs_target"]) not in (None, "")
+                or "achievement" in entry_mode_key
+                or submission_value(payload, ["tro", "taux_atteinte", "atteinte_objectif", "vs_target"]) not in (None, "")
             ):
-                direct_label = "taux realisation"
+                direct_label = "tro"
             elements.append({"label": direct_label, "value": direct_value})
 
         for index in range(1, 4):

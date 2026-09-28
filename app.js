@@ -3038,9 +3038,14 @@
       const elements = Array.isArray(row.elements) ? row.elements : [];
       const directTaux = elements.find((item) => {
         const label = normalizeLookup(item.label || "");
-        return (label.includes("taux") && label.includes("realisation")) || label.includes("atteinte objectif") || label.includes("vs target");
+        return label === "tro" || label.includes("atteinte objectif") || label.includes("vs target") || label.includes("taux atteinte") || label.includes("taux d atteinte");
       });
       if (directTaux) return { mode: "taux_realise", directValue: directTaux.value || "", elements };
+      const realizedRate = elements.find((item) => {
+        const label = normalizeLookup(item.label || "");
+        return label.includes("taux") && (label.includes("realise") || label.includes("realisation"));
+      });
+      if (realizedRate) return { mode: "valeur_realisee", directValue: realizedRate.value || "", elements };
       const directValue = elements.find((item) => {
         const label = normalizeLookup(item.label || "");
         return label.includes("valeur") && label.includes("realisee");
