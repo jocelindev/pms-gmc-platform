@@ -485,6 +485,22 @@ IMPORT_REFERENCE_ALIASES = {
 }
 IMPORT_OBJECTIVE_ALIASES = {
     "branch": IMPORT_REFERENCE_ALIASES["branch"],
+    "clientAccount": (
+        "donneur_ordre",
+        "donneur d'ordre",
+        "donneur ordre",
+        "do",
+        "d.o",
+        "client",
+        "compte client",
+        "contrat",
+        "projet",
+        "programme",
+        "operateur",
+        "operateur client",
+        "operator",
+        "customer",
+    ),
     "pole": IMPORT_REFERENCE_ALIASES["pole"],
     "catalogId": ("id_kpi", "id kpi", "id kpi officiel", "kpi_id", "kpi", "code kpi", "catalog id"),
     "kpiName": IMPORT_REFERENCE_ALIASES["kpiName"],
@@ -508,6 +524,7 @@ IMPORT_OBJECTIVE_ALIASES = {
     "attention": ("commentaires", "commentaire", "points_d_attention", "points attention"),
     "dataNature": IMPORT_REFERENCE_ALIASES["dataNature"],
 }
+CLIENT_ACCOUNT_ALIASES = IMPORT_OBJECTIVE_ALIASES["clientAccount"]
 LOWER_IS_BETTER_TERMS = {
     "abandon",
     "absence",
@@ -710,6 +727,7 @@ def create_kpi_objectives_table(conn: sqlite3.Connection) -> None:
           kpi_id INTEGER NOT NULL,
           pole_id TEXT NOT NULL,
           branch TEXT NOT NULL DEFAULT 'Groupe',
+          client_account TEXT NOT NULL DEFAULT '',
           period TEXT NOT NULL,
           target TEXT NOT NULL,
           unit TEXT,
@@ -724,7 +742,7 @@ def create_kpi_objectives_table(conn: sqlite3.Connection) -> None:
           created_by_user_id INTEGER,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE (kpi_id, pole_id, branch, period),
+          UNIQUE (kpi_id, pole_id, branch, period, client_account),
           FOREIGN KEY (kpi_id) REFERENCES kpis(id) ON DELETE CASCADE,
           FOREIGN KEY (pole_id) REFERENCES poles(id) ON DELETE CASCADE,
           FOREIGN KEY (created_by_user_id) REFERENCES users(id)
@@ -806,7 +824,7 @@ def ensure_kpi_objectives_schema(conn: sqlite3.Connection) -> bool:
     if not columns:
         create_kpi_objectives_table(conn)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_objectives_period ON kpi_objectives(period)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_objectives_scope ON kpi_objectives(pole_id, branch, period)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_objectives_scope_client ON kpi_objectives(pole_id, branch, client_account, period)")
         return True
 
     changed = False
@@ -814,30 +832,37 @@ def ensure_kpi_objectives_schema(conn: sqlite3.Connection) -> bool:
         conn.execute("ALTER TABLE kpi_objectives ADD COLUMN branch TEXT NOT NULL DEFAULT 'Groupe'")
         columns.add("branch")
         changed = True
+    if "client_account" not in columns:
+        conn.execute("ALTER TABLE kpi_objectives ADD COLUMN client_account TEXT NOT NULL DEFAULT ''")
+        columns.add("client_account")
+        changed = True
 
     unique_columns = unique_index_columns(conn, "kpi_objectives")
-    scoped_unique_exists = ["kpi_id", "pole_id", "branch", "period"] in unique_columns
+    scoped_unique_exists = ["kpi_id", "pole_id", "branch", "period", "client_account"] in unique_columns
     if not scoped_unique_exists:
         if database_backend() == "postgresql":
             conn.execute("ALTER TABLE kpi_objectives DROP CONSTRAINT IF EXISTS kpi_objectives_kpi_id_pole_id_period_key")
+            conn.execute("ALTER TABLE kpi_objectives DROP CONSTRAINT IF EXISTS kpi_objectives_kpi_id_pole_id_branch_period_key")
             conn.execute(
                 """
-                DO $$
-                BEGIN
-                  IF NOT EXISTS (
-                    SELECT 1
-                    FROM pg_constraint
-                    WHERE conname = 'kpi_objectives_scope_unique'
-                  ) THEN
-                    ALTER TABLE kpi_objectives
-                    ADD CONSTRAINT kpi_objectives_scope_unique UNIQUE (kpi_id, pole_id, branch, period);
-                  END IF;
-                END
-                $$;
+                ALTER TABLE kpi_objectives DROP CONSTRAINT IF EXISTS kpi_objectives_scope_unique
+                """
+            )
+            conn.execute(
+                """
+                ALTER TABLE kpi_objectives DROP CONSTRAINT IF EXISTS kpi_objectives_scope_client_unique
+                """
+            )
+            conn.execute(
+                """
+                ALTER TABLE kpi_objectives
+                ADD CONSTRAINT kpi_objectives_scope_client_unique
+                UNIQUE (kpi_id, pole_id, branch, period, client_account)
                 """
             )
         else:
             branch_select = "COALESCE(NULLIF(branch, ''), 'Groupe')" if "branch" in columns else "'Groupe'"
+            client_select = "COALESCE(client_account, '')" if "client_account" in columns else "''"
             conn.execute("ALTER TABLE kpi_objectives RENAME TO kpi_objectives_old")
             create_kpi_objectives_table(conn)
             conn.execute(
@@ -847,6 +872,7 @@ def ensure_kpi_objectives_schema(conn: sqlite3.Connection) -> bool:
                   kpi_id,
                   pole_id,
                   branch,
+                  client_account,
                   period,
                   target,
                   unit,
@@ -867,6 +893,7 @@ def ensure_kpi_objectives_schema(conn: sqlite3.Connection) -> bool:
                   kpi_id,
                   pole_id,
                   {branch_select},
+                  {client_select},
                   period,
                   target,
                   unit,
@@ -888,7 +915,7 @@ def ensure_kpi_objectives_schema(conn: sqlite3.Connection) -> bool:
         changed = True
 
     conn.execute("CREATE INDEX IF NOT EXISTS idx_objectives_period ON kpi_objectives(period)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_objectives_scope ON kpi_objectives(pole_id, branch, period)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_objectives_scope_client ON kpi_objectives(pole_id, branch, client_account, period)")
     return changed
 
 
@@ -913,6 +940,7 @@ def ensure_kpi_daily_data_schema(conn: sqlite3.Connection) -> bool:
           data_date TEXT NOT NULL,
           pole_id TEXT NOT NULL,
           branch TEXT NOT NULL DEFAULT '',
+          client_account TEXT NOT NULL DEFAULT '',
           kpi_key TEXT NOT NULL,
           kpi_raw TEXT,
           element_key TEXT NOT NULL,
@@ -933,12 +961,14 @@ def ensure_kpi_daily_data_schema(conn: sqlite3.Connection) -> bool:
         )
         """
     )
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_date ON kpi_daily_data(data_date)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_scope ON kpi_daily_data(pole_id, kpi_key, data_date)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_source ON kpi_daily_data(source_form_uid, source_submission_uid)")
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(kpi_daily_data)").fetchall()}
     if "data_nature" not in columns:
         conn.execute("ALTER TABLE kpi_daily_data ADD COLUMN data_nature TEXT NOT NULL DEFAULT 'Reel'")
+    if "client_account" not in columns:
+        conn.execute("ALTER TABLE kpi_daily_data ADD COLUMN client_account TEXT NOT NULL DEFAULT ''")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_date ON kpi_daily_data(data_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_scope_client ON kpi_daily_data(pole_id, branch, client_account, kpi_key, data_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_source ON kpi_daily_data(source_form_uid, source_submission_uid)")
     return True
 
 
@@ -1283,6 +1313,7 @@ def objective_to_front(row: sqlite3.Row) -> dict:
         "poleId": row["pole_id"],
         "poleName": row["pole_name"],
         "branch": row["branch"] if "branch" in row.keys() else "Groupe",
+        "clientAccount": row["client_account"] if "client_account" in row.keys() else "",
         "kpiName": row["kpi_name"],
         "target": format_objective_target(row["target"], row["unit"] or ""),
         "unit": row["unit"] or "",
@@ -1318,6 +1349,7 @@ def objective_record_to_front(record: dict, pole_names: dict[str, str] | None = 
         "poleId": record.get("poleId") or "",
         "poleName": pole_names.get(record.get("poleId"), record.get("poleId") or ""),
         "branch": record.get("branch") or "Groupe",
+        "clientAccount": record.get("clientAccount") or "",
         "kpiName": record.get("kpiName") or record.get("kpiRaw") or record.get("kpiKey") or "",
         "target": record.get("target") or "Objectif a renseigner",
         "targetNumeric": record.get("targetNumeric"),
@@ -1357,6 +1389,7 @@ def database_objective_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
           obj.id,
           obj.pole_id,
           obj.branch,
+          obj.client_account,
           p.name AS pole_name,
           k.name AS kpi_name,
           k.code,
@@ -1393,12 +1426,15 @@ def database_monthly_objective_records(conn: sqlite3.Connection) -> list[dict]:
         if not kpi_key:
             continue
         branch = text_or_empty(row["branch"] or "Groupe") or "Groupe"
+        client_account = normalize_client_account(row["client_account"] if "client_account" in row.keys() else "")
         unit_text = text_or_empty(row["unit"])
         records.append(
             {
                 "id": f"OBJ-DB-{row['id']}",
                 "branch": branch,
                 "branchKey": branch_lookup_key(branch),
+                "clientAccount": client_account,
+                "clientKey": client_account_key(client_account),
                 "poleId": row["pole_id"],
                 "kpiKey": kpi_key,
                 "kpiRaw": kpi_raw,
@@ -1423,24 +1459,25 @@ def database_monthly_objective_records(conn: sqlite3.Connection) -> list[dict]:
     return records
 
 
-def objective_record_merge_key(record: dict) -> tuple[str, str, str, str]:
+def objective_record_merge_key(record: dict) -> tuple[str, str, str, str, str]:
     return (
         record.get("branchKey") or branch_lookup_key(record.get("branch")),
         text_or_empty(record.get("poleId")),
         normalize_match_key(record.get("kpiRaw") or record.get("kpiKey") or record.get("kpiName")),
         text_or_empty(record.get("periodMonth") or record.get("period")),
+        client_account_key(record.get("clientAccount")),
     )
 
 
 def merge_monthly_objective_records(primary_records: list[dict], fallback_records: list[dict]) -> list[dict]:
-    merged: dict[tuple[str, str, str, str], dict] = {}
+    merged: dict[tuple[str, str, str, str, str], dict] = {}
     for record in fallback_records:
         key = objective_record_merge_key(record)
-        if all(key):
+        if all(key[:4]):
             merged[key] = record
     for record in primary_records:
         key = objective_record_merge_key(record)
-        if all(key):
+        if all(key[:4]):
             merged[key] = record
     return list(merged.values())
 
@@ -1524,8 +1561,9 @@ def list_objectives(conn: sqlite3.Connection) -> list[dict]:
                 text_or_empty(item.get("poleId")),
                 normalize_match_key(item.get("catalogId") or item.get("kpiName")),
                 text_or_empty(item.get("period")),
+                client_account_key(item.get("clientAccount")),
             )
-            if all(key):
+            if all(key[:4]):
                 merged[key] = item
         for item in database_objectives:
             key = (
@@ -1533,8 +1571,9 @@ def list_objectives(conn: sqlite3.Connection) -> list[dict]:
                 text_or_empty(item.get("poleId")),
                 normalize_match_key(item.get("catalogId") or item.get("kpiName")),
                 text_or_empty(item.get("period")),
+                client_account_key(item.get("clientAccount")),
             )
-            if all(key):
+            if all(key[:4]):
                 merged[key] = item
         return sorted(merged.values(), key=lambda item: (item.get("period", ""), item.get("poleName", ""), item.get("kpiName", "")), reverse=True)
 
@@ -3323,6 +3362,41 @@ def platform_submission_uid(kind: str, *parts) -> str:
     return f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}{kind}:{normalized}"
 
 
+def normalize_client_account(value) -> str:
+    return re.sub(r"\s+", " ", text_or_empty(value)).strip()
+
+
+def client_account_key(value) -> str:
+    return normalize_match_key(normalize_client_account(value))
+
+
+def client_account_from_payload(payload: dict | None) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    keys = (
+        "clientAccount",
+        "client_account",
+        "donneurOrdre",
+        "donneur_ordre",
+        "donneur_d_ordre",
+        "donneur ordre",
+        "donneur d'ordre",
+        "do",
+        "client",
+        "customer",
+        "contrat",
+        "projet",
+        "programme",
+        "operateur",
+        "operator",
+    )
+    for key in keys:
+        value = payload.get(key)
+        if value not in (None, ""):
+            return normalize_client_account(value)
+    return ""
+
+
 def insert_platform_kobo_submission(
     conn: sqlite3.Connection,
     *,
@@ -3492,10 +3566,19 @@ def save_platform_reference_kpi(payload: dict, session: dict | None = None) -> d
 def save_platform_monthly_objective(payload: dict, session: dict | None = None) -> dict:
     pole_id = text_or_empty(payload.get("poleId") or payload.get("pole"))
     branch = text_or_empty(payload.get("branch") or payload.get("countryName") or "Groupe") or "Groupe"
+    client_account = normalize_client_account(
+        payload.get("clientAccount") or payload.get("client_account") or payload.get("donneurOrdre") or payload.get("donneur_ordre")
+    )
     kpi_code = canonical_kpi_code(payload.get("catalogId") or payload.get("kpiId") or payload.get("idKpi"))
     period_raw = text_or_empty(payload.get("period") or payload.get("month"))
     target = text_or_empty(payload.get("target") or payload.get("objective"))
     unit = text_or_empty(payload.get("unit"))
+    objective_db_id = optional_int(payload.get("objectiveDbId") or payload.get("dbId"))
+    row_id = text_or_empty(payload.get("rowId") or payload.get("collectionRowId"))
+    if row_id:
+        row_type, row_key = collection_row_kind_and_key(row_id, "objective")
+        if row_type == "objective":
+            objective_db_id = collection_numeric_key(row_key)
     if not pole_id or not kpi_code or not period_raw or not target:
         raise ValueError("Pays/filiale, pole, KPI, mois et objectif sont obligatoires.")
     if not unit:
@@ -3508,8 +3591,43 @@ def save_platform_monthly_objective(payload: dict, session: dict | None = None) 
         pole_name = text_or_empty(payload.get("poleName") or (pole_row["name"] if pole_row else pole_id)) or pole_id
         data_nature = normalize_collection_data_nature(payload.get("dataNature"))
         validation_status = text_or_empty(payload.get("validation") or payload.get("validationStatus") or "A valider")
+        if objective_db_id:
+            old_objective = conn.execute(
+                """
+                SELECT
+                  obj.id,
+                  obj.pole_id,
+                  obj.branch,
+                  obj.client_account,
+                  obj.period,
+                  obj.source_form_uid,
+                  k.code,
+                  k.name
+                FROM kpi_objectives obj
+                JOIN kpis k ON k.id = obj.kpi_id
+                WHERE obj.id = ?
+                """,
+                (objective_db_id,),
+            ).fetchone()
+            if old_objective:
+                old_client = normalize_client_account(old_objective["client_account"] if "client_account" in old_objective.keys() else "")
+                require_collection_row_scope(conn, session, old_objective["pole_id"], old_objective["branch"])
+                old_uid = platform_submission_uid(
+                    "objectif",
+                    old_objective["branch"],
+                    old_client,
+                    old_objective["pole_id"],
+                    old_objective["code"] or old_objective["name"],
+                    old_objective["period"],
+                )
+                conn.execute("DELETE FROM kpi_objectives WHERE id = ?", (old_objective["id"],))
+                conn.execute(
+                    "DELETE FROM kobo_submissions WHERE submission_uid = ? AND COALESCE(submission_uid, '') LIKE ?",
+                    (old_uid, f"{PLATFORM_COLLECTION_SUBMISSION_PREFIX}%"),
+                )
         objective_payload = {
             "pays_filiale": branch,
+            "donneur_ordre": client_account,
             "pole": pole_id,
             "id_kpi": kpi_code,
             "periode_objectif": period,
@@ -3526,7 +3644,7 @@ def save_platform_monthly_objective(payload: dict, session: dict | None = None) 
         source_form_uid = insert_platform_kobo_submission(
             conn,
             role="objectifsMensuels",
-            submission_uid_value=platform_submission_uid("objectif", branch, pole_id, kpi_code, period),
+            submission_uid_value=platform_submission_uid("objectif", branch, client_account, pole_id, kpi_code, period),
             pole_id=pole_id,
             pole_name=pole_name,
             branch=branch,
@@ -3573,6 +3691,7 @@ def save_platform_monthly_objective(payload: dict, session: dict | None = None) 
               kpi_id,
               pole_id,
               branch,
+              client_account,
               period,
               target,
               unit,
@@ -3587,8 +3706,8 @@ def save_platform_monthly_objective(payload: dict, session: dict | None = None) 
               created_by_user_id,
               updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(kpi_id, pole_id, branch, period) DO UPDATE SET
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(kpi_id, pole_id, branch, period, client_account) DO UPDATE SET
               target = excluded.target,
               unit = excluded.unit,
               frequency = excluded.frequency,
@@ -3606,6 +3725,7 @@ def save_platform_monthly_objective(payload: dict, session: dict | None = None) 
                 kpi_id,
                 pole_id,
                 branch,
+                client_account,
                 period,
                 target,
                 objective_payload["unite"],
@@ -3620,9 +3740,9 @@ def save_platform_monthly_objective(payload: dict, session: dict | None = None) 
                 created_by,
             ),
         )
-        audit(conn, "Saisie plateforme objectif mensuel", "kobo_submission", f"{branch}:{pole_id}:{kpi_code}:{period}", objective_payload)
+        audit(conn, "Saisie plateforme objectif mensuel", "kobo_submission", f"{branch}:{client_account}:{pole_id}:{kpi_code}:{period}", objective_payload)
         conn.commit()
-        return {"formUid": source_form_uid, "submissionUid": platform_submission_uid("objectif", branch, pole_id, kpi_code, period)}
+        return {"formUid": source_form_uid, "submissionUid": platform_submission_uid("objectif", branch, client_account, pole_id, kpi_code, period)}
 
 
 def import_header_key(value) -> str:
@@ -4099,6 +4219,7 @@ def map_reference_import_payload(conn: sqlite3.Connection, row: dict, file_name:
 
 def map_objective_import_payload(conn: sqlite3.Connection, row: dict, file_name: str) -> dict:
     branch = import_row_value(row, IMPORT_OBJECTIVE_ALIASES["branch"]) or "Groupe"
+    client_account = import_row_value(row, IMPORT_OBJECTIVE_ALIASES["clientAccount"])
     pole_raw = import_row_value(row, IMPORT_OBJECTIVE_ALIASES["pole"])
     pole_id = resolve_catalog_pole_id(conn, pole_raw)
     catalog_id = canonical_kpi_code(import_row_value(row, IMPORT_OBJECTIVE_ALIASES["catalogId"]))
@@ -4115,6 +4236,7 @@ def map_objective_import_payload(conn: sqlite3.Connection, row: dict, file_name:
         raise ValueError("Objectif mensuel obligatoire.")
     return {
         "branch": branch,
+        "clientAccount": client_account,
         "poleId": pole_id,
         "catalogId": catalog_id,
         "kpiName": import_row_value(row, IMPORT_OBJECTIVE_ALIASES["kpiName"]),
@@ -4199,6 +4321,7 @@ def save_imported_objective_payload(conn: sqlite3.Connection, payload: dict, ses
           kpi_id,
           pole_id,
           branch,
+          client_account,
           period,
           target,
           unit,
@@ -4213,8 +4336,8 @@ def save_imported_objective_payload(conn: sqlite3.Connection, payload: dict, ses
           created_by_user_id,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(kpi_id, pole_id, branch, period) DO UPDATE SET
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(kpi_id, pole_id, branch, period, client_account) DO UPDATE SET
           target = excluded.target,
           unit = excluded.unit,
           frequency = excluded.frequency,
@@ -4232,6 +4355,7 @@ def save_imported_objective_payload(conn: sqlite3.Connection, payload: dict, ses
             kpi_id,
             pole_id,
             text_or_empty(payload.get("branch") or "Groupe") or "Groupe",
+            normalize_client_account(payload.get("clientAccount")),
             period,
             text_or_empty(payload.get("target")),
             text_or_empty(payload.get("unit") or "Autre"),
@@ -4305,7 +4429,16 @@ def import_platform_collection_file(payload: dict, session: dict) -> dict:
 def save_platform_calculation_data(payload: dict, session: dict | None = None) -> dict:
     pole_id = text_or_empty(payload.get("poleId") or payload.get("pole"))
     branch = text_or_empty(payload.get("branch") or payload.get("countryName") or "Groupe") or "Groupe"
+    client_account = normalize_client_account(
+        payload.get("clientAccount") or payload.get("client_account") or payload.get("donneurOrdre") or payload.get("donneur_ordre")
+    )
     kpi_code = canonical_kpi_code(payload.get("catalogId") or payload.get("kpiId") or payload.get("idKpi"))
+    calculation_db_id = optional_int(payload.get("calculationDbId") or payload.get("dbId"))
+    row_id = text_or_empty(payload.get("rowId") or payload.get("collectionRowId"))
+    if row_id:
+        row_type, row_key = collection_row_kind_and_key(row_id, "calculation")
+        if row_type == "calculation":
+            calculation_db_id = collection_numeric_key(row_key)
     date_raw = text_or_empty(payload.get("date") or payload.get("dataDate") or payload.get("period"))
     data_date = parse_daily_period_date(date_raw)
     if not pole_id or not kpi_code or not data_date:
@@ -4343,8 +4476,40 @@ def save_platform_calculation_data(payload: dict, session: dict | None = None) -
         pole_name = text_or_empty(payload.get("poleName") or (pole_row["name"] if pole_row else pole_id)) or pole_id
         data_nature = normalize_collection_data_nature(payload.get("dataNature"))
         validation_status = text_or_empty(payload.get("validation") or payload.get("validationStatus") or "A valider")
+        if calculation_db_id:
+            old_calculation = conn.execute(
+                """
+                SELECT
+                  id,
+                  pole_id,
+                  branch,
+                  source_form_uid,
+                  source_submission_uid
+                FROM kpi_daily_data
+                WHERE id = ?
+                """,
+                (calculation_db_id,),
+            ).fetchone()
+            if old_calculation:
+                require_collection_row_scope(conn, session, old_calculation["pole_id"], old_calculation["branch"])
+                if old_calculation["source_form_uid"] and old_calculation["source_submission_uid"]:
+                    conn.execute(
+                        """
+                        DELETE FROM kpi_daily_data
+                        WHERE source_form_uid = ? AND source_submission_uid = ?
+                        """,
+                        (old_calculation["source_form_uid"], old_calculation["source_submission_uid"]),
+                    )
+                    if text_or_empty(old_calculation["source_submission_uid"]).startswith(PLATFORM_COLLECTION_SUBMISSION_PREFIX):
+                        conn.execute(
+                            "DELETE FROM kobo_submissions WHERE form_uid = ? AND submission_uid = ?",
+                            (old_calculation["source_form_uid"], old_calculation["source_submission_uid"]),
+                        )
+                else:
+                    conn.execute("DELETE FROM kpi_daily_data WHERE id = ?", (old_calculation["id"],))
         calculation_payload = {
             "pays_filiale": branch,
+            "donneur_ordre": client_account,
             "pole_id": pole_id,
             "id_kpi": kpi_code,
             "periode_reporting": data_date.isoformat(),
@@ -4355,7 +4520,7 @@ def save_platform_calculation_data(payload: dict, session: dict | None = None) -
             "nature_donnee": "donnee test" if data_nature == "Test" else "donnee reelle",
         }
         if "atteinte" in entry_mode or "taux" in entry_mode or "achievement" in entry_mode:
-            calculation_payload["taux_realise"] = direct_value
+            calculation_payload["taux_realisation"] = direct_value
             value_for_summary = direct_value
         elif has_direct_value:
             calculation_payload["valeur_realisee"] = direct_value
@@ -4366,7 +4531,7 @@ def save_platform_calculation_data(payload: dict, session: dict | None = None) -
                 calculation_payload[f"element_id_{index}"] = item["label"]
                 calculation_payload[f"valeur_element_{index}"] = item["value"]
 
-        submission_uid_value = platform_submission_uid("donnees", branch, pole_id, kpi_code, data_date.isoformat())
+        submission_uid_value = platform_submission_uid("donnees", branch, client_account, pole_id, kpi_code, data_date.isoformat())
         source_form_uid = insert_platform_kobo_submission(
             conn,
             role="donneesCalcul",
@@ -4386,7 +4551,7 @@ def save_platform_calculation_data(payload: dict, session: dict | None = None) -
             (source_form_uid, submission_uid_value),
         )
         if "atteinte" in entry_mode or "taux" in entry_mode or "achievement" in entry_mode:
-            daily_elements = [{"label": "taux realise", "value": direct_value}]
+            daily_elements = [{"label": "taux realisation", "value": direct_value}]
         elif has_direct_value:
             daily_elements = [{"label": "valeur realisee", "value": direct_value}]
         else:
@@ -4401,6 +4566,7 @@ def save_platform_calculation_data(payload: dict, session: dict | None = None) -
                 data_date=data_date,
                 pole_id=pole_id,
                 branch=branch,
+                client_account=client_account,
                 kpi_key=normalize_match_key(kpi_code),
                 kpi_raw=kpi_code,
                 element_label=element["label"],
@@ -4413,7 +4579,7 @@ def save_platform_calculation_data(payload: dict, session: dict | None = None) -
                 data_nature=data_nature,
                 raw_payload_json=raw_payload_json,
             )
-        audit(conn, "Saisie plateforme donnees de calcul", "kobo_submission", f"{branch}:{pole_id}:{kpi_code}:{data_date.isoformat()}", calculation_payload)
+        audit(conn, "Saisie plateforme donnees de calcul", "kobo_submission", f"{branch}:{client_account}:{pole_id}:{kpi_code}:{data_date.isoformat()}", calculation_payload)
         conn.commit()
         return {"formUid": source_form_uid, "submissionUid": submission_uid_value}
 
@@ -5199,7 +5365,6 @@ def target_achievement_percent(value: float | None, target_value: float | None, 
 def direct_achievement_percent_from_elements(elements: list[dict]) -> float | None:
     direct_terms = (
         "taux realisation",
-        "taux realise",
         "taux d atteinte",
         "atteinte objectif",
         "vs target",
@@ -5668,6 +5833,7 @@ def upsert_kpi_daily_data(
     collector: str,
     data_nature: str,
     raw_payload_json: str,
+    client_account: str = "",
 ) -> None:
     element_label = semantic_kobo_element_label(element_label or "valeur")
     element_key = normalize_submission_key(element_label or "valeur")
@@ -5679,6 +5845,7 @@ def upsert_kpi_daily_data(
           data_date,
           pole_id,
           branch,
+          client_account,
           kpi_key,
           kpi_raw,
           element_key,
@@ -5694,9 +5861,10 @@ def upsert_kpi_daily_data(
           raw_payload_json,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(data_date, pole_id, branch, kpi_key, element_key, source_form_uid, source_submission_uid)
         DO UPDATE SET
+          client_account = excluded.client_account,
           kpi_raw = excluded.kpi_raw,
           element_label = excluded.element_label,
           raw_value = excluded.raw_value,
@@ -5712,6 +5880,7 @@ def upsert_kpi_daily_data(
             data_date.isoformat(),
             pole_id,
             text_or_empty(branch),
+            normalize_client_account(client_account),
             kpi_key,
             text_or_empty(kpi_raw),
             element_key,
@@ -5747,6 +5916,7 @@ def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source
     for row in rows:
         payload = parse_raw_payload(row)
         branch_raw = mapped_submission_value(objective_source, payload, "branch", ["pays_filiale", "filiale", "pays", "branch"])
+        client_raw = mapped_submission_value(objective_source, payload, "clientAccount", list(CLIENT_ACCOUNT_ALIASES))
         pole_raw = mapped_submission_value(objective_source, payload, "pole", ["pole_id", "pole", "groupe_de_rattachement", "direction_pole", "direction"])
         kpi_raw = mapped_submission_value(objective_source, payload, "kpi", ["id_kpi", "kpi_id", "kpi", "kpi_name", "indicateur"])
         period_raw = mapped_submission_value(objective_source, payload, "period", ["periode_objectif", "periode_reporting", "periode", "mois", "period"])
@@ -5776,6 +5946,7 @@ def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source
 
         month_key, _year, _month = period_month
         branch = text_or_empty(branch_raw or row["branch"] or "Groupe") or "Groupe"
+        client_account = normalize_client_account(client_raw or client_account_from_payload(payload))
         unit_text = text_or_empty(unit_raw)
         display_target = format_objective_target(target_text, unit_text)
         records.append(
@@ -5783,6 +5954,8 @@ def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source
                 "id": f"OBJ-KOBO-{row['id']}",
                 "branch": branch,
                 "branchKey": branch_lookup_key(branch),
+                "clientAccount": client_account,
+                "clientKey": client_account_key(client_account),
                 "poleId": pole_id,
                 "kpiKey": kpi_key,
                 "kpiRaw": text_or_empty(kpi_raw or row["kpi_name"]),
@@ -5812,14 +5985,17 @@ def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source
     return records, unique_warnings[:5]
 
 
-def build_objective_lookup(records: list[dict]) -> tuple[dict[tuple[str, str, str, str], dict], dict[tuple[str, str, str], dict | None], dict[tuple[str, str], dict | None]]:
-    exact: dict[tuple[str, str, str, str], dict] = {}
+def build_objective_lookup(records: list[dict]) -> tuple[dict[tuple[str, str, str, str, str], dict], dict[tuple[str, str, str], dict | None], dict[tuple[str, str], dict | None]]:
+    exact: dict[tuple[str, str, str, str, str], dict] = {}
     by_pole_kpi_month: dict[tuple[str, str, str], dict | None] = {}
     by_kpi_month: dict[tuple[str, str], dict | None] = {}
     for record in records:
         keys = [record.get("kpiKey"), normalize_match_key(record.get("kpiRaw")), normalize_match_key(record.get("kpiName"))]
+        record_client_key = client_account_key(record.get("clientAccount"))
         for key in [item for item in keys if item]:
-            exact[(record["branchKey"], record["poleId"], key, record["periodMonth"])] = record
+            exact[(record["branchKey"], record["poleId"], key, record["periodMonth"], record_client_key)] = record
+            if record_client_key:
+                continue
             pole_key = (record["poleId"], key, record["periodMonth"])
             if pole_key not in by_pole_kpi_month:
                 by_pole_kpi_month[pole_key] = record
@@ -5852,11 +6028,12 @@ def list_kpi_daily_dates(conn: sqlite3.Connection) -> list[dict]:
           data_date,
           pole_id,
           branch,
+          client_account,
           kpi_key,
           COALESCE(NULLIF(data_nature, ''), 'Reel') AS data_nature,
           COUNT(*) AS rows_count
         FROM kpi_daily_data
-        GROUP BY data_date, pole_id, branch, kpi_key, COALESCE(NULLIF(data_nature, ''), 'Reel')
+        GROUP BY data_date, pole_id, branch, client_account, kpi_key, COALESCE(NULLIF(data_nature, ''), 'Reel')
         ORDER BY data_date DESC, pole_id, kpi_key
         LIMIT 1000
         """
@@ -5866,6 +6043,7 @@ def list_kpi_daily_dates(conn: sqlite3.Connection) -> list[dict]:
             "date": row["data_date"],
             "poleId": row["pole_id"],
             "branch": row["branch"] or "Groupe",
+            "clientAccount": normalize_client_account(row["client_account"] if "client_account" in row.keys() else ""),
             "kpiKey": row["kpi_key"],
             "dataNature": row["data_nature"] or "Reel",
             "rowsCount": row["rows_count"],
@@ -5982,6 +6160,7 @@ def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
           obj.id,
           obj.pole_id,
           obj.branch,
+          obj.client_account,
           obj.period,
           obj.target,
           obj.unit,
@@ -6014,6 +6193,7 @@ def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
                 "collectionType": "objective",
                 "typeLabel": "Objectif mensuel",
                 "branch": text_or_empty(row["branch"] or "Groupe") or "Groupe",
+                "clientAccount": normalize_client_account(row["client_account"] if "client_account" in row.keys() else ""),
                 "poleId": row["pole_id"],
                 "poleName": text_or_empty(row["pole_name"] or pole_names.get(row["pole_id"], row["pole_id"])),
                 "kpiId": text_or_empty(row["code"] or row["kpi_name"]),
@@ -6054,6 +6234,7 @@ def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
           data_date,
           pole_id,
           branch,
+          client_account,
           kpi_key,
           kpi_raw,
           element_key,
@@ -6071,7 +6252,7 @@ def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
         LIMIT 3000
         """
     ).fetchall()
-    groups: dict[tuple[str, str, str, str, str, str], dict] = {}
+    groups: dict[tuple[str, str, str, str, str, str, str], dict] = {}
     for row in daily_rows:
         source_form_uid = text_or_empty(row["source_form_uid"])
         source_submission_uid = text_or_empty(row["source_submission_uid"])
@@ -6081,6 +6262,7 @@ def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
             text_or_empty(row["data_date"]),
             text_or_empty(row["pole_id"]),
             text_or_empty(row["branch"] or "Groupe") or "Groupe",
+            client_account_key(row["client_account"] if "client_account" in row.keys() else ""),
             text_or_empty(row["kpi_key"]),
         )
         reference = kpi_lookup.get((row["pole_id"], row["kpi_key"])) or {}
@@ -6092,6 +6274,7 @@ def list_platform_collection_rows(conn: sqlite3.Connection) -> list[dict]:
                 "collectionType": "calculation",
                 "typeLabel": "Donnees realisees",
                 "branch": text_or_empty(row["branch"] or "Groupe") or "Groupe",
+                "clientAccount": normalize_client_account(row["client_account"] if "client_account" in row.keys() else ""),
                 "poleId": row["pole_id"],
                 "poleName": text_or_empty(pole_names.get(row["pole_id"], row["pole_id"])),
                 "kpiId": text_or_empty(row["kpi_raw"] or reference.get("kpiId") or row["kpi_key"]),
@@ -6205,6 +6388,12 @@ def list_platform_collection_history(conn: sqlite3.Connection, limit: int = 80) 
             or details.get("rowPoleId")
             or details.get("groupe_de_rattachement")
         )
+        client_account = normalize_client_account(
+            details.get("donneur_ordre")
+            or details.get("clientAccount")
+            or details.get("client_account")
+            or details.get("rowClientAccount")
+        )
         kpi_id = text_or_empty(
             details.get("id_kpi")
             or details.get("id_kpi_final")
@@ -6222,6 +6411,7 @@ def list_platform_collection_history(conn: sqlite3.Connection, limit: int = 80) 
         )
         value = text_or_empty(
             details.get("objectif_mensuel")
+            or details.get("taux_realisation")
             or details.get("taux_realise")
             or details.get("valeur_realisee")
             or details.get("valeur_cible")
@@ -6235,6 +6425,7 @@ def list_platform_collection_history(conn: sqlite3.Connection, limit: int = 80) 
                 "action": "Suppression" if is_delete else "Enregistrement",
                 "actionLabel": action,
                 "branch": branch,
+                "clientAccount": client_account,
                 "poleId": pole_id,
                 "kpiId": kpi_id,
                 "period": period,
@@ -6332,6 +6523,7 @@ def delete_platform_collection_row(payload: dict, session: dict) -> dict:
                   obj.id,
                   obj.pole_id,
                   obj.branch,
+                  obj.client_account,
                   obj.period,
                   obj.source_form_uid,
                   k.code,
@@ -6345,7 +6537,8 @@ def delete_platform_collection_row(payload: dict, session: dict) -> dict:
             if not row:
                 raise ValueError("Objectif introuvable.")
             require_collection_row_scope(conn, session, row["pole_id"], row["branch"])
-            uid = platform_submission_uid("objectif", row["branch"], row["pole_id"], row["code"] or row["name"], row["period"])
+            client_account = normalize_client_account(row["client_account"] if "client_account" in row.keys() else "")
+            uid = platform_submission_uid("objectif", row["branch"], client_account, row["pole_id"], row["code"] or row["name"], row["period"])
             conn.execute("DELETE FROM kpi_objectives WHERE id = ?", (row["id"],))
             conn.execute(
                 "DELETE FROM kobo_submissions WHERE submission_uid = ? AND COALESCE(submission_uid, '') LIKE ?",
@@ -6949,19 +7142,24 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         element: dict,
         *,
         branch: str = "Groupe",
+        client_account: str = "",
         group_period_key: str | None = None,
         period_start: str = "",
         period_end: str = "",
         period_type: str = "period",
     ) -> None:
         branch = text_or_empty(branch or element.get("branch") or "Groupe") or "Groupe"
+        client_account = normalize_client_account(client_account or element.get("clientAccount"))
         branch_key = branch_lookup_key(branch)
-        group_key = (branch_key, pole_id, kpi_key, normalize_match_key(group_period_key or period_label))
+        client_key = client_account_key(client_account)
+        group_key = (branch_key, client_key, pole_id, kpi_key, normalize_match_key(group_period_key or period_label))
         group = groups.setdefault(
             group_key,
             {
                 "branch": branch,
                 "branchKey": branch_key,
+                "clientAccount": client_account,
+                "clientKey": client_key,
                 "poleId": pole_id,
                 "kpiKey": kpi_key,
                 "kpiRaw": kpi_raw,
@@ -7005,9 +7203,9 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             if (
                 "taux" in entry_mode_key
                 or "atteinte" in entry_mode_key
-                or submission_value(payload, ["taux_realise", "taux_realisation", "atteinte_objectif", "vs_target"]) not in (None, "")
+                or submission_value(payload, ["taux_realisation", "atteinte_objectif", "vs_target"]) not in (None, "")
             ):
-                direct_label = "taux realise"
+                direct_label = "taux realisation"
             elements.append({"label": direct_label, "value": direct_value})
 
         for index in range(1, 4):
@@ -7088,6 +7286,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             ["periode_reporting", "periode", "period", "date_collecte", "mois", "semaine"],
         )
         branch_raw = mapped_submission_value(calculation_source, payload, "branch", ["pays_filiale", "filiale", "branch", "pays"])
+        client_raw = mapped_submission_value(calculation_source, payload, "clientAccount", list(CLIENT_ACCOUNT_ALIASES))
         validation_raw = mapped_submission_value(
             calculation_source,
             payload,
@@ -7123,6 +7322,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         period_date = parse_daily_period_date(period_label)
         kpi_raw_text = text_or_empty(kpi_raw or row["kpi_name"])
         branch = text_or_empty(branch_raw or row["branch"] or "Groupe") or "Groupe"
+        client_account = normalize_client_account(client_raw or client_account_from_payload(payload))
         submission_elements = calculation_submission_elements(payload, row)
         numeric_elements = [element for element in submission_elements if parse_number(element.get("value")) is not None]
         if not numeric_elements:
@@ -7160,6 +7360,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "label": semantic_kobo_element_label(element.get("label") or "valeur"),
                 "value": element.get("value"),
                 "branch": branch,
+                "clientAccount": client_account,
                 "validation": text_or_empty(validation_raw or row["validation_status"]),
                 "dataNature": data_nature,
             }
@@ -7172,6 +7373,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     data_date=period_date,
                     pole_id=pole_id,
                     branch=branch,
+                    client_account=client_account,
                     kpi_key=kpi_key,
                     kpi_raw=kpi_raw_text,
                     element_label=element["label"],
@@ -7191,6 +7393,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 {
                     "branch": branch,
                     "branchKey": branch_lookup_key(branch),
+                    "clientAccount": client_account,
+                    "clientKey": client_account_key(client_account),
                     "poleId": pole_id,
                     "kpiKey": kpi_key,
                     "kpiRaw": kpi_raw_text,
@@ -7205,6 +7409,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 period_label,
                 element,
                 branch=branch,
+                client_account=client_account,
                 period_type="period",
             )
 
@@ -7214,6 +7419,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
           data_date,
           pole_id,
           branch,
+          client_account,
           kpi_key,
           kpi_raw,
           element_key,
@@ -7232,10 +7438,12 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         if not period_date:
             continue
         branch = text_or_empty(row["branch"] or "Groupe") or "Groupe"
+        client_account = normalize_client_account(row["client_account"] if "client_account" in row.keys() else "")
         element = {
             "label": semantic_kobo_element_label(row["element_label"] or row["element_key"] or "valeur"),
             "value": row["raw_value"] if row["raw_value"] not in (None, "") else row["numeric_value"],
             "branch": branch,
+            "clientAccount": client_account,
             "validation": text_or_empty(row["validation_status"]),
             "dataNature": text_or_empty(row["data_nature"] or "Reel") or "Reel",
         }
@@ -7243,6 +7451,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             {
                 "branch": branch,
                 "branchKey": branch_lookup_key(branch),
+                "clientAccount": client_account,
+                "clientKey": client_account_key(client_account),
                 "poleId": row["pole_id"],
                 "kpiKey": row["kpi_key"],
                 "kpiRaw": text_or_empty(row["kpi_raw"]),
@@ -7257,6 +7467,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             row["data_date"],
             element,
             branch=branch,
+            client_account=client_account,
             period_start=period_date.isoformat(),
             period_end=period_date.isoformat(),
             period_type="day",
@@ -7266,9 +7477,9 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     quality["calculationGroups"] = len(groups)
 
     dated_entries = [entry for entry in calculation_entries if entry["periodDate"]]
-    daily_elements_by_scope: dict[tuple[str, str, dt.date], list[dict]] = {}
+    daily_elements_by_scope: dict[tuple[str, str, str, dt.date], list[dict]] = {}
     for entry in dated_entries:
-        daily_elements_by_scope.setdefault((entry["branchKey"], entry["poleId"], entry["periodDate"]), []).append(
+        daily_elements_by_scope.setdefault((entry["branchKey"], entry.get("clientKey") or "", entry["poleId"], entry["periodDate"]), []).append(
             {
                 "kpiKey": entry["kpiKey"],
                 "element": entry["element"],
@@ -7297,7 +7508,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 selected_labels.add(label_key)
         return selected
 
-    def reference_has_objective_for_month(record: dict, branch_key: str, period_date: dt.date) -> bool:
+    def reference_has_objective_for_month(record: dict, branch_key: str, period_date: dt.date, scoped_client_key: str = "") -> bool:
         period_month = month_key_from_date(period_date)
         key_candidates = [
             normalize_match_key(record.get("kpiId")),
@@ -7306,8 +7517,9 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         branch_candidates = [branch_key, "groupe", record.get("branchKey")]
         for key in [candidate for candidate in key_candidates if candidate]:
             for objective_branch_key in [candidate for candidate in branch_candidates if candidate]:
-                if objective_lookup.get((objective_branch_key, record["poleId"], key, period_month)):
-                    return True
+                for objective_client_key in (scoped_client_key, ""):
+                    if objective_lookup.get((objective_branch_key, record["poleId"], key, period_month, objective_client_key)):
+                        return True
             if objective_by_pole_kpi_month.get((record["poleId"], key, period_month)):
                 return True
             if objective_by_kpi_month.get((key, period_month)):
@@ -7315,22 +7527,23 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         return False
 
     inferred_calculation_entries: list[dict] = []
-    for (branch_key, pole_id, period_date), scoped_elements in daily_elements_by_scope.items():
+    for (branch_key, scope_client_key, pole_id, period_date), scoped_elements in daily_elements_by_scope.items():
         sample_element = next((item.get("element") or {} for item in scoped_elements if item.get("element")), {})
         branch = text_or_empty(sample_element.get("branch") or "Groupe") or "Groupe"
+        client_account = normalize_client_account(sample_element.get("clientAccount"))
         for reference in references:
             if reference.get("poleId") != pole_id or not reference_matches_branch(reference, branch_key):
                 continue
             kpi_key = normalize_match_key(reference.get("kpiId"))
             if not kpi_key:
                 continue
-            group_key = (branch_key, pole_id, kpi_key, normalize_match_key(period_date.isoformat()))
+            group_key = (branch_key, scope_client_key, pole_id, kpi_key, normalize_match_key(period_date.isoformat()))
             if group_key in groups:
                 continue
             matching_elements = shared_elements_for_reference(reference, scoped_elements)
             if not matching_elements:
                 continue
-            if not reference_has_objective_for_month(reference, branch_key, period_date):
+            if not reference_has_objective_for_month(reference, branch_key, period_date, scope_client_key):
                 continue
             inferred_value, _inferred_method, _inferred_warnings = evaluate_kpi_formula(
                 reference.get("formula") or "",
@@ -7347,6 +7560,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     period_date.isoformat(),
                     element,
                     branch=branch,
+                    client_account=client_account,
                     period_start=period_date.isoformat(),
                     period_end=period_date.isoformat(),
                     period_type="day",
@@ -7355,6 +7569,8 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     {
                         "branch": branch,
                         "branchKey": branch_key,
+                        "clientAccount": client_account,
+                        "clientKey": scope_client_key,
                         "poleId": pole_id,
                         "kpiKey": kpi_key,
                         "kpiRaw": reference.get("kpiId") or reference.get("kpiName"),
@@ -7365,15 +7581,18 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
 
     dated_entries.extend(inferred_calculation_entries)
 
-    scope_dates: dict[tuple[str, str, str], set[dt.date]] = {}
+    scope_dates: dict[tuple[str, str, str, str], set[dt.date]] = {}
     for entry in dated_entries:
-        scope_dates.setdefault((entry["branchKey"], entry["poleId"], entry["kpiKey"]), set()).add(entry["periodDate"])
+        scope_dates.setdefault((entry["branchKey"], entry.get("clientKey") or "", entry["poleId"], entry["kpiKey"]), set()).add(entry["periodDate"])
 
-    for (branch_key, pole_id, kpi_key), target_dates in scope_dates.items():
+    for (branch_key, scoped_client_key, pole_id, kpi_key), target_dates in scope_dates.items():
         scoped_entries = [
             entry
             for entry in dated_entries
-            if entry["branchKey"] == branch_key and entry["poleId"] == pole_id and entry["kpiKey"] == kpi_key
+            if entry["branchKey"] == branch_key
+            and (entry.get("clientKey") or "") == scoped_client_key
+            and entry["poleId"] == pole_id
+            and entry["kpiKey"] == kpi_key
         ]
         for target_date in sorted(target_dates):
             start_date = target_date.replace(day=1)
@@ -7395,6 +7614,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     month_to_date_label(target_date),
                     entry["element"],
                     branch=sample["branch"],
+                    client_account=sample.get("clientAccount") or "",
                     group_period_key=f"month-to-date-{target_date.isoformat()}",
                     period_start=start_date.isoformat(),
                     period_end=target_date.isoformat(),
@@ -7445,7 +7665,10 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             for branch_key in (group_branch_key, "groupe", reference.get("branchKey")):
                 if not branch_key:
                     continue
-                objective = objective_lookup.get((branch_key, reference["poleId"], key, period_month))
+                objective = (
+                    objective_lookup.get((branch_key, reference["poleId"], key, period_month, client_account_key(group.get("clientAccount"))))
+                    or objective_lookup.get((branch_key, reference["poleId"], key, period_month, ""))
+                )
                 if objective:
                     return objective
             objective = objective_by_pole_kpi_month.get((reference["poleId"], key, period_month))
@@ -7532,7 +7755,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             for element in elements
             if element.get("label")
         }
-        scope_key = (group.get("branchKey") or "groupe", group["poleId"], day_date)
+        scope_key = (group.get("branchKey") or "groupe", group.get("clientKey") or "", group["poleId"], day_date)
         for shared in daily_elements_by_scope.get(scope_key, []):
             if shared.get("kpiKey") == group.get("kpiKey"):
                 continue
@@ -7546,7 +7769,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 existing_labels.add(label_key)
         return elements
 
-    daily_actual_points: dict[tuple[str, str, str], list[dict]] = {}
+    daily_actual_points: dict[tuple[str, str, str, str], list[dict]] = {}
 
     for group in groups.values():
         is_month_to_date = group.get("periodType") == "monthToDate"
@@ -7589,7 +7812,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         day_point = None
         direct_achievement = direct_achievement_percent_from_elements(evaluation_elements)
         if is_month_to_date:
-            point_key = (group.get("branchKey") or "groupe", group["poleId"], group["kpiKey"])
+            point_key = (group.get("branchKey") or "groupe", group.get("clientKey") or "", group["poleId"], group["kpiKey"])
             period_start_date = parse_daily_period_date(group.get("periodStart") or "")
             period_end_date = parse_daily_period_date(group.get("periodEnd") or "")
             points = [
@@ -7709,10 +7932,13 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         day_value_label = day_point.get("valueLabel") if day_point else value_label if group.get("periodType") == "day" else ""
         month_to_date_value = value if is_month_to_date else None
         month_to_date_value_label = value_label if is_month_to_date else ""
+        result_client_key = group.get("clientKey") or ""
         result = {
-            "id": f"{group.get('branchKey') or 'groupe'}:{group['poleId']}:{reference['kpiId']}:{normalize_submission_key(group['period'])}",
+            "id": f"{group.get('branchKey') or 'groupe'}:{result_client_key or 'global'}:{group['poleId']}:{reference['kpiId']}:{normalize_submission_key(group['period'])}",
             "branch": group.get("branch") or "Groupe",
             "branchKey": group.get("branchKey") or "groupe",
+            "clientAccount": group.get("clientAccount") or "",
+            "clientKey": result_client_key,
             "poleId": group["poleId"],
             "poleName": pole_names.get(group["poleId"], group["poleId"]),
             "kpiId": reference["kpiId"],
@@ -7762,7 +7988,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
         if group.get("periodType") == "day":
             day_date = parse_daily_period_date(group.get("periodEnd") or group.get("period") or "")
             if day_date:
-                point_key = (result["branchKey"], group["poleId"], group["kpiKey"])
+                point_key = (result["branchKey"], group.get("clientKey") or "", group["poleId"], group["kpiKey"])
                 daily_actual_points.setdefault(point_key, []).append(
                     {
                         "date": day_date,

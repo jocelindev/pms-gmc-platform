@@ -1584,9 +1584,16 @@
     return result.branch || result.country || result.filiale || result.pays || "Groupe";
   }
 
+  function kpiScopeLabel(kpi = {}, fallbackCountry = "Groupe") {
+    const country = kpi.branch || kpi.country || kpi.filiale || fallbackCountry || "Groupe";
+    const client = kpi.clientAccount || kpi.client || "";
+    return client ? `${country} / DO : ${client}` : country;
+  }
+
   function managementResultKpiKey(result = {}) {
     return [
       normalizeLookup(managementResultCountry(result)),
+      normalizeLookup(result.clientAccount || result.client || result.clientKey || ""),
       result.poleId || "",
       normalizeLookup(result.kpiId || result.kpiName || result.name),
     ].join(":");
@@ -1694,8 +1701,11 @@
   function managementResultToKpi(result = {}, trendHistory = []) {
     return {
       id: result.kpiId,
+      resultUid: result.id || "",
       name: result.kpiName || result.name || "KPI calcule",
       branch: managementResultCountry(result),
+      clientAccount: result.clientAccount || "",
+      clientKey: result.clientKey || "",
       value: result.monthToDateValueLabel || result.actualValueLabel || result.valueLabel || "",
       numericValue: result.monthToDateValue ?? result.actualValue ?? result.value,
       dayValue: result.dayValue ?? result.actualValue ?? result.value,
@@ -2450,7 +2460,7 @@
           <tr>
             <td>
               <strong>${escapeHtml(row.kpi.name)}</strong>
-              <br><small>${escapeHtml(row.pole.name)} - ${escapeHtml(row.kpi.id || row.pole.id)}</small>
+              <br><small>${escapeHtml([row.pole.name, row.kpi.id || row.pole.id, row.kpi.clientAccount ? `DO : ${row.kpi.clientAccount}` : ""].filter(Boolean).join(" - "))}</small>
             </td>
             <td class="period-cell">${escapeHtml(kpiPeriodFrequencyLabel(row.kpi, row.pole))}</td>
             <td class="realized-period-cell">
@@ -2612,7 +2622,7 @@
           value: topDecisionRow ? topDecisionRow.pole.id : "Pilotage",
           body: decisionBody,
           detail: topDecisionRow
-            ? `${topDecisionRow.pole.name} / ${topDecisionRow.kpi.branch || context.activeCountry.name} / taux ${decisionMetric?.display || "--"}`
+            ? `${topDecisionRow.pole.name} / ${kpiScopeLabel(topDecisionRow.kpi, context.activeCountry.name)} / taux ${decisionMetric?.display || "--"}`
             : decisionTitle,
           className: decisionClass,
         },
@@ -2864,12 +2874,13 @@
             .map((row) => {
               const targetMetric = metricFromTarget(row.kpi);
               const rowCountry = row.kpi.branch || context.activeCountry.name;
+              const rowScope = kpiScopeLabel(row.kpi, context.activeCountry.name);
               return `
                 <article class="management-priority-row status-${escapeHtml(row.kpi.status || "gray")}">
                   <div>
                     <span class="code-chip">${escapeHtml(row.pole.id)}</span>
                     <strong>${escapeHtml(row.kpi.name)}</strong>
-                    <small>${escapeHtml(row.pole.name)} / ${escapeHtml(rowCountry)} - ${escapeHtml(row.pole.owner || "Responsable a affecter")}</small>
+                    <small>${escapeHtml(row.pole.name)} / ${escapeHtml(rowScope)} - ${escapeHtml(row.pole.owner || "Responsable a affecter")}</small>
                   </div>
                   <div class="management-priority-meta">
                     <span>Valeur</span>
@@ -4542,6 +4553,7 @@
                 ${renderTrendStrip(kpi, pole)}
                 <div class="selected-kpi-meta">
                   <span>Objectif: ${escapeHtml(kpi.target)}</span>
+                  ${kpi.clientAccount ? `<span>Donneur d'ordre: ${escapeHtml(kpi.clientAccount)}</span>` : ""}
                   <span>Tendance: ${escapeHtml(kpi.trend)}</span>
                   <span>Source: ${escapeHtml(kpi.source)}</span>
                   <span>Collecte: ${escapeHtml(kpiCollectionFrequency(kpi, pole))}</span>
@@ -4581,7 +4593,7 @@
           .map(
             (kpi) => `
               <tr>
-                <td><strong>${escapeHtml(kpi.name)}</strong></td>
+                <td><strong>${escapeHtml(kpi.name)}</strong>${kpi.clientAccount ? `<br><small>DO : ${escapeHtml(kpi.clientAccount)}</small>` : ""}</td>
                 <td>${escapeHtml(kpi.value)}</td>
                 <td>${escapeHtml(kpi.target)}</td>
                 <td>${escapeHtml(kpi.trend)}</td>
@@ -5532,8 +5544,8 @@
             detail: "Obligatoire: pays/filiale, pole, intitule KPI, unite, frequence et sens de performance. L'ID KPI peut etre genere automatiquement si vous le laissez vide.",
           },
           objective: {
-            title: "Objectif mensuel: une cible officielle par pays, pole, KPI et mois.",
-            detail: "Obligatoire: mois, pays/filiale, pole, KPI, objectif et unite. Si l'objectif depend du contrat ou du pays, indiquez clairement la valeur ou le libelle attendu.",
+            title: "Objectif mensuel: une cible officielle par pays, pole, KPI, mois et donneur d'ordre si besoin.",
+            detail: "Obligatoire: mois, pays/filiale, pole, KPI, objectif et unite. Renseignez le donneur d'ordre si le pays contient plusieurs clients ou contrats.",
           },
           calculation: {
             title: "Donnees realisees: saisissez soit le taux connu, soit les elements de calcul.",
@@ -5663,6 +5675,7 @@
                     ? `${row.kpiId} - ${row.kpiName}`
                     : row.kpiId || row.kpiName || "KPI";
                   const orderLabel = activeTab === "reference" && displayOrderValue(row) < 999999 ? `Ordre ${row.displayOrder}` : "";
+                  const clientLabel = row.clientAccount ? `DO : ${row.clientAccount}` : "";
                   const actionButtons = [
                     canModify
                       ? `<button class="table-action" type="button" data-edit-collection-row="${escapeHtml(row.id)}">Modifier</button>`
@@ -5673,7 +5686,7 @@
                   ].join("");
                   return `
                     <tr>
-                      <td>${escapeHtml(row.branch || "Groupe")}</td>
+                      <td>${escapeHtml(row.branch || "Groupe")}${clientLabel ? `<br><small>${escapeHtml(clientLabel)}</small>` : ""}</td>
                       <td><strong>${escapeHtml(row.poleName || row.poleId || "")}</strong><br><small>${escapeHtml(row.poleId || "")}</small></td>
                       <td><strong>${escapeHtml(kpiLabel)}</strong><br><small>${escapeHtml([orderLabel, row.sourceLabel || typeLabelByTab[activeTab] || ""].filter(Boolean).join(" - "))}</small></td>
                       <td>${escapeHtml(row.period || (activeTab === "reference" ? "Referentiel" : ""))}</td>

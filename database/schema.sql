@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS kpi_objectives (
   kpi_id INTEGER NOT NULL,
   pole_id TEXT NOT NULL,
   branch TEXT NOT NULL DEFAULT 'Groupe',
+  client_account TEXT NOT NULL DEFAULT '',
   period TEXT NOT NULL,
   target TEXT NOT NULL,
   unit TEXT,
@@ -125,7 +126,7 @@ CREATE TABLE IF NOT EXISTS kpi_objectives (
   created_by_user_id INTEGER,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (kpi_id, pole_id, branch, period),
+  UNIQUE (kpi_id, pole_id, branch, period, client_account),
   FOREIGN KEY (kpi_id) REFERENCES kpis(id) ON DELETE CASCADE,
   FOREIGN KEY (pole_id) REFERENCES poles(id) ON DELETE CASCADE,
   FOREIGN KEY (created_by_user_id) REFERENCES users(id)
@@ -177,6 +178,7 @@ CREATE TABLE IF NOT EXISTS kpi_daily_data (
   data_date TEXT NOT NULL,
   pole_id TEXT NOT NULL,
   branch TEXT NOT NULL DEFAULT '',
+  client_account TEXT NOT NULL DEFAULT '',
   kpi_key TEXT NOT NULL,
   kpi_raw TEXT,
   element_key TEXT NOT NULL,
@@ -249,11 +251,11 @@ CREATE INDEX IF NOT EXISTS idx_user_access_pole ON user_access(pole_id);
 CREATE INDEX IF NOT EXISTS idx_user_access_branch ON user_access(branch);
 CREATE INDEX IF NOT EXISTS idx_kpis_pole ON kpis(pole_id);
 CREATE INDEX IF NOT EXISTS idx_objectives_period ON kpi_objectives(period);
-CREATE INDEX IF NOT EXISTS idx_objectives_scope ON kpi_objectives(pole_id, branch, period);
+CREATE INDEX IF NOT EXISTS idx_objectives_scope_client ON kpi_objectives(pole_id, branch, client_account, period);
 CREATE INDEX IF NOT EXISTS idx_kobo_submissions_form ON kobo_submissions(form_uid);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_kobo_submissions_uid ON kobo_submissions(form_uid, submission_uid);
 CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_date ON kpi_daily_data(data_date);
-CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_scope ON kpi_daily_data(pole_id, kpi_key, data_date);
+CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_scope_client ON kpi_daily_data(pole_id, branch, client_account, kpi_key, data_date);
 CREATE INDEX IF NOT EXISTS idx_kpi_daily_data_source ON kpi_daily_data(source_form_uid, source_submission_uid);
 CREATE INDEX IF NOT EXISTS idx_reports_pole_period ON reports(pole_id, period);
 

@@ -190,10 +190,20 @@
     const items = byPole.get(poleId) || [];
     const itemId = normalizeLookup(item.id).replace(/^form\s+/, "");
     const itemName = normalizeLookup(item.name);
+    const itemClient = normalizeLookup(item.clientAccount || item.client || item.clientKey || "");
+    const itemBranch = normalizeLookup(item.branch || item.country || item.filiale || "Groupe");
     const existingIndex = items.findIndex((existing) => {
       const existingId = normalizeLookup(existing.id).replace(/^form\s+/, "");
       const existingName = normalizeLookup(existing.name);
-      return (itemId && existingId === itemId) || (itemName && existingName === itemName);
+      const sameKpi = (itemId && existingId === itemId) || (itemName && existingName === itemName);
+      if (!sameKpi) return false;
+      const existingClient = normalizeLookup(existing.clientAccount || existing.client || existing.clientKey || "");
+      if (itemClient || existingClient) {
+        if (!existingClient && existing.pendingCalculation && itemClient) return true;
+        const existingBranch = normalizeLookup(existing.branch || existing.country || existing.filiale || "Groupe");
+        return existingClient === itemClient && existingBranch === itemBranch;
+      }
+      return true;
     });
 
     if (existingIndex >= 0) {
@@ -335,7 +345,12 @@
   }
 
   function kpiHistoryKey(item = {}) {
-    return `${normalizeLookup(item.branch || item.country || item.filiale || "Groupe")}:${item.poleId || ""}:${normalizeLookup(item.kpiId || item.kpiName || item.name)}`;
+    return [
+      normalizeLookup(item.branch || item.country || item.filiale || "Groupe"),
+      normalizeLookup(item.clientAccount || item.client || item.clientKey || ""),
+      item.poleId || "",
+      normalizeLookup(item.kpiId || item.kpiName || item.name),
+    ].join(":");
   }
 
   function toIsoDate(date) {
@@ -915,8 +930,11 @@
       });
       upsertKpiItem(byPole, result.poleId, {
         id: result.kpiId,
+        resultUid: result.id || "",
         name: result.kpiName,
         branch: result.branch || activeCountry || "Groupe",
+        clientAccount: result.clientAccount || "",
+        clientKey: result.clientKey || "",
         value: result.monthToDateValueLabel || result.actualValueLabel || result.valueLabel,
         numericValue: result.monthToDateValue ?? result.actualValue ?? result.value,
         dayValue: result.dayValue ?? result.actualValue ?? result.value,
@@ -3020,7 +3038,7 @@
       const elements = Array.isArray(row.elements) ? row.elements : [];
       const directTaux = elements.find((item) => {
         const label = normalizeLookup(item.label || "");
-        return label.includes("taux") && label.includes("realise");
+        return (label.includes("taux") && label.includes("realisation")) || label.includes("atteinte objectif") || label.includes("vs target");
       });
       if (directTaux) return { mode: "taux_realise", directValue: directTaux.value || "", elements };
       const directValue = elements.find((item) => {
@@ -3089,6 +3107,7 @@
       } else if (collectionType === "objective") {
         setFieldValue("#platform-objective-period", String(row.period || "").slice(0, 7));
         setSelectValue("#platform-objective-branch", branch);
+        setFieldValue("#platform-objective-client", row.clientAccount || "");
         setSelectValue("#platform-objective-pole", row.poleId, row.poleName);
         setSelectValue("#platform-objective-kpi", row.kpiId || row.kpiName, row.kpiName || row.kpiId);
         setFieldValue("#platform-objective-target", row.rawValue || row.value || "");
@@ -3107,6 +3126,7 @@
         const editMode = chooseCalculationEditMode(row);
         setFieldValue("#platform-calculation-date", String(row.period || "").slice(0, 10));
         setSelectValue("#platform-calculation-branch", branch);
+        setFieldValue("#platform-calculation-client", row.clientAccount || "");
         setSelectValue("#platform-calculation-pole", row.poleId, row.poleName);
         setSelectValue("#platform-calculation-kpi", row.kpiId || row.kpiName, row.kpiName || row.kpiId);
         setSelectValue("#platform-calculation-entry-mode", editMode.mode);
@@ -3323,7 +3343,10 @@
       await withLoading($("#platform-objective-save"), "Enregistrement...", async () => {
         try {
           const response = await api.savePlatformObjective({
+            rowId: state.currentCollectionEditRow?.collectionType === "objective" ? state.currentCollectionEditRow.id : "",
+            dbId: state.currentCollectionEditRow?.collectionType === "objective" ? state.currentCollectionEditRow.dbId : "",
             branch: fieldValue("#platform-objective-branch") || state.calendarBranchFilter || "Groupe",
+            clientAccount: fieldValue("#platform-objective-client"),
             poleId: pole.id,
             poleName: pole.name,
             catalogId: kpiId,
@@ -3337,6 +3360,7 @@
             dataNature: fieldValue("#platform-objective-data-nature") || "Reel",
             sourceData: "Saisie interne Hub central",
           });
+          state.currentCollectionEditRow = null;
           applyCollectionResponse(response, "#platform-objective-status", `Objectif ${kpiId} enregistre.`);
         } catch (error) {
           console.warn("Saisie objectif indisponible.", error);
@@ -3382,7 +3406,10 @@
       await withLoading($("#platform-calculation-save"), "Enregistrement...", async () => {
         try {
           const response = await api.savePlatformCalculation({
+            rowId: state.currentCollectionEditRow?.collectionType === "calculation" ? state.currentCollectionEditRow.id : "",
+            dbId: state.currentCollectionEditRow?.collectionType === "calculation" ? state.currentCollectionEditRow.dbId : "",
             branch: fieldValue("#platform-calculation-branch") || state.calendarBranchFilter || "Groupe",
+            clientAccount: fieldValue("#platform-calculation-client"),
             poleId: pole.id,
             poleName: pole.name,
             catalogId: kpiId,
@@ -3394,6 +3421,7 @@
             validation: fieldValue("#platform-calculation-validation") || "En attente",
             dataNature: fieldValue("#platform-calculation-data-nature") || "Reel",
           });
+          state.currentCollectionEditRow = null;
           applyCollectionResponse(response, "#platform-calculation-status", `Donnee ${kpiId} enregistree.`);
         } catch (error) {
           console.warn("Saisie donnees de calcul indisponible.", error);
