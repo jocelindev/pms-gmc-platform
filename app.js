@@ -1664,10 +1664,6 @@
     return Boolean(state.currentPermissions?.management || state.currentPermissions?.administration);
   }
 
-  function isPdgManagementProfile(profile = state.currentUser?.profile) {
-    return normalizeLookup(profile) === "pdg management";
-  }
-
   function hasPermission(permissionCode) {
     const permissions = state.currentPermissions || {};
     return Boolean(permissions.administration || permissions[permissionCode]);
@@ -1684,7 +1680,7 @@
     if (view === "reports") return Boolean(permissions.consultation || permissions.ajout || permissions.validation);
     if (view === "alerts") return Boolean(permissions.consultation || permissions.validation);
     if (view === "dashboard") return Boolean(permissions.consultation);
-    if (view === "poles") return Boolean(permissions.consultation && !isPdgManagementProfile());
+    if (view === "poles") return Boolean(permissions.consultation);
     return true;
   }
 

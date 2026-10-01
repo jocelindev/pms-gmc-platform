@@ -6422,7 +6422,6 @@
     };
     const selectedUserProfile = currentUser?.profile || state.currentUserAccessProfile || currentAccessRole?.profile || "";
     const selectedUserPermissions = permissionsForProfile(selectedUserProfile);
-    const selectedUserIsPdgManagement = normalizeLookup(selectedUserProfile) === "pdg management";
     const selectedUserRules = userAccessRulesFor(currentUser);
     const selectedUserHasGlobalView = Boolean(selectedUserPermissions.administration || selectedUserPermissions.management);
     const selectedUserCountries = selectedUserHasGlobalView || selectedUserRules.some((rule) => isGroupCountry(findCountryByValue(ruleCountryValue(rule))))
@@ -6435,7 +6434,7 @@
       ["Tableau de bord", selectedUserPermissions.consultation || selectedUserPermissions.administration],
       ["Collecte de donnees", selectedUserPermissions.ajout || selectedUserPermissions.administration],
       ["Management", selectedUserPermissions.management || selectedUserPermissions.administration],
-      ["Suivi par pole", !selectedUserIsPdgManagement && (selectedUserPermissions.consultation || selectedUserPermissions.administration)],
+      ["Suivi par pole", selectedUserPermissions.consultation || selectedUserPermissions.administration],
       ["Notifications", selectedUserPermissions.consultation || selectedUserPermissions.validation || selectedUserPermissions.administration],
       ["Reporting", selectedUserPermissions.consultation || selectedUserPermissions.ajout || selectedUserPermissions.administration],
       ["Administration", selectedUserPermissions.administration],
