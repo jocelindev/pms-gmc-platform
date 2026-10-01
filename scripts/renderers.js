@@ -4479,9 +4479,16 @@
       return;
     }
     const { selectedPole, selectedFrequency, rawKpis: rawSelectedKpis, kpis: selectedKpis } = monitorContext;
+    const selectedDataKpis = selectedKpis.filter(hasKpiData);
     if (poleSelect) poleSelect.value = selectedPole.id;
     if (title) title.textContent = `KPI - ${selectedPole.name} - ${activeCountry.name}`;
-    if (total) total.textContent = selectedFrequency === "Tous" ? `${selectedKpis.length} KPI` : `${selectedKpis.length}/${rawSelectedKpis.length} KPI`;
+    if (total) {
+      total.className = `status-pill ${selectedDataKpis.length ? "green" : "gray"}`;
+      total.textContent =
+        selectedFrequency === "Tous"
+          ? `${selectedDataKpis.length} KPI calcule${selectedDataKpis.length > 1 ? "s" : ""}`
+          : `${selectedDataKpis.length}/${rawSelectedKpis.length} KPI calcule${selectedDataKpis.length > 1 ? "s" : ""}`;
+    }
 
     directory.innerHTML = [selectedPole]
       .map((pole) => {
@@ -4506,7 +4513,7 @@
                 <p>${escapeHtml(pole.owner)} - ${escapeHtml(pole.id)}</p>
               </div>
               <div class="pole-kpi-counts">
-                <span class="status-pill ${poleStatus}">${kpis.length} KPI</span>
+                <span class="status-pill ${poleStatus}">${dataKpis.length} KPI calcule${dataKpis.length > 1 ? "s" : ""}</span>
                 <span class="status-pill ${cadenceClass(cadenceLabel)}">Collecte: ${escapeHtml(cadenceLabel)}</span>
                 <span class="status-pill ${countryStatusClass(activeCountry)}">Pays: ${escapeHtml(activeCountry.name)}</span>
                 <span><i class="green"></i>${greenCount} vert(s)</span>
@@ -4516,8 +4523,8 @@
             </div>
             <div class="pole-kpi-items">
               ${
-                kpis.length
-                  ? kpis
+                dataKpis.length
+                  ? dataKpis
                       .map(
                         (kpi) => `
                           <section class="pole-kpi-item status-${escapeHtml(kpi.status)}">
@@ -4534,7 +4541,7 @@
                       .join("")
                   : `<div class="empty-kpi-state">${
                       rawKpis.length
-                        ? `Aucun KPI ${escapeHtml(selectedFrequency.toLowerCase())} pour ce pole. Changez le filtre de collecte pour voir les autres KPI.`
+                        ? "Aucun KPI avec donnees calculees pour ce filtre."
                         : "Aucun KPI n'est encore rattache a ce pole."
                     }</div>`
               }
@@ -4566,8 +4573,8 @@
     if (!selectedHeading) return;
 
     selectedHeading.textContent = `${pole.name} - KPIs ${cycle.value.toLowerCase()}`;
-    $("#selected-pole-kpi-count").className = `status-pill ${hasData ? (redCount ? "red" : amberCount ? "amber" : "green") : "gray"}`;
-    $("#selected-pole-kpi-count").textContent = `${kpis.length} KPI`;
+    $("#selected-pole-kpi-count").className = `status-pill ${dataKpis.length ? (redCount ? "red" : amberCount ? "amber" : "green") : "gray"}`;
+    $("#selected-pole-kpi-count").textContent = `${dataKpis.length} KPI calcule${dataKpis.length > 1 ? "s" : ""}`;
     $("#selected-pole-summary").innerHTML = `
       <div>
         <span>Categorie</span>
@@ -4586,8 +4593,8 @@
         <strong>${escapeHtml(hasData ? `${pole.lastReport} - ${pole.status}` : "En attente donnees collectees")}</strong>
       </div>
     `;
-    $("#selected-kpi-cards").innerHTML = kpis.length
-      ? kpis
+    $("#selected-kpi-cards").innerHTML = dataKpis.length
+      ? dataKpis
           .map(
             (kpi) => `
               <article class="selected-kpi-card status-${escapeHtml(kpi.status)}">
@@ -4611,7 +4618,7 @@
             `
           )
           .join("")
-      : `<div class="empty-kpi-state">Aucun KPI n'est encore rattache a ce pole.</div>`;
+      : `<div class="empty-kpi-state">Aucun KPI avec donnees calculees pour ce filtre.</div>`;
 
     $("#pole-kpi-title").textContent = `Table detaillee - ${pole.name}`;
     $("#pole-scorecards").innerHTML = `
