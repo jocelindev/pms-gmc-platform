@@ -760,24 +760,32 @@ button {
   box-shadow: inset 4px 0 0 var(--palladium-gold);
 }
 
-.sidebar-note {
+.sidebar-logout-slot {
   margin-top: auto;
-  border: 1px solid rgba(214, 168, 56, 0.32);
+}
+
+.sidebar-logout-button {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(214, 168, 56, 0.42);
   background: rgba(255, 255, 255, 0.08);
+  color: #fff;
   border-radius: 8px;
-  padding: 16px;
+  padding: 12px 14px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  transition: 160ms ease;
 }
 
-.sidebar-note strong {
-  display: block;
-  margin-top: 6px;
+.sidebar-logout-button:hover {
+  background: rgba(214, 168, 56, 0.18);
+  border-color: var(--palladium-gold);
 }
 
-.sidebar-note p {
-  color: rgba(255, 255, 255, 0.74);
-  margin: 8px 0 0;
-  font-size: 13px;
-  line-height: 1.45;
+.sidebar-logout-button:focus-visible {
+  outline: 3px solid rgba(214, 168, 56, 0.42);
+  outline-offset: 2px;
 }
 
 .main {
