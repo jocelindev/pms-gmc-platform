@@ -3400,13 +3400,14 @@
     const target = $("#alert-board");
     if (!target) return;
     const context = getDashboardContext(state);
+    const isPdgView = normalizeLookup(state.currentUser?.profile) === "pdg management";
     const rows = dashboardCriticalRows(context, 8).filter((row) => hasKpiData(row.kpi));
     const anomalies = Array.isArray(state.koboAnomalies) && state.koboAnomalies.length
       ? state.koboAnomalies
       : Array.isArray(state.kpiCalculationQuality?.anomalies)
         ? state.kpiCalculationQuality.anomalies
         : [];
-    const anomalyRows = anomalies.slice(0, 8);
+    const anomalyRows = isPdgView ? [] : anomalies.slice(0, 8);
     const performanceMarkup = rows.length
       ? rows
           .map(
@@ -3421,20 +3422,32 @@
           )
           .join("")
       : `<div class="empty-kpi-state">Aucune alerte de performance calculee sur le perimetre actif.</div>`;
-    const anomalyMarkup = anomalyRows.length
-      ? anomalyRows
-          .map(
-            (item) => `
-              <article class="alert-card ${item.severity === "Bloquant" ? "critical" : "warning"}">
-                ${statusPill(item.severity || "A corriger", item.statusClass || (item.severity === "Bloquant" ? "red" : "amber"))}
-                <h3>${escapeHtml(item.kpi || item.poleName || "Ligne a verifier")}</h3>
-                <strong>${escapeHtml(item.form || "Collecte de donnees")} - ${escapeHtml(item.period || "Periode a verifier")}</strong>
-                <p>${escapeHtml(item.issue || "Anomalie de rapprochement")} ${item.action ? `- ${escapeHtml(item.action)}` : ""}</p>
-              </article>
-            `
-          )
-          .join("")
-      : `<div class="empty-kpi-state">Aucune anomalie detectee dans les donnees synchronisees.</div>`;
+    const anomalySection = isPdgView
+      ? ""
+      : `
+        <section class="alert-section">
+          <div class="alert-section-head">
+            <span>Qualite des donnees collecte</span>
+            ${statusPill(anomalyRows.length ? `${anomalyRows.length} a corriger` : "RAS", anomalyRows.length ? "amber" : "green")}
+          </div>
+          <div class="alert-section-grid">${
+            anomalyRows.length
+              ? anomalyRows
+                  .map(
+                    (item) => `
+                      <article class="alert-card ${item.severity === "Bloquant" ? "critical" : "warning"}">
+                        ${statusPill(item.severity || "A corriger", item.statusClass || (item.severity === "Bloquant" ? "red" : "amber"))}
+                        <h3>${escapeHtml(item.kpi || item.poleName || "Ligne a verifier")}</h3>
+                        <strong>${escapeHtml(item.form || "Collecte de donnees")} - ${escapeHtml(item.period || "Periode a verifier")}</strong>
+                        <p>${escapeHtml(item.issue || "Anomalie de rapprochement")} ${item.action ? `- ${escapeHtml(item.action)}` : ""}</p>
+                      </article>
+                    `
+                  )
+                  .join("")
+              : `<div class="empty-kpi-state">Aucune anomalie detectee dans les donnees synchronisees.</div>`
+          }</div>
+        </section>
+      `;
     target.innerHTML = `
       <section class="alert-section">
         <div class="alert-section-head">
@@ -3443,13 +3456,7 @@
         </div>
         <div class="alert-section-grid">${performanceMarkup}</div>
       </section>
-      <section class="alert-section">
-        <div class="alert-section-head">
-          <span>Qualite des donnees collecte</span>
-          ${statusPill(anomalyRows.length ? `${anomalyRows.length} a corriger` : "RAS", anomalyRows.length ? "amber" : "green")}
-        </div>
-        <div class="alert-section-grid">${anomalyMarkup}</div>
-      </section>
+      ${anomalySection}
     `;
   }
 
