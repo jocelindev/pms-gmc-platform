@@ -1698,6 +1698,7 @@
     const generationAllowed = hasPermission("ajout");
     const commentAllowed = hasPermission("ajout") || hasPermission("modification");
     const validationAllowed = hasPermission("validation");
+    $("#generate-report")?.toggleAttribute("hidden", !generationAllowed);
     $("#generate-report")?.toggleAttribute("disabled", !generationAllowed);
     $("#save-report-comment")?.toggleAttribute("disabled", !commentAllowed);
     $("#schedule-report")?.toggleAttribute("disabled", !validationAllowed);
