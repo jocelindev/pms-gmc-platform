@@ -861,10 +861,10 @@
   function targetLabelIsMissing(value) {
     const normalized = normalizeLookup(value);
     if (!normalized) return true;
+    if (normalized.includes("objectif") && normalized.includes("manquant")) return true;
     return [
-      "objectif kobo manquant",
       "objectif manquant",
-      "objectif kobo mensuel attendu",
+      "objectif mensuel attendu",
       "a completer",
       "objectif a renseigner",
     ].some((term) => normalized.includes(term));
@@ -2109,8 +2109,8 @@
       }
 
       if (/\s/.test(formUid)) {
-        setKoboStatus("warning", "L'ID formulaire ne doit pas contenir d'espace.");
-        showToast("ID formulaire a verifier.");
+        setKoboStatus("warning", "L'ID source ne doit pas contenir d'espace.");
+        showToast("ID source a verifier.");
         return;
       }
 
@@ -2201,7 +2201,7 @@
       $("#kobo-connection-status").className = "connector-status empty";
       $("#kobo-connection-status").textContent = "Aucune source externe connectee.";
       $("#kobo-upload-summary").className = "upload-summary empty";
-      $("#kobo-upload-summary").textContent = "Aucun formulaire charge.";
+      $("#kobo-upload-summary").textContent = "Aucun fichier charge.";
       state.koboActiveForm = null;
       renderKoboActiveForm();
       showToast("Configuration de collecte reinitialisee.");
@@ -2277,7 +2277,7 @@
     card.innerHTML = `
       <div class="active-form-grid">
         <div><span>Mode</span><strong>${escapeHtml(form.mode)}</strong></div>
-        <div><span>Formulaire</span><strong>${escapeHtml(form.name)}</strong></div>
+        <div><span>Fichier / source</span><strong>${escapeHtml(form.name)}</strong></div>
         <div><span>Source</span><strong>${escapeHtml(form.origin)}</strong></div>
         <div><span>Statut</span><strong>${escapeHtml(form.detail)}</strong></div>
       </div>
@@ -2306,7 +2306,7 @@
     if (!acceptedExtensions.includes(extension)) {
       summary.className = "upload-summary warning";
       summary.textContent = "Format non accepte. Utilisez .xlsx, .xls, .xml, .xform ou .csv.";
-      showToast("Format de formulaire non accepte.");
+      showToast("Format de fichier non accepte.");
       return;
     }
 
@@ -2323,7 +2323,7 @@
       reader.addEventListener("error", () => {
         summary.className = "upload-summary warning";
         summary.textContent = "Impossible de lire le fichier selectionne.";
-        showToast("Lecture du formulaire impossible.");
+        showToast("Lecture du fichier impossible.");
       });
       reader.readAsText(file);
       return;
@@ -2332,9 +2332,9 @@
     activateUploadedKoboForm(
       file,
       [
-        { name: "survey", type: "Onglet XLSForm", label: "Structure du formulaire a analyser au branchement backend." },
-        { name: "choices", type: "Onglet XLSForm", label: "Listes de choix du formulaire." },
-        { name: "settings", type: "Onglet XLSForm", label: "Parametres du formulaire." },
+        { name: "survey", type: "Onglet XLSForm", label: "Structure du fichier a analyser au branchement backend." },
+        { name: "choices", type: "Onglet XLSForm", label: "Listes de choix du fichier." },
+        { name: "settings", type: "Onglet XLSForm", label: "Parametres du fichier." },
       ],
       "XLSForm"
     );
@@ -2345,7 +2345,7 @@
       mode: "Fichier charge",
       name: file.name,
       origin: `${formType} - ${formatBytes(file.size)}`,
-      detail: fields.length ? "Formulaire charge localement et pret pour mapping plateforme." : "Formulaire charge, mais aucun champ exploitable n'a ete detecte.",
+      detail: fields.length ? "Fichier charge localement et pret pour mapping plateforme." : "Fichier charge, mais aucun champ exploitable n'a ete detecte.",
       status: fields.length ? "Charge" : "A verifier",
       statusClass: fields.length ? "green" : "amber",
       fields,
@@ -2353,7 +2353,7 @@
     $("#kobo-upload-summary").className = "upload-summary success";
     $("#kobo-upload-summary").innerHTML = `<strong>${escapeHtml(file.name)}</strong><span>${escapeHtml(formType)} - ${formatBytes(file.size)}</span>`;
     renderKoboActiveForm();
-    persistKoboActiveForm("Formulaire de collecte charge dans la plateforme.");
+    persistKoboActiveForm("Fichier de collecte charge dans la plateforme.");
   }
 
   function extractXmlFields(content) {
@@ -3238,7 +3238,7 @@
       }
 
       document.getElementById("platform-collection-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      showToast("Ligne chargee dans le formulaire. Modifiez puis enregistrez.");
+      showToast("Ligne chargee dans la zone de saisie. Modifiez puis enregistrez.");
     };
     const deletePlatformCollectionRow = async (row) => {
       if (!row) {
@@ -3604,7 +3604,7 @@
       );
 
       if (!serverUrl || !formId) {
-        updateAdminKoboStatus(statusId, "warning", "Renseignez le serveur et l'ID du formulaire.");
+        updateAdminKoboStatus(statusId, "warning", "Renseignez le serveur et l'ID de la source.");
         showToast(`${successLabel} incomplet.`);
         return;
       }
@@ -3734,7 +3734,7 @@
           formInputId: "#admin-kobo-reference-form-id",
           mode: "Collecte referentiel KPI",
           detail: "KPI et formules de calcul par pole.",
-          successLabel: "Formulaire KPI et formules",
+          successLabel: "Source KPI et formules",
           fieldType: "Champ referentiel KPI",
           fields: referenceKoboFields,
         })
@@ -3753,7 +3753,7 @@
           tokenInputId: "#admin-kobo-reference-token",
           mode: "Collecte referentiel KPI",
           detail: "KPI et formules de calcul par pole.",
-          successLabel: "Formulaire KPI et formules",
+          successLabel: "Source KPI et formules",
           fieldType: "Champ referentiel KPI",
           fields: referenceKoboFields,
         })
@@ -3770,7 +3770,7 @@
           formInputId: "#admin-kobo-monthly-objective-form-id",
           mode: "Collecte objectifs mensuels",
           detail: "Objectifs mensuels par pays / filiale, pole, KPI et mois.",
-          successLabel: "Formulaire objectifs mensuels",
+          successLabel: "Source objectifs mensuels",
           fieldType: "Champ objectifs mensuels",
           fields: monthlyObjectiveKoboFields,
         })
@@ -3789,7 +3789,7 @@
           tokenInputId: "#admin-kobo-monthly-objective-token",
           mode: "Collecte objectifs mensuels",
           detail: "Objectifs mensuels par pays / filiale, pole, KPI et mois.",
-          successLabel: "Formulaire objectifs mensuels",
+          successLabel: "Source objectifs mensuels",
           fieldType: "Champ objectifs mensuels",
           fields: monthlyObjectiveKoboFields,
         })
@@ -3806,7 +3806,7 @@
           formInputId: "#admin-kobo-calculation-form-id",
           mode: "Collecte donnees de calcul",
           detail: "Elements bruts utilises pour calculer les KPI.",
-          successLabel: "Formulaire donnees de calcul",
+          successLabel: "Source donnees de calcul",
           fieldType: "Champ donnees de calcul",
           fields: calculationKoboFields,
         })
@@ -3825,7 +3825,7 @@
           tokenInputId: "#admin-kobo-calculation-token",
           mode: "Collecte donnees de calcul",
           detail: "Elements bruts utilises pour calculer les KPI.",
-          successLabel: "Formulaire donnees de calcul",
+          successLabel: "Source donnees de calcul",
           fieldType: "Champ donnees de calcul",
           fields: calculationKoboFields,
         })

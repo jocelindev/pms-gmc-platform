@@ -131,7 +131,7 @@ KOBO_TOKEN_ENV_KEYS = ("PMS_KOBO_API_TOKEN", "KOBO_API_TOKEN")
 KOBO_SERVER_ENV_KEYS = ("PMS_KOBO_SERVER_URL", "KOBO_SERVER_URL")
 REFERENCE_KOBO_CURRENT_UID = "aJSryGjJv4Jzz9YRcP8D67"
 REFERENCE_KOBO_OLD_UIDS = ("ay5PAFNfJ8mzMUEnQELEsp", "agJCJ2VqwMGNk586NHJ39W", "auGyH8vhCsK9KKtG2fu2u5")
-REFERENCE_KOBO_TITLE = "PMS GMC - Formulaire 1 - Referentiel KPI et formules"
+REFERENCE_KOBO_TITLE = "PMS GMC - Referentiel KPI et formules"
 REFERENCE_KOBO_SOURCE_TYPE = "Collecte referentiel KPI"
 REFERENCE_KOBO_DEFAULT_SERVER = ""
 OBJECTIVES_KOBO_DEFAULT_UID = "aNdbykKVWBW8KeprR5M2Uj"
@@ -193,7 +193,7 @@ ENV_KOBO_SOURCE_DEFINITIONS = (
         "env_keys": ("PMS_KOBO_OBJECTIVES_FORM_UID", "PMS_KOBO_OBJECTIVE_FORM_UID", "KOBO_OBJECTIVES_FORM_UID"),
         "server_env_keys": ("PMS_KOBO_OBJECTIVES_SERVER_URL", "PMS_KOBO_OBJECTIVE_SERVER_URL"),
         "default_uid": OBJECTIVES_KOBO_DEFAULT_UID,
-        "title": "PMS GMC - Formulaire Objectifs mensuels",
+        "title": "PMS GMC - Objectifs mensuels",
         "source_type": "Collecte objectifs mensuels",
         "cadence": "Mensuel",
         "field_type": "Champ objectifs mensuels",
@@ -216,7 +216,7 @@ ENV_KOBO_SOURCE_DEFINITIONS = (
         "env_keys": ("PMS_KOBO_CALCULATION_FORM_UID", "PMS_KOBO_DATA_FORM_UID", "KOBO_CALCULATION_FORM_UID"),
         "server_env_keys": ("PMS_KOBO_CALCULATION_SERVER_URL", "PMS_KOBO_DATA_SERVER_URL"),
         "default_uid": CALCULATION_KOBO_DEFAULT_UID,
-        "title": "PMS GMC - Formulaire 3 - Donnees de calcul flexibles",
+        "title": "PMS GMC - Donnees de calcul flexibles",
         "source_type": "Collecte donnees de calcul",
         "cadence": "Journalier",
         "field_type": "Champ donnees de calcul",
@@ -1190,19 +1190,24 @@ def migrate_collection_source_labels(conn: sqlite3.Connection) -> bool:
         ("Connexion KoboToolbox", "Connexion source externe"),
         ("KoboCollect Archive", "Collecte archivee"),
         ("KoboCollect", "Collecte"),
+        ("PMS GMC - Formulaire 1 - Referentiel KPI et formules", "PMS GMC - Referentiel KPI et formules"),
+        ("PMS GMC - Formulaire Objectifs mensuels", "PMS GMC - Objectifs mensuels"),
+        ("PMS GMC - Formulaire 2 - Donnees de calcul journalieres", "PMS GMC - Donnees de calcul journalieres"),
+        ("PMS GMC - Formulaire 3 - Donnees de calcul flexibles", "PMS GMC - Donnees de calcul flexibles"),
     )
     changed = False
     for previous_label, next_label in replacements:
-        cursor = conn.execute(
-            """
-            UPDATE kobo_forms
-            SET source_type = ?,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE source_type = ?
-            """,
-            (next_label, previous_label),
-        )
-        changed = bool(cursor.rowcount) or changed
+        for column_name in ("source_type", "title"):
+            cursor = conn.execute(
+                f"""
+                UPDATE kobo_forms
+                SET {column_name} = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE {column_name} = ?
+                """,
+                (next_label, previous_label),
+            )
+            changed = bool(cursor.rowcount) or changed
     return changed
 
 
@@ -1640,7 +1645,7 @@ def objective_record_to_front(record: dict, pole_names: dict[str, str] | None = 
     pole_name = pole_names.get(pole_id, pole_id)
     client_account = scoped_client_account(pole_id, record.get("clientAccount") or "", pole_name)
     return {
-        "id": record.get("id") or f"OBJ-KOBO-{record.get('periodMonth', '')}-{record.get('poleId', '')}-{record.get('kpiKey', '')}",
+        "id": record.get("id") or f"OBJ-SRC-{record.get('periodMonth', '')}-{record.get('poleId', '')}-{record.get('kpiKey', '')}",
         "poleId": record.get("poleId") or "",
         "poleName": pole_name,
         "branch": record.get("branch") or "Groupe",
@@ -2306,7 +2311,7 @@ def get_kobo_data_audit(conn: sqlite3.Connection, kpi_quality: dict | None = Non
         if proposal and proposal not in proposals:
             proposals.append(str(proposal))
     if not proposals:
-        proposals.append("Conserver le meme ID KPI dans les trois formulaires pour fiabiliser le rapprochement automatique.")
+        proposals.append("Conserver le meme ID KPI dans les trois sources pour fiabiliser le rapprochement automatique.")
 
     return {
         "status": global_status,
@@ -3623,7 +3628,7 @@ def kobo_source_definition_for_role(role: str) -> dict | None:
 def ensure_kobo_source_for_role(conn: sqlite3.Connection, role: str) -> dict:
     definition = kobo_source_definition_for_role(role)
     if not definition:
-        raise ValueError(f"Role de formulaire inconnu: {role}")
+        raise ValueError(f"Role de source inconnu: {role}")
 
     common_server, _server_env = first_env_value(KOBO_SERVER_ENV_KEYS)
     role_server, _role_server_env = first_env_value(definition.get("server_env_keys", ()))
@@ -4417,7 +4422,7 @@ def rows_from_xlsx_tables(raw_content: bytes, kind: str) -> list[dict]:
             return rows
     if "survey" in {normalize_match_key(name) for name in tables} and "choices" in {normalize_match_key(name) for name in tables}:
         expected = "les reponses exportees" if kind == "objective" else "la liste kpi_ids dans choices"
-        raise ValueError(f"Ce fichier est un XLSForm. Importez {expected}, pas uniquement la structure du formulaire.")
+        raise ValueError(f"Ce fichier est un XLSForm. Importez {expected}, pas uniquement la structure du fichier.")
     raise ValueError("Aucune ligne d'en-tete reconnue dans le fichier Excel.")
 
 
@@ -4924,7 +4929,7 @@ def kobo_request_json(server_url: str, api_path: str, token: str) -> dict | list
     except HTTPError as exc:
         detail = exc.read(500).decode("utf-8", errors="ignore").strip()
         if exc.code in (401, 403):
-            raise ValueError("Jeton API refuse ou droits insuffisants pour ce formulaire.") from exc
+            raise ValueError("Jeton API refuse ou droits insuffisants pour cette source.") from exc
         if exc.code == 404:
             raise ValueError("Formulaire introuvable avec cet UID.") from exc
         suffix = f" Detail: {detail[:160]}" if detail else ""
@@ -6113,7 +6118,7 @@ def evaluate_kpi_formula(
     add_formula_context_values(element_values, context_values)
     formula_key = normalize_match_key(formula)
     if not element_values:
-        return None, "Aucune valeur numerique", ["Aucune valeur numerique exploitable dans le formulaire donnees."]
+        return None, "Aucune valeur numerique", ["Aucune valeur numerique exploitable dans les donnees de calcul."]
 
     if "moyenne" in formula_key and raw_numbers:
         return sum(raw_numbers) / len(raw_numbers), "Moyenne des elements collectes", warnings
@@ -6323,7 +6328,7 @@ def extract_monthly_objective_records(conn: sqlite3.Connection, objective_source
         display_target = format_objective_target(target_text, unit_text)
         records.append(
             {
-                "id": f"OBJ-KOBO-{row['id']}",
+                "id": f"OBJ-SRC-{row['id']}",
                 "branch": branch,
                 "branchKey": branch_lookup_key(branch),
                 "clientAccount": client_account,
@@ -7173,7 +7178,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "Mapping",
                 "Bloquant",
                 f"Mapping incomplet: {', '.join(missing_fields[:5])}.",
-                "Completer les champs attendus dans le mapping avance ou utiliser la structure flexible du formulaire 3.",
+                "Completer les champs attendus dans le mapping avance ou utiliser la structure flexible des donnees de calcul.",
                 role=role,
                 source=source,
             )
@@ -7371,7 +7376,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "Referentiel",
                 "A corriger",
                 "Formule de calcul absente pour ce KPI.",
-                "Completer formule_de_calcul dans le formulaire referentiel KPI.",
+                "Completer la formule dans la source referentiel KPI.",
                 role="referentielKpi",
                 source=reference_source,
                 row=row,
@@ -7499,7 +7504,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
             "Objectif",
             "A corriger",
             "Objectif mensuel sans KPI correspondant dans le referentiel.",
-            "Utiliser le meme id_kpi dans le formulaire objectif et le formulaire referentiel.",
+            "Utiliser le meme id_kpi dans les objectifs mensuels et le referentiel.",
             role="objectifsMensuels",
             source=objective_source,
             branch=objective.get("branch", "Groupe"),
@@ -7691,7 +7696,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                 "Donnees calcul",
                 "Bloquant",
                 f"Ligne de donnees ignoree: {', '.join(missing_parts)} non reconnu.",
-                "Verifier pole_id et id_kpi dans le formulaire donnees de calcul.",
+                "Verifier pole_id et id_kpi dans les donnees de calcul.",
                 role="donneesCalcul",
                 source=calculation_source,
                 row=row,
@@ -8164,7 +8169,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
                     "Rapprochement",
                     "Bloquant",
                     "Donnee de calcul sans KPI correspondant dans le referentiel.",
-                    "Utiliser le meme id_kpi, pole et pays/filiale entre le formulaire donnees et le formulaire referentiel.",
+                    "Utiliser le meme id_kpi, pole et pays/filiale entre les donnees de calcul et le referentiel.",
                     role="donneesCalcul",
                     source=calculation_source,
                     branch=group.get("branch") or "Groupe",
@@ -8412,10 +8417,10 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
 
     if quality["unmatchedCalculationCount"]:
         quality["proposals"].append(
-            "Uniformiser les champs pays_filiale/filiale, pole_id, id_kpi et periode_reporting dans les formulaires pour supprimer les ecarts."
+            "Uniformiser les champs pays_filiale/filiale, pole_id, id_kpi et periode_reporting dans les sources pour supprimer les ecarts."
         )
     if quality["unmatchedObjectiveCount"]:
-        quality["proposals"].append("Corriger les objectifs mensuels dont l'ID KPI n'existe pas dans le referentiel du Formulaire 1.")
+        quality["proposals"].append("Corriger les objectifs mensuels dont l'ID KPI n'existe pas dans le referentiel.")
     if quality["missingMonthlyObjectiveCount"]:
         quality["proposals"].append("Renseigner les objectifs mensuels pour calculer le taux realise et le statut vert/orange/rouge.")
     if quality["missingFormulaCount"]:
@@ -8427,7 +8432,7 @@ def calculate_kpi_results(conn: sqlite3.Connection) -> tuple[list[dict], dict]:
     if not results and quality["configured"]:
         quality["proposals"].append("Renseigner ou synchroniser les donnees de calcul pour remplacer les valeurs en attente.")
     if not quality["proposals"]:
-        quality["proposals"].append("Maintenir le meme pays / filiale, pole, id_kpi et mois dans les trois formulaires pour garder le calcul automatique stable.")
+        quality["proposals"].append("Maintenir le meme pays / filiale, pole, id_kpi et mois dans les trois sources pour garder le calcul automatique stable.")
 
     unique_warnings = []
     for warning in quality["warnings"]:
@@ -8448,14 +8453,14 @@ def sync_kobo_form(payload: dict) -> dict:
     if not token:
         token, _ = get_kobo_api_token_from_env()
     if not server_url or not form_uid:
-        raise ValueError("Adresse serveur et UID formulaire obligatoires.")
+        raise ValueError("Adresse serveur et ID source obligatoires.")
     if not token:
-        raise ValueError("Jeton API obligatoire pour synchroniser le formulaire.")
+        raise ValueError("Jeton API obligatoire pour importer la source.")
 
     encoded_uid = quote(form_uid, safe="")
     asset = kobo_request_json(server_url, f"/api/v2/assets/{encoded_uid}/", token)
     if not isinstance(asset, dict):
-        raise ValueError("Metadonnees inattendues pour ce formulaire.")
+        raise ValueError("Metadonnees inattendues pour cette source.")
 
     form_title = extract_kobo_form_title(asset, form_uid)
     fields = extract_kobo_asset_fields(asset)
@@ -8776,7 +8781,7 @@ def save_kobo_form(payload: dict) -> dict:
     status = str(payload.get("status") or "Actif").strip()
     fields = payload.get("fields") or []
     if not name:
-        raise ValueError("Nom du formulaire de collecte obligatoire.")
+        raise ValueError("Nom de la source de collecte obligatoire.")
 
     uid = slugify(name)
     mode_lower = mode.lower()
@@ -8820,7 +8825,7 @@ def save_kobo_form(payload: dict) -> dict:
                     mapped_to,
                 ),
             )
-        audit(conn, "Connexion formulaire de collecte", "kobo_form", uid, {"name": name, "mode": mode, "fields": len(fields)})
+        audit(conn, "Connexion source de collecte", "kobo_form", uid, {"name": name, "mode": mode, "fields": len(fields)})
         conn.commit()
         return active_kobo_form(conn) or {}
 

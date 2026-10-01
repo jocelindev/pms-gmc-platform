@@ -710,7 +710,7 @@
         validator: "N+1",
         reference: formulaProfile.source || "FORMULE",
         documentStatus: "Reference fichier collecte",
-        attention: "Valeur calculee automatiquement lorsque le formulaire donnees de calcul est synchronise.",
+        attention: "Valeur calculee automatiquement lorsque les donnees de calcul sont importees ou saisies.",
         fromCatalog: true,
       };
     }
@@ -2012,7 +2012,7 @@
       {
         label: "Corrections collecte",
         value: correctionCount,
-        hint: correctionCount ? "lignes a corriger avant calcul complet" : "formulaires alignes",
+        hint: correctionCount ? "lignes a corriger avant calcul complet" : "sources alignees",
         className: correctionCount ? "amber" : "green",
       },
     ];
@@ -3274,7 +3274,7 @@
     const steps = [
       {
         title: "Reception collecte",
-        detail: "Soumissions recues depuis les formulaires connectes.",
+        detail: "Donnees recues depuis les sources connectees.",
         count: submissions.length,
         status: submissions.length ? "Actif" : "En attente",
         className: submissions.length ? "green" : "gray",
@@ -3288,7 +3288,7 @@
       },
       {
         title: "Mapping KPI",
-        detail: "Rattachement formulaire, pole, filiale, periode et code KPI.",
+        detail: "Rattachement source, pole, filiale, periode et code KPI.",
         count: referenceCount,
         status: referenceCount ? "Reference" : "En attente",
         className: referenceCount ? "green" : "gray",
@@ -3727,7 +3727,7 @@
       const workflowItems = [
         {
           title: "Collecte terrain",
-          body: `${Number(audit.formsWithSubmissions || 0)} formulaire(s) avec soumission sur ${sourceStates.length}.`,
+          body: `${Number(audit.formsWithSubmissions || 0)} source(s) avec donnees sur ${sourceStates.length}.`,
           className: readySources === sourceStates.length ? "green" : readySources ? "amber" : "red",
         },
         {
@@ -4115,14 +4115,14 @@
         return {
           className: "red",
           title: "Referentiel KPI attendu",
-          text: "Renseigner le referentiel KPI/formules ou synchroniser l'ancien formulaire pour afficher les KPI par pole.",
+          text: "Renseigner le referentiel KPI/formules ou importer l'ancienne source pour afficher les KPI par pole.",
         };
       }
       if (!objectiveCount) {
         return {
           className: "amber",
           title: "Objectifs mensuels attendus",
-          text: "Renseigner les objectifs ou synchroniser l'ancien formulaire pour calculer l'objectif a date et le taux realise.",
+          text: "Renseigner les objectifs ou importer l'ancienne source pour calculer l'objectif a date et le taux realise.",
         };
       }
       if (!calculationGroups && !dailyRows && !calculationRecords) {
@@ -4136,13 +4136,13 @@
         return {
           className: issueStatusClass,
           title: "Points collecte a corriger",
-          text: "Verifier les champs pays/filiale, pole, id_kpi et periode dans les formulaires qui ne se rapprochent pas.",
+          text: "Verifier les champs pays/filiale, pole, id_kpi et periode dans les sources qui ne se rapprochent pas.",
         };
       }
       return {
         className: "green",
         title: "Donnees pretes",
-        text: "Les formulaires sont alignes. Les KPI peuvent etre lus par pole et par periode.",
+        text: "Les sources sont alignees. Les KPI peuvent etre lus par pole et par periode.",
       };
     })();
 
@@ -4408,7 +4408,7 @@
       if (!rawKpis.length) {
         actionClass = "gray";
         actionTitle = "Referentiel KPI attendu";
-        actionText = "Renseigner le referentiel KPI/formules ou synchroniser l'ancien formulaire pour faire apparaitre les KPI du pole.";
+        actionText = "Renseigner le referentiel KPI/formules ou importer l'ancienne source pour faire apparaitre les KPI du pole.";
       } else if (!kpis.length) {
         actionClass = "gray";
         actionTitle = "Filtre sans KPI";
@@ -5840,7 +5840,7 @@
     setKoboQuickCard(
       "#admin-kobo-reference-quick",
       referenceSource,
-      "Formulaire 1",
+      "Referentiel historique",
       "A connecter",
       "Referentiel KPI et formules."
     );
@@ -5863,17 +5863,17 @@
       const selectedPoleObjectives = objectives.filter((objective) => objective.poleId === selectedPole.id).length;
       objectiveSummary.innerHTML = `
         <div class="admin-summary-card">
-          <span>Formulaire 1</span>
+          <span>Referentiel</span>
           <strong>KPI + formules</strong>
           <small>${escapeHtml(referenceSource?.formId || "A connecter")}</small>
         </div>
         <div class="admin-summary-card">
-          <span>Formulaire 2</span>
+          <span>Objectifs</span>
           <strong>Objectifs mensuels</strong>
           <small>${escapeHtml(monthlyObjectiveSource?.formId || "A connecter")}</small>
         </div>
         <div class="admin-summary-card">
-          <span>Formulaire 3</span>
+          <span>Donnees</span>
           <strong>Donnees calcul</strong>
           <small>${escapeHtml(calculationSource?.formId || "A connecter")}</small>
         </div>
@@ -5890,7 +5890,7 @@
         <div class="admin-summary-card">
           <span>Champs attendus</span>
           <strong>${countFields}</strong>
-          <small>sur les trois formulaires</small>
+          <small>sur les trois sources</small>
         </div>
         <div class="admin-summary-card">
           <span>Catalogue source</span>
@@ -5939,7 +5939,7 @@
             ? "Premiere synchronisation en attente."
             : "Import externe desactive par defaut.";
       autoSummary.innerHTML = `
-        <span>Synchronisation automatique</span>
+        <span>Import automatique</span>
         <strong>${escapeHtml(statusLabel)}</strong>
         <small>${escapeHtml(detail)}</small>
       `;
@@ -5964,7 +5964,7 @@
         submissionCount: referenceCount,
         dailyRows: 0,
         missingFields: [],
-        action: referenceSource ? "Synchroniser pour verifier les soumissions." : "Renseigner l'UID du formulaire.",
+        action: referenceSource ? "Importer pour verifier les donnees." : "Renseigner l'ID de la source.",
       },
       {
         role: "objectifsMensuels",
@@ -5977,7 +5977,7 @@
         submissionCount: objectives.length,
         dailyRows: 0,
         missingFields: [],
-        action: monthlyObjectiveSource ? "Synchroniser pour verifier les objectifs." : "Renseigner l'UID du formulaire.",
+        action: monthlyObjectiveSource ? "Importer pour verifier les objectifs." : "Renseigner l'ID de la source.",
       },
       {
         role: "donneesCalcul",
@@ -5990,7 +5990,7 @@
         submissionCount: state.koboSubmissions?.filter((item) => item.sourceRole === "donneesCalcul").length || 0,
         dailyRows: state.kpiCalculationQuality?.dailyDataRows || 0,
         missingFields: [],
-        action: calculationSource ? "Synchroniser pour verifier les donnees jour." : "Renseigner l'UID du formulaire.",
+        action: calculationSource ? "Importer pour verifier les donnees jour." : "Renseigner l'ID de la source.",
       },
     ];
     const auditForms = Array.isArray(audit.forms) && audit.forms.length ? audit.forms : fallbackAuditForms;
@@ -6030,7 +6030,7 @@
                 ${dailyMetric}
               </div>
               ${missingMarkup}
-              <p>${escapeHtml(form.action || "Verifier la configuration du formulaire.")}</p>
+              <p>${escapeHtml(form.action || "Verifier la configuration de la source.")}</p>
             </article>
           `;
         })
@@ -6055,7 +6055,7 @@
           ${
             proposals.length
               ? proposals.map((proposal) => `<span>${escapeHtml(proposal)}</span>`).join("")
-              : "<span>Synchroniser regulierement les trois formulaires.</span>"
+              : "<span>Verifier regulierement les trois sources.</span>"
           }
         </div>
       `;
@@ -6149,7 +6149,7 @@
         period: activeObjectiveMonth,
         issue: "KPI sans objectif mensuel",
         detail: kpi.kpiName || kpi.name || "",
-        action: "Renseigner le formulaire 2 objectifs mensuels pour ce KPI.",
+        action: "Renseigner les objectifs mensuels pour ce KPI.",
       });
     });
     monthlyObjectives.forEach((objective) => {
@@ -6171,7 +6171,7 @@
         period: objective.periodMonth || objective.period || "Periode a verifier",
         issue: "Objectif sans donnees de calcul",
         detail: `${reference.kpiName || objective.kpiName || ""}${objective.target ? ` - objectif: ${objective.target}` : ""}`.trim(),
-        action: "Renseigner le formulaire 3 donnees de calcul pour ce pays, pole, KPI et date.",
+        action: "Renseigner les donnees de calcul pour ce pays, pole, KPI et date.",
       });
     });
     const anomalyCount = $("#admin-kobo-anomaly-count");
@@ -6233,12 +6233,12 @@
         <div class="admin-kobo-anomaly-stat status-${escapeHtml(missingObjectiveItems.length ? "amber" : "green")}">
           <span>KPI sans objectif</span>
           <strong>${escapeHtml(missingObjectiveItems.length)}</strong>
-          <small>a completer dans le formulaire 2</small>
+          <small>a completer dans les objectifs mensuels</small>
         </div>
         <div class="admin-kobo-anomaly-stat status-${escapeHtml(missingCalculationItems.length ? "amber" : "green")}">
           <span>Objectifs sans donnees</span>
           <strong>${escapeHtml(missingCalculationItems.length)}</strong>
-          <small>a completer dans le formulaire 3</small>
+          <small>a completer dans les donnees de calcul</small>
         </div>
         <div class="admin-kobo-anomaly-stat status-${escapeHtml(warningAnomalies.length ? "amber" : "green")}">
           <span>Anomalies collecte</span>
@@ -6287,7 +6287,7 @@
               }
             )
             .join("")
-        : `<tr><td colspan="5">Aucun KPI a corriger. Les trois formulaires sont prets pour le calcul complet.</td></tr>`;
+        : `<tr><td colspan="5">Aucun KPI a corriger. Les trois sources sont pretes pour le calcul complet.</td></tr>`;
     }
 
     const fillKoboSourceForm = (source, config) => {
@@ -6391,17 +6391,17 @@
     setKoboSourceStatus(
       "#admin-kobo-reference-status",
       referenceSource,
-      "Aucun formulaire KPI/formules configure."
+      "Aucune source KPI/formules configuree."
     );
     setKoboSourceStatus(
       "#admin-kobo-monthly-objective-status",
       monthlyObjectiveSource,
-      "Aucun formulaire objectifs mensuels configure."
+      "Aucune source objectifs mensuels configuree."
     );
     setKoboSourceStatus(
       "#admin-kobo-calculation-status",
       calculationSource,
-      "Aucun formulaire de donnees de calcul configure."
+      "Aucune source de donnees de calcul configuree."
     );
 
     const catalogStatus = $("#objective-catalog-status");

@@ -587,7 +587,7 @@
               <div>
                 <p class="eyebrow">Donnees collecte</p>
                 <h3>Etat de preparation des KPI</h3>
-                <p class="kpi-engine-subtitle">Controle des formulaires referentiel KPI, objectifs mensuels et donnees de calcul.</p>
+                <p class="kpi-engine-subtitle">Controle du referentiel KPI, des objectifs mensuels et des donnees de calcul.</p>
               </div>
               <span class="status-pill gray" id="kpi-engine-status">A configurer</span>
             </div>
@@ -622,7 +622,7 @@
                 <div class="kobo-panel-title">
                   <span class="step-badge">1</span>
                   <div>
-                    <p class="eyebrow">Connexion formulaire</p>
+                    <p class="eyebrow">Connexion source</p>
                     <h3>Connecter une source externe</h3>
                   </div>
                 </div>
@@ -634,7 +634,7 @@
                   <small class="form-hint">Import externe desactive par defaut.</small>
                 </label>
                 <label>
-                  ID formulaire / Asset UID
+                  ID source / Asset UID
                   <input id="kobo-form-uid" class="search-input" placeholder="ex. aBcDeFg12345" />
                   <small class="form-hint">Identifiant de la source externe.</small>
                 </label>
@@ -667,7 +667,7 @@
                 </div>
               </div>
               <label class="file-upload-card" id="kobo-drop-zone" for="kobo-form-file">
-                <span class="file-upload-icon">KBO</span>
+                <span class="file-upload-icon">EXT</span>
                 <strong>Deposer ou selectionner un fichier</strong>
                 <span>XLSForm, XML/XForm ou CSV</span>
                 <input id="kobo-form-file" type="file" accept=".xlsx,.xls,.xml,.xform,.csv" />
@@ -680,7 +680,7 @@
                 <span>.csv</span>
               </div>
               <div class="upload-summary empty" id="kobo-upload-summary">
-                Aucun formulaire charge.
+                Aucun fichier charge.
               </div>
             </section>
 
@@ -689,7 +689,7 @@
                 <div class="kobo-panel-title">
                   <span class="step-badge">3</span>
                   <div>
-                    <p class="eyebrow">Formulaire actif</p>
+                    <p class="eyebrow">Source active</p>
                     <h3>Source historique utilisee pour alimenter la plateforme</h3>
                   </div>
                 </div>
@@ -1504,7 +1504,7 @@
                 <div class="panel-header">
                   <div>
                     <p class="eyebrow">Passerelle historique</p>
-                    <h3>Import optionnel depuis les anciens formulaires</h3>
+                    <h3>Import optionnel depuis les anciennes sources</h3>
                   </div>
                 </div>
                 <div class="kobo-logic-grid">
@@ -1529,9 +1529,9 @@
                     <p>Rapproche les trois sources par pays / filiale, pole, KPI et periode pour alimenter les dashboards.</p>
                   </div>
                 </div>
-                <div class="kobo-template-actions" aria-label="Modeles historiques XLSForm">
+                <div class="kobo-template-actions" aria-label="Modeles historiques de collecte">
                   <a class="ghost-action" href="kobo_forms/PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026_corrige_pays_20260720.xlsx" download>
-                    Telecharger formulaire 1
+                    Telecharger referentiel
                   </a>
                   <a class="ghost-action" href="kobo_forms/PMS_GMC_Formulaire_Objectifs_Mensuels_2026.xlsx" download>
                     Telecharger objectifs
@@ -1539,8 +1539,8 @@
                   <a class="ghost-action" href="kobo_forms/PMS_GMC_Formulaire_2_Donnees_Calcul_Journalieres_2026.xlsx" download>
                     Telecharger donnees
                   </a>
-                  <a class="ghost-action" href="kobo_forms/README_KOBO_FORMS.md" target="_blank" rel="noreferrer">
-                    Voir le guide
+                  <a class="ghost-action" href="kobo_forms/README_MODELES_HISTORIQUES.md" target="_blank" rel="noreferrer">
+                    Guide historique
                   </a>
                 </div>
                 <p class="kobo-template-note">
@@ -1548,7 +1548,7 @@
                 </p>
                 <div class="kobo-sync-ready" aria-label="Configuration de collecte prete">
                   <div id="admin-kobo-reference-quick">
-                    <span>Formulaire 1 configure</span>
+                    <span>Referentiel historique</span>
                     <strong>A connecter</strong>
                     <small>Referentiel KPI et formules.</small>
                   </div>
@@ -1563,7 +1563,7 @@
                     <small>Donnees journalieres et elements de calcul.</small>
                   </div>
                   <div id="admin-kobo-auto-summary">
-                    <span>Synchronisation automatique</span>
+                    <span>Import automatique</span>
                     <strong>Token Render a configurer</strong>
                     <small>Import externe desactive par defaut.</small>
                   </div>
@@ -1595,7 +1595,7 @@
                     <thead>
                       <tr>
                         <th>Gravite</th>
-                        <th>Formulaire</th>
+                        <th>Source</th>
                         <th>Pole / KPI / periode</th>
                         <th>Anomalie</th>
                         <th>Action proposee</th>
@@ -1609,7 +1609,7 @@
               <section class="panel span-3 admin-kobo-source-panel">
                 <div class="panel-header">
                   <div>
-                    <p class="eyebrow">Formulaire 1</p>
+                    <p class="eyebrow">Source historique 1</p>
                     <h3>KPIs et formules de calcul par pole</h3>
                   </div>
                 </div>
@@ -1619,7 +1619,7 @@
                     <input id="admin-kobo-reference-server" class="search-input" inputmode="url" value="" placeholder="https://source-externe.example" />
                   </label>
                   <label>
-                    ID formulaire KPI / formules
+                    ID source KPI / formules
                     <input id="admin-kobo-reference-form-id" class="search-input" value="aJSryGjJv4Jzz9YRcP8D67" placeholder="ex. aKPIFormules2026" />
                   </label>
                   <label>
@@ -1628,7 +1628,7 @@
                   </label>
                 </div>
                 <details class="admin-advanced-mapping">
-                  <summary>Mapping avance des champs du formulaire 1</summary>
+                  <summary>Mapping avance des champs referentiel</summary>
                   <div class="admin-kobo-form admin-kobo-dual-form">
                   <label>
                     Champ ID KPI
@@ -1746,14 +1746,14 @@
                 </details>
                 <div class="connector-actions admin-kobo-actions">
                   <button class="primary-action" id="admin-kobo-reference-save" type="button">
-                    Enregistrer le formulaire KPI et formules
+                    Enregistrer la source KPI et formules
                   </button>
                   <button class="ghost-action" id="admin-kobo-reference-sync" type="button">
                     Import externe desactive
                   </button>
                 </div>
                 <div class="connector-status empty" id="admin-kobo-reference-status">
-                  Aucun formulaire KPI/formules configure.
+                  Aucune source KPI/formules configuree.
                 </div>
               </section>
 
@@ -1770,7 +1770,7 @@
                     <input id="admin-kobo-monthly-objective-server" class="search-input" inputmode="url" value="" placeholder="https://source-externe.example" />
                   </label>
                   <label>
-                    ID formulaire objectifs mensuels
+                    ID source objectifs mensuels
                     <input id="admin-kobo-monthly-objective-form-id" class="search-input" value="aNdbykKVWBW8KeprR5M2Uj" placeholder="ex. aObjectifsMensuels2026" />
                   </label>
                   <label>
@@ -1829,14 +1829,14 @@
                 </details>
                 <div class="connector-actions admin-kobo-actions">
                   <button class="primary-action" id="admin-kobo-monthly-objective-save" type="button">
-                    Enregistrer le formulaire objectifs
+                    Enregistrer la source objectifs
                   </button>
                   <button class="ghost-action" id="admin-kobo-monthly-objective-sync" type="button">
                     Import externe desactive
                   </button>
                 </div>
                 <div class="connector-status empty" id="admin-kobo-monthly-objective-status">
-                  Aucun formulaire objectifs mensuels configure.
+                  Aucune source objectifs mensuels configuree.
                 </div>
               </section>
 
@@ -1853,7 +1853,7 @@
                     <input id="admin-kobo-calculation-server" class="search-input" inputmode="url" value="" placeholder="https://source-externe.example" />
                   </label>
                   <label>
-                    ID formulaire donnees de calcul
+                    ID source donnees de calcul
                     <input id="admin-kobo-calculation-form-id" class="search-input" value="aCdB3YF8vSppFsVBroKm9W" placeholder="ex. aDonneesCalculKPI2026" />
                   </label>
                   <label>
@@ -1932,14 +1932,14 @@
                 </details>
                 <div class="connector-actions admin-kobo-actions">
                   <button class="primary-action" id="admin-kobo-calculation-save" type="button">
-                    Enregistrer le formulaire donnees de calcul
+                    Enregistrer la source donnees de calcul
                   </button>
                   <button class="ghost-action" id="admin-kobo-calculation-sync" type="button">
                     Import externe desactive
                   </button>
                 </div>
                 <div class="connector-status empty" id="admin-kobo-calculation-status">
-                  Aucun formulaire de donnees de calcul configure.
+                  Aucune source de donnees de calcul configuree.
                 </div>
               </section>
 
@@ -1947,7 +1947,7 @@
                 <div class="panel-header">
                   <div>
                     <p class="eyebrow">Structure collecte</p>
-                    <h3>Champs attendus pour les trois formulaires</h3>
+                    <h3>Champs attendus pour les trois sources</h3>
                   </div>
                   <span class="status-pill green" id="objective-field-count">0 champ</span>
                 </div>

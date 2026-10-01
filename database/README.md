@@ -43,7 +43,7 @@ Au demarrage, `start.py` initialise les tables si necessaire puis lance le serve
 - `user_access` : affectation utilisateur par utilisateur, avec pole, profil et dashboard autorise.
 - `kpis` : catalogue KPI par pole.
 - `kpi_objectives` : objectifs KPI alimentes par la collecte integree.
-- `kobo_forms` et `kobo_form_fields` : formulaires et mapping des sources de collecte.
+- `kobo_forms` et `kobo_form_fields` : tables techniques legacy pour les sources de collecte et leur mapping.
 - `kobo_submissions` : historique technique des donnees collectees via la plateforme.
 - `validation_queue` : anomalies et controles avant publication.
 - `reports` : rapports hebdomadaires, mensuels, trimestriels, etc.

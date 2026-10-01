@@ -164,7 +164,7 @@
         "Formulaire 1 : declare les KPI, pays / filiales, poles et formules de calcul.",
         "Formulaire Objectifs : declare les cibles mensuelles officielles par pays / filiale, pole, KPI et mois.",
         "Formulaire Donnees : collecte soit le taux realise deja connu, soit un a trois elements bruts necessaires a la formule.",
-        "La plateforme rapproche les trois formulaires par pays / filiale, pole, KPI et periode.",
+        "La plateforme rapproche les trois sources par pays / filiale, pole, KPI et periode.",
         "La plateforme calcule la valeur realisee, l'objectif a date, le taux realise et le statut de performance.",
       ],
       referentials: {
@@ -356,7 +356,7 @@
         role: "referentielKpi",
         serverUrl: "",
         formId: "aJSryGjJv4Jzz9YRcP8D67",
-        title: "PMS GMC - Formulaire 1 - Referentiel KPI et formules",
+        title: "PMS GMC - Referentiel KPI et formules",
         mode: "Collecte referentiel KPI",
         status: "Actif",
         detail: "KPI et formules de calcul par pays / filiale et par pole.",
@@ -395,7 +395,7 @@
         role: "objectifsMensuels",
         serverUrl: "",
         formId: "aNdbykKVWBW8KeprR5M2Uj",
-        title: "PMS GMC - Formulaire Objectifs mensuels",
+        title: "PMS GMC - Objectifs mensuels",
         mode: "Collecte objectifs mensuels",
         status: "Actif",
         detail: "Objectifs mensuels par pays / filiale, pole, KPI et mois.",
@@ -417,7 +417,7 @@
         role: "donneesCalcul",
         serverUrl: "",
         formId: "aCdB3YF8vSppFsVBroKm9W",
-        title: "PMS GMC - Formulaire 2 - Donnees de calcul journalieres",
+        title: "PMS GMC - Donnees de calcul journalieres",
         mode: "Collecte donnees de calcul",
         status: "Actif",
         detail: "Elements bruts utilises pour calculer les KPI.",
@@ -588,7 +588,7 @@
     koboPipeline: [
       { title: "Reception collecte", detail: "Saisie integree et controle qualite des donnees.", count: "1 285", status: "Actif", className: "green" },
       { title: "Zone de controle", detail: "Doublons, formats, pieces jointes et champs obligatoires.", count: "17", status: "A traiter", className: "amber" },
-      { title: "Mapping KPI", detail: "Rattachement formulaire, pole, filiale, periode et code KPI.", count: "44", status: "Regles", className: "green" },
+      { title: "Mapping KPI", detail: "Rattachement source, pole, filiale, periode et code KPI.", count: "44", status: "Regles", className: "green" },
       { title: "Calcul plateforme", detail: "Application des formules et seuils RAG du catalogue.", count: "74", status: "Pret", className: "green" },
       { title: "Publication", detail: "Mise a jour tableau de bord, alertes et rapports par pole.", count: "7", status: "Cycles", className: "green" },
     ],
@@ -850,7 +850,7 @@
       "08:42 - Donnees COL-BPO-JOUR-01 integrees",
       "08:33 - Seuil Ratio MS/CA modifie par Admin",
       "08:12 - Plan d'action BPO valide par DGA",
-      "07:58 - Rejet doublon formulaire WFM Congo",
+      "07:58 - Rejet doublon source WFM Congo",
     ],
   };
 

@@ -52,7 +52,7 @@ Identifiant admin : admin
 Mot de passe admin : Admin@2026!
 ```
 
-Note importante : l'offre gratuite convient pour une demonstration externe. En local, la base SQLite est creee automatiquement au premier demarrage si elle n'existe pas. Pour conserver les donnees en production, configurer une base PostgreSQL et ajouter son URL dans Render via `DATABASE_URL` ou `PMS_DATABASE_URL`. Les mots de passe initiaux peuvent etre changes par variables d'environnement : `PMS_ADMIN_PASSWORD` et `PMS_DEFAULT_USER_PASSWORD`. Pour une exploitation officielle, il faudra aussi securiser les secrets Kobo, renforcer les mots de passe et prevoir les sauvegardes.
+Note importante : l'offre gratuite convient pour une demonstration externe. En local, la base SQLite est creee automatiquement au premier demarrage si elle n'existe pas. Pour conserver les donnees en production, configurer une base PostgreSQL et ajouter son URL dans Render via `DATABASE_URL` ou `PMS_DATABASE_URL`. Les mots de passe initiaux peuvent etre changes par variables d'environnement : `PMS_ADMIN_PASSWORD` et `PMS_DEFAULT_USER_PASSWORD`. Pour une exploitation officielle, il faudra aussi securiser les secrets d'import, renforcer les mots de passe et prevoir les sauvegardes.
 
 ## Base de donnees de production
 
@@ -71,45 +71,34 @@ Ouvrir le fichier suivant dans un navigateur :
 C:\Users\dquin\Documents\developpement Web\pms-gmc-platform\index.html
 ```
 
-## Configuration KoboCollect
+## Collecte interne et imports historiques
 
-La configuration KoboCollect se fait dans **Administration > KoboCollecte**. C'est l'espace de parametrage des formulaires qui alimentent la plateforme.
+La source primaire des donnees est maintenant la zone **Collecte de donnees** de la plateforme. Les responsables y renseignent directement :
 
-- Trois modeles XLSForm sont disponibles dans `kobo_forms/` :
-  - `PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026_corrige_pays_20260720.xlsx` pour le referentiel KPI et les formules.
-  - `PMS_GMC_Formulaire_Objectifs_Mensuels_2026.xlsx` pour les objectifs mensuels officiels par pays / filiale, pole, KPI et mois.
-  - `PMS_GMC_Formulaire_2_Donnees_Calcul_Journalieres_2026.xlsx` pour les donnees brutes journalieres de calcul.
-- Les formulaires publies dans KoboToolbox sont preconfigures quand leur UID est connu :
-  - Formulaire 1 UID `aJSryGjJv4Jzz9YRcP8D67`.
-  - Formulaire Objectifs mensuels UID `aNdbykKVWBW8KeprR5M2Uj`.
-  - Formulaire 2 UID `aCdB3YF8vSppFsVBroKm9W`.
-- Pour une synchronisation automatique, ajouter le token dans Render comme variable d'environnement secrete `PMS_KOBO_API_TOKEN`.
-- Si PostgreSQL n'est pas encore configure en production, la base SQLite locale peut etre recreee apres redeploiement ou redemarrage. La plateforme reconstruit donc automatiquement la connexion Kobo au demarrage depuis les variables Render :
-  - `PMS_KOBO_SERVER_URL` : serveur Kobo, par defaut `https://kf.kobotoolbox.org`.
-  - `PMS_KOBO_REFERENCE_FORM_UID` : UID du formulaire KPI et formules.
-  - `PMS_KOBO_OBJECTIVES_FORM_UID` : UID du formulaire objectifs mensuels.
-  - `PMS_KOBO_CALCULATION_FORM_UID` : UID du formulaire donnees de calcul journalieres.
-- Sur Render, le serveur synchronise automatiquement les formulaires operationnels toutes les 5 minutes avec `PMS_KOBO_AUTO_SYNC_INTERVAL_SECONDS=300`. Une protection empeche le lancement d'une nouvelle synchronisation si la precedente est encore en cours.
-- Si `PMS_KOBO_API_TOKEN` n'est pas encore configure, il reste possible de renseigner le token API Kobo dans **Administration > KoboCollecte**, puis cliquer sur `Synchroniser depuis Kobo`.
-- Depuis l'interface, ces modeles sont telechargeables dans **Administration > KoboCollecte**, avant les zones UID/token.
-- Le serveur lit les metadonnees du formulaire Kobo et enregistre les champs detectes dans SQLite.
-- Les soumissions Kobo sont importees dans `kobo_submissions`, avec dedoublonnage par identifiant de soumission.
-- Le jeton API sert uniquement a la synchronisation courante : il n'est pas renvoye a l'interface ni affiche comme formulaire actif.
-- Les trois formulaires utilisent maintenant le meme champ `ID KPI officiel`, propose en liste recherchable `KPI-001` a `KPI-200`. Les KPI presents dans le catalogue affichent aussi l'intitule, la formule de calcul et la cible; les autres IDs restent en reserve pour les futurs KPI. Pour rester compatible Kobo, la valeur interne est en format `KPI_001`, mais la plateforme l'affiche et le rapproche comme `KPI-001`.
-- Dans Administration > KoboCollecte, la logique PMS distingue trois sources : `KPI et formules`, `Objectifs mensuels` et `Elements de calcul`.
-- Le formulaire `KPI et formules` reste compatible avec `Copie de Catalogu.xlsx` et exploite aussi `GMC_FICHE_COLLECTE_V2.xlsx`, notamment la feuille `FORMULE` : 44 KPI/formules metier et 7 onglets de collecte.
-- Le moteur PMS rapproche automatiquement les trois formulaires par `pays / filiale + pole + ID KPI officiel + periode`, applique la formule du catalogue, calcule l'objectif a date a partir de l'objectif mensuel, puis alimente le tableau de bord et l'onglet `Suivi par pole`.
-- Les objectifs mensuels et les donnees de calcul dont l'ID KPI n'existe pas dans le Formulaire 1 sont signales comme ecarts de rapprochement.
-- Sans soumission du formulaire 1, aucun KPI n'est affiche dans les vues metier. Quand le formulaire 1 est alimente mais que les donnees de calcul ne sont pas encore synchronisees, les KPI apparaissent avec le statut `En attente calcul`.
-- Si les donnees de calcul existent mais que l'objectif mensuel Kobo manque, le KPI reste calcule mais son statut reste `Objectif Kobo manquant` / attente au lieu d'etre classe rouge a tort.
-- Dans l'administration, `Enregistrer` conserve l'UID et le mapping des champs; `Synchroniser depuis Kobo` utilise le token API pour importer les soumissions et rendre les KPI visibles.
+- le referentiel KPI et les formules ;
+- les objectifs mensuels ;
+- les donnees realisees et les elements de calcul.
+
+Des modeles historiques XLSForm restent disponibles dans `kobo_forms/` uniquement pour les reprises ou controles d'anciens fichiers :
+
+- `PMS_GMC_Formulaire_1_Referentiel_KPI_Formules_2026_corrige_pays_20260720.xlsx` pour le referentiel KPI et les formules ;
+- `PMS_GMC_Formulaire_Objectifs_Mensuels_2026.xlsx` pour les objectifs mensuels officiels ;
+- `PMS_GMC_Formulaire_2_Donnees_Calcul_Journalieres_2026.xlsx` pour les donnees brutes journalieres de calcul.
+
+La logique PMS distingue trois sources : `KPI et formules`, `Objectifs mensuels` et `Elements de calcul`.
+
+Le moteur PMS rapproche automatiquement les trois sources par `pays / filiale + pole + ID KPI officiel + periode`, applique la formule du catalogue, calcule l'objectif a date a partir de l'objectif mensuel, puis alimente le tableau de bord et l'onglet `Suivi par pole`.
+
+Les objectifs mensuels et les donnees de calcul dont l'ID KPI n'existe pas dans le referentiel sont signales comme ecarts de rapprochement. Si les donnees realisees existent mais que l'objectif mensuel manque, le KPI reste calcule mais son statut reste en attente d'objectif au lieu d'etre classe rouge a tort.
+
+Les anciennes variables d'import externe sont conservees en code uniquement pour compatibilite technique legacy. Elles ne constituent plus le parcours utilisateur principal.
 
 ## Contenu de cette version
 
 - Tableau de bord groupe COMEX.
 - Calendrier global type Power BI pour filtrer les periodes de suivi et de reporting.
-- Configuration KoboCollect/KoboToolbox dans Administration.
-- Pipeline KoboCollect vers PMS : reception, controle, mapping, calcul KPI et publication.
+- Collecte interne dans la plateforme.
+- Pipeline collecte vers PMS : reception, controle, mapping, calcul KPI et publication.
 - File de validation des anomalies avant integration.
 - Referentiel KPI.
 - Centre d'alertes.
@@ -146,16 +135,16 @@ database/pms_gmc.sqlite Base de donnees locale generee
 
 ## Principes integres
 
-- KoboCollect/KoboToolbox est la source primaire des donnees.
+- La collecte interne Hub central est la source primaire des donnees.
 - L'objectif principal est le suivi des performances par pole et la production de rapports periodiques.
-- Chaque rapport doit consolider KPI, donnees Kobo, alertes RAG, commentaires, plans d'action et validation N+1.
+- Chaque rapport doit consolider KPI, donnees collectees, alertes RAG, commentaires, plans d'action et validation N+1.
 - La file de validation bloque les donnees douteuses avant calcul et publication.
 - Les exports du prototype produisent des fichiers locaux JSON ou CSV pour simuler les livrables.
 - Palette Palladium/GMC : bleu `#1F3864`, dore `#D6A838`, bleu secondaire `#2E75B6`.
 - RAG reserve aux statuts KPI et alertes.
 - Version sans dependances frontend pour demarrer rapidement.
 - Base locale SQLite et base production PostgreSQL branchees via une API Python legere.
-- Les objectifs KPI, droits par profil, affectations utilisateur, formulaires de collecte actifs et rapports generes sont persistables en base.
+- Les objectifs KPI, droits par profil, affectations utilisateur, sources de collecte actives et rapports generes sont persistables en base.
 - Page de connexion locale avec mots de passe hashes, session utilisateur, profil et acces par pole.
 
 ## Prochaines etapes conseillees
@@ -163,6 +152,6 @@ database/pms_gmc.sqlite Base de donnees locale generee
 1. Transformer ce prototype en application React/Next.js.
 2. Migrer l'API locale vers FastAPI ou Node.js pour une exploitation multi-utilisateur.
 3. Brancher une base PostgreSQL durable en production puis mettre en place les sauvegardes.
-4. Brancher KoboToolbox via API ou webhook si Kobo reste utilise en appoint.
+4. Conserver l'import externe uniquement en appoint si necessaire.
 5. Ajouter authentification, roles RBAC et audit trail complet.
 6. Generer les rapports reels Word/PDF/PowerPoint/Excel a partir des donnees consolidees par pole et periodicite.
