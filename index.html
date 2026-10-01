@@ -538,7 +538,7 @@
               <h2>KPIs par pole</h2>
               <p>Choisir un pole pour afficher uniquement ses KPI, avec la valeur, l'objectif, la tendance et le statut.</p>
             </div>
-            <div class="filters compact-filters pole-filter-bar">
+            <div class="filters compact-filters pole-filter-bar" hidden aria-hidden="true">
               <span class="access-scope-pill" id="pole-access-scope">Acces: tous les poles</span>
               <label>
                 Pole
@@ -566,7 +566,7 @@
             </div>
           </section>
 
-          <section class="panel kpi-engine-panel" id="kpi-engine-panel">
+          <section class="panel kpi-engine-panel" id="kpi-engine-panel" hidden aria-hidden="true">
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Donnees collecte</p>
@@ -2186,7 +2186,7 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="scripts/data.js?v=internal-tool-20260831"></script>
-    <script src="scripts/renderers.js?v=internal-tool-20260831"></script>
+    <script src="scripts/renderers.js?v=suivi-pole-clean-20261001"></script>
     <script src="scripts/api.js?v=internal-tool-20260831"></script>
     <script src="scripts/reporting.js?v=internal-tool-20260831"></script>
     <script src="app.js?v=internal-tool-20260831"></script>
