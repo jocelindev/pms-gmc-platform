@@ -2860,17 +2860,17 @@ textarea {
 .selected-kpi-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 
 .selected-kpi-card {
   border: 1px solid var(--border);
-  border-top-width: 4px;
+  border-top-width: 3px;
   border-radius: 8px;
   background: #fff;
-  padding: 13px;
+  padding: 9px 10px;
   display: grid;
-  gap: 12px;
+  gap: 7px;
   min-width: 0;
 }
 
@@ -2890,24 +2890,26 @@ textarea {
   display: flex;
   align-items: start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .selected-kpi-head strong {
   color: var(--palladium-blue);
-  line-height: 1.35;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .selected-kpi-value strong {
-  font-size: 24px;
+  font-size: 20px;
+  line-height: 1.05;
 }
 
 .selected-kpi-meta {
   display: grid;
-  gap: 5px;
+  gap: 3px;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .empty-kpi-state {
@@ -3340,17 +3342,17 @@ textarea {
 .pole-kpi-items {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 
 .pole-kpi-item {
   border: 1px solid var(--border);
-  border-left-width: 4px;
+  border-left-width: 3px;
   border-radius: 8px;
   background: #fff;
-  padding: 13px;
+  padding: 9px 10px;
   display: grid;
-  gap: 12px;
+  gap: 7px;
   min-width: 0;
 }
 
@@ -3375,32 +3377,34 @@ textarea {
   display: flex;
   justify-content: space-between;
   align-items: start;
-  gap: 10px;
+  gap: 8px;
 }
 
 .pole-kpi-item-head strong {
   color: var(--palladium-blue);
-  line-height: 1.35;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .pole-kpi-value {
   color: var(--palladium-blue);
-  font-size: 26px;
+  font-size: 21px;
   font-weight: 900;
+  line-height: 1.05;
 }
 
 .kpi-preparation-badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 .kpi-preparation-badge {
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 8.5px;
   font-weight: 900;
   line-height: 1;
-  padding: 6px 8px;
+  padding: 4px 6px;
   text-transform: uppercase;
 }
 
@@ -3430,13 +3434,13 @@ textarea {
   border-top: 1px dashed rgba(31, 56, 100, 0.2);
   border-bottom: 1px dashed rgba(31, 56, 100, 0.2);
   background: rgba(31, 56, 100, 0.035);
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
 }
 
 .kpi-trend-cell {
   min-width: 0;
-  padding: 8px 7px;
+  padding: 5px 6px;
   text-align: center;
   border-right: 1px solid rgba(31, 56, 100, 0.1);
 }
@@ -3452,16 +3456,16 @@ textarea {
 
 .kpi-trend-cell span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 8.5px;
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .kpi-trend-cell strong {
-  margin-top: 4px;
+  margin-top: 2px;
   color: #64748b;
-  font-size: 14px;
+  font-size: 11px;
   line-height: 1.15;
   white-space: nowrap;
 }
