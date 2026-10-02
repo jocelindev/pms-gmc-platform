@@ -835,11 +835,6 @@ body[data-active-view="alerts"] .calendar-slicer {
   display: none;
 }
 
-body[data-active-view="dashboard"] .calendar-pole-filter-box,
-body[data-active-view="management"] .calendar-pole-filter-box {
-  display: none;
-}
-
 body[data-active-view="dashboard"] .powerbi-filter-row,
 body[data-active-view="management"] .powerbi-filter-row {
   grid-template-columns: repeat(2, minmax(250px, 1fr));
@@ -908,7 +903,7 @@ body[data-active-view="management"] .powerbi-filter-row {
   border: 2px solid rgba(31, 56, 100, 0.22);
   border-radius: 18px 18px 8px 8px;
   display: grid;
-  grid-template-columns: minmax(290px, 1fr) minmax(240px, 0.8fr) minmax(240px, 0.8fr) minmax(130px, 0.42fr);
+  grid-template-columns: minmax(260px, 1fr) repeat(3, minmax(200px, 0.76fr)) minmax(130px, 0.4fr);
   min-height: 82px;
   overflow: visible;
   position: relative;
