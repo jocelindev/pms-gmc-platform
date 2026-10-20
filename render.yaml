@@ -2,7 +2,7 @@ databases:
   - name: pms-gmc-platform-db
     databaseName: pms_gmc_platform
     user: pms_gmc_platform
-    plan: free
+    plan: 0.1c-256mb
 
 services:
   - type: web
